@@ -166,7 +166,7 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
             return { data: null, failed: true, status: error.status || 0 };
         }
     }
-    
+
     return { data: null, failed: true, status: 0 };
 }
 
@@ -259,17 +259,19 @@ export const Api = {
 
     /**
      * Fetch holidays assigned to a specific user within a date period.
+     * WARNING: The API requires FULL ISO 8601 datetime format (e.g., 2022-12-03T00:00:00Z).
+     * Despite legacy Clockify docs suggesting YYYY-MM-DD, simple date format returns 400 error.
      * @param {string} workspaceId 
      * @param {string} userId 
-     * @param {string} startIso - Full ISO string, but API uses YYYY-MM-DD.
-     * @param {string} endIso 
+     * @param {string} startIso - Full ISO 8601 datetime string (e.g., 2022-12-03T00:00:00Z)
+     * @param {string} endIso - Full ISO 8601 datetime string (e.g., 2022-12-05T23:59:59Z)
      * @param {Object} [options] 
      * @returns {Promise<{data: Array<Holiday>, failed: boolean, status: number}>}
      */
     async fetchHolidays(workspaceId, userId, startIso, endIso, options = {}) {
         const url = `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assigned-to=${encodeURIComponent(userId)}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}`;
         console.log('Fetching holidays with URL:', url);
-        
+
         const { data, failed, status } = await fetchWithAuth(url, options);
         return { data, failed, status };
     },
@@ -385,11 +387,11 @@ export const Api = {
     async fetchAllTimeOff(workspaceId, users, startDate, endDate, options = {}) {
         const userIds = users.map(u => u.id);
         const fetchOptions = { maxRetries: options.maxRetries, signal: options.signal };
-        
+
         // Ensure dates are in full ISO 8601 format for the Time-Off API
         const startIso = `${startDate}T00:00:00.000Z`;
         const endIso = `${endDate}T23:59:59.999Z`;
-        
+
         const { data, failed } = await this.fetchTimeOffRequests(workspaceId, userIds, startIso, endIso, fetchOptions);
 
         if (failed) {
