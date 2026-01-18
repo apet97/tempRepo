@@ -49,7 +49,7 @@ export function init() {
         if (!payload || !payload.workspaceId) {
             throw new Error('Invalid token payload');
         }
-        
+
         // Apply Theme based on JWT claim
         if (payload.theme === 'DARK') {
             document.body.classList.add('cl-theme-dark');
@@ -331,11 +331,14 @@ export async function handleGenerateReport() {
                 name: 'holidays',
                 promise: Api.fetchAllHolidays(store.claims.workspaceId, store.users, startDate, endDate, { signal })
                     .then(holidays => {
+                        console.log('[DEBUG] main.js: Processing holidays, map size:', holidays.size);
                         holidays.forEach((hList, userId) => {
                             const hMap = new Map();
+                            console.log(`[DEBUG] main.js: User ${userId} has ${(hList || []).length} holidays`);
                             (hList || []).forEach(h => {
                                 const startKey = IsoUtils.extractDateKey(h.datePeriod?.startDate);
                                 const endKey = IsoUtils.extractDateKey(h.datePeriod?.endDate);
+                                console.log(`[DEBUG] main.js: Holiday "${h.name}" - startKey=${startKey}, endKey=${endKey}`);
 
                                 if (startKey) {
                                     if (!endKey || endKey === startKey) {
@@ -347,8 +350,10 @@ export async function handleGenerateReport() {
                                     }
                                 }
                             });
+                            console.log(`[DEBUG] main.js: After processing, hMap keys for user ${userId}:`, Array.from(hMap.keys()));
                             store.holidays.set(userId, hMap);
                         });
+                        console.log('[DEBUG] main.js: store.holidays size after processing:', store.holidays.size);
                     })
             });
         }

@@ -364,7 +364,10 @@ export const Api = {
             const batchResults = await Promise.all(batchPromises);
             batchResults.forEach(({ userId, data, failed }) => {
                 if (failed) failedCount++;
-                if (data) results.set(userId, data);
+                if (data) {
+                    console.log(`[DEBUG] fetchAllHolidays: User ${userId} has ${data.length} holidays:`, data);
+                    results.set(userId, data);
+                }
             });
         }
 
