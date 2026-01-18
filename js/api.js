@@ -90,9 +90,13 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
         try {
             const headers = {
                 'X-Addon-Token': store.token,
-                'Content-Type': 'application/json',
                 ...options.headers
             };
+
+            // Only add Content-Type for requests with a body
+            if (options.body && !headers['Content-Type']) {
+                headers['Content-Type'] = 'application/json';
+            }
 
             const response = await fetch(url, { ...options, headers, signal: options.signal });
 
@@ -258,7 +262,7 @@ export const Api = {
         const end = endIso.split('T')[0];
         
         const { data, failed, status } = await fetchWithAuth(
-            `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assigned-to=${encodeURIComponent(userId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+            `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assignedTo=${encodeURIComponent(userId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
             options
         );
         return { data, failed, status };
@@ -375,7 +379,12 @@ export const Api = {
     async fetchAllTimeOff(workspaceId, users, startDate, endDate, options = {}) {
         const userIds = users.map(u => u.id);
         const fetchOptions = { maxRetries: options.maxRetries, signal: options.signal };
-        const { data, failed } = await this.fetchTimeOffRequests(workspaceId, userIds, startDate, endDate, fetchOptions);
+        
+        // Ensure dates are in full ISO 8601 format for the Time-Off API
+        const startIso = `${startDate}T00:00:00Z`;
+        const endIso = `${endDate}T23:59:59Z`;
+        
+        const { data, failed } = await this.fetchTimeOffRequests(workspaceId, userIds, startIso, endIso, fetchOptions);
 
         if (failed) {
             store.apiStatus.timeOffFailed = users.length;
