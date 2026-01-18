@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="OTPLUS - Advanced overtime analysis addon for Clockify with profile-based capacity tracking, holiday integration, and billable hour breakdowns.">
+  <meta name="description"
+    content="OTPLUS - Advanced overtime analysis addon for Clockify with profile-based capacity tracking, holiday integration, and billable hour breakdowns.">
   <title>OTPLUS — Overtime Summary</title>
   <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://resources.developer.clockify.me">
@@ -35,8 +36,8 @@
           <input type="date" id="endDate" class="compact-date" aria-label="End date">
         </div>
         <div class="button-group" style="margin-left: 12px; align-self: flex-end;">
-            <button class="btn-text btn-xs" id="datePresetLastMonth">Last Month</button>
-            <button class="btn-text btn-xs" id="datePresetThisMonth">This Month</button>
+          <button class="btn-text btn-xs" id="datePresetLastMonth">Last Month</button>
+          <button class="btn-text btn-xs" id="datePresetThisMonth">This Month</button>
         </div>
       </div>
     </div>
@@ -44,7 +45,8 @@
     <!-- Configuration Card -->
     <div class="card">
       <div class="card-title">
-        <button type="button" class="section-toggle-btn" id="configToggle" aria-expanded="true" aria-controls="configContent">
+        <button type="button" class="section-toggle-btn" id="configToggle" aria-expanded="true"
+          aria-controls="configContent">
           <span class="toggle-icon" aria-hidden="true">&#9660;</span>
           Configuration
         </button>
@@ -82,7 +84,8 @@
     </div>
 
     <!-- API Status Banner -->
-    <div id="apiStatusBanner" class="card hidden api-status-banner" role="alert" aria-live="polite" aria-atomic="true"></div>
+    <div id="apiStatusBanner" class="card hidden api-status-banner" role="alert" aria-live="polite" aria-atomic="true">
+    </div>
 
     <!-- Loading -->
     <div id="loadingState" class="hidden" role="status" aria-live="polite" aria-label="Loading report data">
@@ -98,8 +101,10 @@
 
       <!-- Tab Navigation -->
       <div class="card tab-nav-card" id="tabNavCard" role="tablist" aria-label="Report views">
-        <button type="button" class="btn-text btn-xs tab-btn active" data-tab="summary" role="tab" aria-selected="true" aria-controls="summaryCard" id="tab-summary">Summary</button>
-        <button type="button" class="btn-text btn-xs tab-btn" data-tab="detailed" role="tab" aria-selected="false" aria-controls="detailedCard" id="tab-detailed">Detailed</button>
+        <button type="button" class="btn-text btn-xs tab-btn active" data-tab="summary" role="tab" aria-selected="true"
+          aria-controls="summaryCard" id="tab-summary">Summary</button>
+        <button type="button" class="btn-text btn-xs tab-btn" data-tab="detailed" role="tab" aria-selected="false"
+          aria-controls="detailedCard" id="tab-detailed">Detailed</button>
       </div>
 
       <!-- Summary Card -->
@@ -159,7 +164,7 @@
   </div>
 
   <!-- Entry Point -->
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=3"></script>
 </body>
 
 </html>
