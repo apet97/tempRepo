@@ -425,10 +425,12 @@ export const Api = {
         console.log('[DEBUG] fetchAllTimeOff: Found', requests.length, 'time-off requests');
 
         requests.forEach(request => {
-            console.log('[DEBUG] fetchAllTimeOff: Processing request:', request.id, 'status:', request.status, 'userId:', request.userId || request.requesterUserId);
+            // FIX: Status is an object with statusType property, not a string
+            const statusType = request.status?.statusType || request.status;
+            console.log('[DEBUG] fetchAllTimeOff: Processing request:', request.id, 'statusType:', statusType, 'userId:', request.userId || request.requesterUserId);
 
             // Filter by status - only process approved requests
-            if (request.status !== 'APPROVED') {
+            if (statusType !== 'APPROVED') {
                 console.log('[DEBUG] fetchAllTimeOff: Skipping non-APPROVED request');
                 return;
             }
@@ -442,14 +444,16 @@ export const Api = {
             if (!results.has(userId)) results.set(userId, new Map());
             const userMap = results.get(userId);
 
-            const period = request.timeOffPeriod || {};
-            const startKey = IsoUtils.extractDateKey(period.start || period.startDate);
-            const endKey = IsoUtils.extractDateKey(period.end || period.endDate);
+            // FIX: The period dates are nested under timeOffPeriod.period, not timeOffPeriod directly
+            const timeOffPeriod = request.timeOffPeriod || {};
+            const innerPeriod = timeOffPeriod.period || {};
+            const startKey = IsoUtils.extractDateKey(innerPeriod.start || timeOffPeriod.start || timeOffPeriod.startDate);
+            const endKey = IsoUtils.extractDateKey(innerPeriod.end || timeOffPeriod.end || timeOffPeriod.endDate);
 
-            console.log('[DEBUG] fetchAllTimeOff: Period data:', period, 'startKey:', startKey, 'endKey:', endKey);
+            console.log('[DEBUG] fetchAllTimeOff: Period data:', timeOffPeriod, 'innerPeriod:', innerPeriod, 'startKey:', startKey, 'endKey:', endKey);
 
             if (startKey) {
-                const isFullDay = !period.halfDay && (request.timeUnit === 'DAYS' || !period.halfDayHours);
+                const isFullDay = !timeOffPeriod.halfDay && (request.timeUnit === 'DAYS' || !timeOffPeriod.halfDayHours);
                 // Initialize start date
                 userMap.set(startKey, { isFullDay, hours: 0 });
 
