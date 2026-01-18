@@ -269,10 +269,10 @@ export const Api = {
         const start = startIso.split('T')[0];
         const end = endIso.split('T')[0];
         
-        const { data, failed, status } = await fetchWithAuth(
-            `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assigned-to=${encodeURIComponent(userId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
-            options
-        );
+        const url = `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assigned-to=${encodeURIComponent(userId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+        console.log('Fetching holidays with URL:', url);
+        
+        const { data, failed, status } = await fetchWithAuth(url, options);
         return { data, failed, status };
     },
 
