@@ -227,7 +227,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
         daysToProcess.forEach(dateKey => {
             const dayData = user.days.get(dateKey) || { entries: [] };
-            const { capacity, isNonWorking, isHoliday, holidayName, isTimeOff } = getEffectiveCapacity(dateKey, user.userId, storeRef);
+            const { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff, holidayHours, timeOffHours } = getEffectiveCapacity(dateKey, user.userId, storeRef);
 
             // Always add capacity for the range (even if no entries)
             user.totals.expectedCapacity += capacity;
@@ -245,9 +245,9 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
             // Ensure day exists for anomaly tracking
             if (!user.days.has(dateKey)) {
-                user.days.set(dateKey, { entries: [], meta: { capacity, isNonWorking, isHoliday, holidayName, isTimeOff } });
+                user.days.set(dateKey, { entries: [], meta: { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff } });
             } else {
-                dayData.meta = { capacity, isNonWorking, isHoliday, holidayName, isTimeOff };
+                dayData.meta = { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff };
             }
 
             // Sort entries by start time (Tail Attribution)
