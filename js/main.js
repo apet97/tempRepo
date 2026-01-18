@@ -339,7 +339,6 @@ export async function handleGenerateReport() {
                                 const startKey = IsoUtils.extractDateKey(h.datePeriod?.startDate);
                                 const endKey = IsoUtils.extractDateKey(h.datePeriod?.endDate);
                                 console.log(`[DEBUG] main.js: Holiday "${h.name}" - startKey=${startKey}, endKey=${endKey}`);
-
                                 if (startKey) {
                                     if (!endKey || endKey === startKey) {
                                         hMap.set(startKey, h);
@@ -364,6 +363,11 @@ export async function handleGenerateReport() {
                 name: 'timeOff',
                 promise: Api.fetchAllTimeOff(store.claims.workspaceId, store.users, startDate, endDate, { signal })
                     .then(timeOff => {
+                        console.log('[DEBUG] main.js: Received timeOff map. Size:', timeOff.size);
+                        if (timeOff.size > 0) {
+                            const firstUser = timeOff.keys().next().value;
+                            console.log(`[DEBUG] main.js: Sample timeOff for user ${firstUser}:`, Array.from(timeOff.get(firstUser).keys()));
+                        }
                         store.timeOff = timeOff;
                     })
             });

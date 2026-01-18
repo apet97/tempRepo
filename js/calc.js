@@ -113,11 +113,15 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
     if (config.applyTimeOff && userTimeOff?.has(dateKey)) {
         const toInfo = userTimeOff.get(dateKey);
         isTimeOff = true;
+        console.log(`[DEBUG] calc.js: Found Time Off for user ${userId} on ${dateKey}. IsFullDay: ${toInfo.isFullDay}, Hours: ${toInfo.hours}`);
         if (toInfo.isFullDay) {
             capacity = 0;
         } else if (toInfo.hours > 0) {
             capacity = Math.max(0, capacity - toInfo.hours);
         }
+    } else if (config.applyTimeOff && userTimeOff && userTimeOff.size > 0) {
+        // Debug only: check if we have time off for this user on OTHER days
+        // console.log(`[DEBUG] calc.js: User ${userId} has time off, but not on ${dateKey}`);
     }
 
     return { capacity, isNonWorking, isHoliday, holidayName, isTimeOff };
