@@ -97,10 +97,12 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
     const baseCapacity = capacity;
 
     // 3. Holidays - can coexist with time off, takes precedence over working days logic
+    let holidayProjectId = null;
     if (config.applyHolidays && userHolidays?.has(dateKey)) {
         const holiday = userHolidays.get(dateKey);
         isHoliday = true;
         holidayName = holiday.name || 'Holiday';
+        holidayProjectId = holiday.projectId;
         capacity = 0; // Holiday has 0 capacity
     }
 
@@ -127,7 +129,7 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
         holidayHours = baseCapacity;
     }
 
-    return { capacity, baseCapacity, isNonWorking, isHoliday, holidayName, holidayProjectId: holiday?.projectId, isTimeOff, holidayHours, timeOffHours };
+    return { capacity, baseCapacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff, holidayHours, timeOffHours };
 }
 
 // --- Main Calculation ---
@@ -256,7 +258,13 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             dayData.entries.forEach(entry => {
                 // FILTER: Ignore time entries that are purely for Holiday/Time Off accounting
                 // to prevent them from being counted as Work/Overtime.
-                // 1. Holiday Entries: Check if project matches the Holiday's project ID
+
+                // 1. Check strict entry types (Clockify specific types for auto-created entries)
+                if (entry.type === 'HOLIDAY' || entry.type === 'TIME_OFF') {
+                    return; // Skip this entry
+                }
+
+                // 2. Fallback: Check if project matches the Holiday's project ID on a holiday day
                 const { holidayProjectId } = dayData.meta;
                 if (isHoliday && holidayProjectId && entry.projectId === holidayProjectId) {
                     return; // Skip this entry
