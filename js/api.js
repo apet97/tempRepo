@@ -267,11 +267,7 @@ export const Api = {
      * @returns {Promise<{data: Array<Holiday>, failed: boolean, status: number}>}
      */
     async fetchHolidays(workspaceId, userId, startIso, endIso, options = {}) {
-        // API expects YYYY-MM-DD for holiday endpoints
-        const start = startIso.split('T')[0];
-        const end = endIso.split('T')[0];
-        
-        const url = `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assigned-to=${encodeURIComponent(userId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+        const url = `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assigned-to=${encodeURIComponent(userId)}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}`;
         console.log('Fetching holidays with URL:', url);
         
         const { data, failed, status } = await fetchWithAuth(url, options);
@@ -354,8 +350,8 @@ export const Api = {
     async fetchAllHolidays(workspaceId, users, startDate, endDate, options = {}) {
         const results = new Map();
         let failedCount = 0;
-        const startIso = `${startDate}T00:00:00Z`;
-        const endIso = `${endDate}T23:59:59Z`;
+        const startIso = `${startDate}T00:00:00.000Z`;
+        const endIso = `${endDate}T23:59:59.999Z`;
 
         for (let i = 0; i < users.length; i += BATCH_SIZE) {
             const batch = users.slice(i, i + BATCH_SIZE);
@@ -391,8 +387,8 @@ export const Api = {
         const fetchOptions = { maxRetries: options.maxRetries, signal: options.signal };
         
         // Ensure dates are in full ISO 8601 format for the Time-Off API
-        const startIso = `${startDate}T00:00:00Z`;
-        const endIso = `${endDate}T23:59:59Z`;
+        const startIso = `${startDate}T00:00:00.000Z`;
+        const endIso = `${endDate}T23:59:59.999Z`;
         
         const { data, failed } = await this.fetchTimeOffRequests(workspaceId, userIds, startIso, endIso, fetchOptions);
 
