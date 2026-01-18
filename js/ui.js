@@ -159,7 +159,7 @@ export function renderSummaryTable(users) {
       <th class="text-right">Breaks</th>
       ${showBillable ? '<th class="text-right">Bill. Worked</th><th class="text-right">Bill. OT</th><th class="text-right">Non-Bill OT</th>' : ''}
       <th class="text-right">Total</th>
-      <th class="text-right">H / TO (h)</th>
+      <th class="text-right">Vacation</th>
       <th class="text-right">Amount</th>
     `;
   }
@@ -168,7 +168,7 @@ export function renderSummaryTable(users) {
     const tr = document.createElement('tr');
     tr.className = 'summary-row';
     const initials = user.userName.slice(0, 2).toUpperCase();
-    const holidayTimeOffHours = (user.totals.holidayHours || 0) + (user.totals.timeOffHours || 0);
+    const vacationHours = user.totals.vacationEntryHours || 0;
     const isHighOt = user.totals.total > 0 && (user.totals.overtime / user.totals.total) > 0.3;
 
     tr.innerHTML = `
@@ -189,7 +189,7 @@ export function renderSummaryTable(users) {
         <td class="text-right">${formatHours(user.totals.nonBillableOT)}</td>
       ` : ''}
       <td class="text-right font-bold">${formatHours(user.totals.total)}</td>
-      <td class="text-right" title="Holiday & Time Off Hours">${formatHours(holidayTimeOffHours)}</td>
+      <td class="text-right" title="Vacation Entry Hours">${formatHours(vacationHours)}</td>
       <td class="text-right font-bold">${formatCurrency(user.totals.amount)}</td>
     `;
     fragment.appendChild(tr);

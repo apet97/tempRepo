@@ -179,8 +179,9 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 expectedCapacity: 0,
                 holidayCount: 0,
                 timeOffCount: 0,
-                holidayHours: 0, // NEW: Track hours for Holidays
-                timeOffHours: 0  // NEW: Track hours for Time Off
+                holidayHours: 0,
+                timeOffHours: 0,
+                vacationEntryHours: 0  // Track actual HOLIDAY/TIME_OFF entry durations
             }
         });
     });
@@ -282,6 +283,8 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                     // Force as Regular, do NOT check capacity, do NOT increment accumulator
                     regular = duration;
                     overtime = 0;
+                    // Track vacation entry hours separately
+                    user.totals.vacationEntryHours += duration;
                     // Do not add to dailyAccumulator, so they don't consume capacity for *other* potential entries (if half day)
                 } else {
                     // Standard Logic
