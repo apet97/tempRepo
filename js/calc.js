@@ -93,6 +93,9 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
         }
     }
 
+    // Capture base capacity (after overrides/profile/working days, but BEFORE anomalies)
+    const baseCapacity = capacity;
+
     // 3. Holidays - can coexist with time off, takes precedence over working days logic
     if (config.applyHolidays && userHolidays?.has(dateKey)) {
         const holiday = userHolidays.get(dateKey);
@@ -103,18 +106,28 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
 
     // 4. Time Off (reduce capacity) - can coexist with holiday (though redundant capacity-wise)
     // Only process Time Off if it is NOT already a full-day holiday to avoid double counting "days off" in stats
+    let timeOffHours = 0;
     if (config.applyTimeOff && userTimeOff?.has(dateKey) && !isHoliday) {
         const toInfo = userTimeOff.get(dateKey);
         isTimeOff = true;
 
         if (toInfo.isFullDay) {
+            timeOffHours = baseCapacity; // Lost full day capacity
             capacity = 0;
         } else if (toInfo.hours > 0) {
+            timeOffHours = toInfo.hours;
             capacity = Math.max(0, capacity - toInfo.hours);
         }
     }
 
-    return { capacity, isNonWorking, isHoliday, holidayName, isTimeOff };
+    // Determine Holiday Hours (if holiday, it takes the full base capacity or remaining capacity?)
+    // Usually holiday replaces the full working day.
+    let holidayHours = 0;
+    if (isHoliday) {
+        holidayHours = baseCapacity;
+    }
+
+    return { capacity, baseCapacity, isNonWorking, isHoliday, holidayName, holidayProjectId: holiday?.projectId, isTimeOff, holidayHours, timeOffHours };
 }
 
 // --- Main Calculation ---
@@ -163,7 +176,9 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 otPremium: 0,
                 expectedCapacity: 0,
                 holidayCount: 0,
-                timeOffCount: 0
+                timeOffCount: 0,
+                holidayHours: 0, // NEW: Track hours for Holidays
+                timeOffHours: 0  // NEW: Track hours for Time Off
             }
         });
     });
@@ -216,8 +231,15 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             user.totals.expectedCapacity += capacity;
 
             // Track anomalies (all can coexist)
-            if (isHoliday) user.totals.holidayCount += 1;
-            if (isTimeOff) user.totals.timeOffCount += 1;
+            // Track anomalies (all can coexist)
+            if (isHoliday) {
+                user.totals.holidayCount += 1;
+                user.totals.holidayHours += holidayHours;
+            }
+            if (isTimeOff) {
+                user.totals.timeOffCount += 1;
+                user.totals.timeOffHours += timeOffHours;
+            }
 
             // Ensure day exists for anomaly tracking
             if (!user.days.has(dateKey)) {
@@ -232,6 +254,14 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             let dailyAccumulator = 0;
 
             dayData.entries.forEach(entry => {
+                // FILTER: Ignore time entries that are purely for Holiday/Time Off accounting
+                // to prevent them from being counted as Work/Overtime.
+                // 1. Holiday Entries: Check if project matches the Holiday's project ID
+                const { holidayProjectId } = dayData.meta;
+                if (isHoliday && holidayProjectId && entry.projectId === holidayProjectId) {
+                    return; // Skip this entry
+                }
+
                 const duration = round(calculateDuration(entry));
                 const hourlyRate = (entry.hourlyRate?.amount || 0) / 100;
                 const isBreak = entry.type === 'BREAK';
