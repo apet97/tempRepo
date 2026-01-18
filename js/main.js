@@ -5,8 +5,8 @@
  */
 
 import { store } from './state.js';
-import { Api } from './api.js';
-import { calculateAnalysis } from './calc.js?v=6';
+import { Api } from './api.js?v=7';
+import { calculateAnalysis } from './calc.js?v=7';
 import { downloadCsv } from './export.js';
 import * as UI from './ui.js';
 import { IsoUtils, debounce, parseIsoDuration } from './utils.js';
@@ -293,10 +293,9 @@ export async function handleGenerateReport() {
     const requestDateRange = { start: startDate, end: endDate };
 
     try {
-        // 1. Fetch Entries (REQUIRED - Time entries are the primary data source)
-        const entries = await Api.fetchEntries(
+        // 1. Fetch Entries via Detailed Report API (single request for ALL users)
+        const entries = await Api.fetchDetailedReport(
             store.claims.workspaceId,
-            store.users,
             `${startDate}T00:00:00Z`,
             `${endDate}T23:59:59Z`,
             { signal }

@@ -220,8 +220,98 @@ export const Api = {
     },
 
     /**
+     * Fetch all time entries using the Detailed Report API (single request for all users).
+     * This replaces per-user fetching with a single report request.
+     * 
+     * @param {string} workspaceId - The Clockify workspace ID.
+     * @param {string} startIso - Start date ISO string.
+     * @param {string} endIso - End date ISO string.
+     * @param {Object} [options] - Fetch options including AbortSignal.
+     * @returns {Promise<Array<TimeEntry>>} Combined list of all time entries.
+     */
+    async fetchDetailedReport(workspaceId, startIso, endIso, options = {}) {
+        const reportsUrl = `https://reports.api.clockify.me/v1/workspaces/${workspaceId}/reports/detailed`;
+        const allEntries = [];
+        let page = 1;
+        const pageSize = 200; // Max allowed
+        let hasMore = true;
+
+        console.log(`Fetching detailed report for ${startIso} to ${endIso}...`);
+
+        while (hasMore) {
+            const requestBody = {
+                dateRangeStart: startIso,
+                dateRangeEnd: endIso,
+                detailedFilter: {
+                    page: page,
+                    pageSize: pageSize,
+                    sortColumn: 'DATE'
+                },
+                sortOrder: 'ASCENDING',
+                exportType: 'JSON',
+                amountShown: 'EARNED',
+                amounts: ['EARNED', 'COST']
+            };
+
+            const { data, failed } = await fetchWithAuth(reportsUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+                signal: options.signal
+            }, options.maxRetries);
+
+            if (failed || !data) {
+                console.error('Detailed report fetch failed on page', page);
+                break;
+            }
+
+            const entries = data.timeEntries || [];
+            console.log(`Page ${page}: Retrieved ${entries.length} entries`);
+
+            // Transform report entries to match time-entries API format
+            const transformed = entries.map(e => ({
+                id: e.id,
+                description: e.description,
+                userId: e.userId,
+                userName: e.userName,
+                billable: e.billable,
+                projectId: e.projectId,
+                projectName: e.projectName,
+                taskId: e.taskId,
+                taskName: e.taskName,
+                type: e.type || 'REGULAR', // Reports API may not include type
+                timeInterval: {
+                    start: e.timeInterval?.start,
+                    end: e.timeInterval?.end,
+                    duration: e.timeInterval?.duration ? `PT${e.timeInterval.duration}S` : null
+                },
+                hourlyRate: e.rate ? { amount: e.rate * 100, currency: 'USD' } : { amount: 0, currency: 'USD' },
+                tags: e.tags || []
+            }));
+
+            allEntries.push(...transformed);
+
+            // Check if more pages
+            if (entries.length < pageSize) {
+                hasMore = false;
+            } else {
+                page++;
+                // Safety limit
+                if (page > 50) {
+                    console.warn('Reached page limit (50), stopping pagination');
+                    hasMore = false;
+                }
+            }
+        }
+
+        console.log(`Total entries from detailed report: ${allEntries.length}`);
+        return allEntries;
+    },
+
+    /**
      * Batched fetch of time entries for multiple users concurrently.
      * Processes users in chunks (BATCH_SIZE) to manage load.
+     * DEPRECATED: Use fetchDetailedReport for better performance.
      * 
      * @param {string} workspaceId - The Clockify workspace ID.
      * @param {Array<User>} users - List of users to fetch entries for.
