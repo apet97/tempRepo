@@ -229,8 +229,14 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             const dayData = user.days.get(dateKey) || { entries: [] };
             const { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff, holidayHours, timeOffHours } = getEffectiveCapacity(dateKey, user.userId, storeRef);
 
-            // Always add capacity for the range (even if no entries)
-            user.totals.expectedCapacity += capacity;
+            // Only add capacity for days with activity (entries, time off, or holiday)
+            // Skip "idle" days where user had no entries and no leave
+            const hasEntries = dayData.entries && dayData.entries.length > 0;
+            const hasActivity = hasEntries || isHoliday || isTimeOff;
+
+            if (hasActivity) {
+                user.totals.expectedCapacity += capacity;
+            }
 
             // Track anomalies (all can coexist)
             // Track anomalies (all can coexist)
