@@ -102,9 +102,11 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
     }
 
     // 4. Time Off (reduce capacity) - can coexist with holiday (though redundant capacity-wise)
-    if (config.applyTimeOff && userTimeOff?.has(dateKey)) {
+    // Only process Time Off if it is NOT already a full-day holiday to avoid double counting "days off" in stats
+    if (config.applyTimeOff && userTimeOff?.has(dateKey) && !isHoliday) {
         const toInfo = userTimeOff.get(dateKey);
         isTimeOff = true;
+
         if (toInfo.isFullDay) {
             capacity = 0;
         } else if (toInfo.hours > 0) {

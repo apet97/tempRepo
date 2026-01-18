@@ -131,8 +131,8 @@ export function renderSummaryStrip(users) {
       <div class="summary-item more"><span class="summary-label">Billable OT</span><span class="summary-value">${formatHours(totals.billableOT)}</span></div>
       <div class="summary-item more"><span class="summary-label">Non-Bill OT</span><span class="summary-value">${formatHours(totals.nonBillableOT)}</span></div>
     ` : ''}
-    <div class="summary-item"><span class="summary-label">Holidays</span><span class="summary-value">${totals.holidayCount}</span></div>
-    <div class="summary-item"><span class="summary-label">Time Off</span><span class="summary-value">${totals.timeOffCount}</span></div>
+    <div class="summary-item"><span class="summary-label">Holiday Days</span><span class="summary-value">${totals.holidayCount}</span></div>
+    <div class="summary-item"><span class="summary-label">Time Off Days</span><span class="summary-value">${totals.timeOffCount}</span></div>
     <div class="summary-item highlight"><span class="summary-label">Total</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
   `;
@@ -216,8 +216,8 @@ export function renderDetailedTable(users, activeFilter = null) {
 
   // Use stored filter if not provided, otherwise update store
   if (activeFilter) {
-      store.ui.activeDetailedFilter = activeFilter;
-      store.ui.detailedPage = 1; // Reset to page 1 on filter change
+    store.ui.activeDetailedFilter = activeFilter;
+    store.ui.detailedPage = 1; // Reset to page 1 on filter change
   }
   const currentFilter = store.ui.activeDetailedFilter || 'all';
 
@@ -323,7 +323,7 @@ export function renderDetailedTable(users, activeFilter = null) {
 
   // Pagination Controls
   if (totalPages > 1) {
-      html += `
+    html += `
       <div class="pagination-controls" style="display:flex; justify-content:center; align-items:center; gap:10px; margin-top:16px;">
           <button class="btn-secondary btn-sm pagination-btn" ${page === 1 ? 'disabled' : ''} data-page="${page - 1}">Previous</button>
           <span style="font-size:12px; color:var(--text-secondary);">Page ${page} of ${totalPages}</span>
@@ -476,13 +476,13 @@ export function bindEvents(callbacks) {
 
   // Pagination Event Delegation
   document.getElementById('detailedTableContainer')?.addEventListener('click', (e) => {
-      if (e.target.matches('.pagination-btn')) {
-          const newPage = parseInt(e.target.dataset.page, 10);
-          if (!isNaN(newPage)) {
-              store.ui.detailedPage = newPage;
-              renderDetailedTable(store.analysisResults);
-          }
+    if (e.target.matches('.pagination-btn')) {
+      const newPage = parseInt(e.target.dataset.page, 10);
+      if (!isNaN(newPage)) {
+        store.ui.detailedPage = newPage;
+        renderDetailedTable(store.analysisResults);
       }
+    }
   });
 
   document.getElementById('generateBtn').addEventListener('click', callbacks.onGenerate);
