@@ -4,6 +4,8 @@
  * rate limiting, pagination, and error handling.
  * 
  * Implements a strict token bucket rate limiter to comply with API limits.
+ * 
+ * Last Refreshed: 2026-01-18 21:05 UTC
  */
 
 import { store } from './state.js';
