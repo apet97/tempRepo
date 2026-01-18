@@ -256,80 +256,79 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             let dailyAccumulator = 0;
 
             dayData.entries.forEach(entry => {
-                // FILTER: Ignore time entries that are purely for Holiday/Time Off accounting
-                // to prevent them from being counted as Work/Overtime.
-
-                // 1. Check strict entry types (Clockify specific types for auto-created entries)
-                if (entry.type === 'HOLIDAY' || entry.type === 'TIME_OFF') {
-                    return; // Skip this entry
-                }
-
-                // 2. Fallback: Check if project matches the Holiday's project ID on a holiday day
-                const { holidayProjectId } = dayData.meta;
-                if (isHoliday && holidayProjectId && entry.projectId === holidayProjectId) {
-                    return; // Skip this entry
-                }
-
                 const duration = round(calculateDuration(entry));
                 const hourlyRate = (entry.hourlyRate?.amount || 0) / 100;
                 const isBreak = entry.type === 'BREAK';
                 const isBillable = entry.billable;
+
+                // SPECIAL LOGIC: Holiday/Time Off Entries
+                // User requirement: "THEY DO NOT COUNT TOWARDS OVERTIME. HOWEVER, THEY DO COUNT TOWARDS TIME AND AMOUNT... THEY FOLLOW REGULAR TIME ENTRY LOGIC"
+                // Check types or project ID match
+                const isSpecialEntry = (entry.type === 'HOLIDAY' || entry.type === 'TIME_OFF') ||
+                    (isHoliday && dayData.meta.holidayProjectId && entry.projectId === dayData.meta.holidayProjectId);
 
                 let regular = 0;
                 let overtime = 0;
 
                 if (isBreak) {
                     user.totals.breaks += duration;
+                } else if (isSpecialEntry) {
+                    // Force as Regular, do NOT check capacity, do NOT increment accumulator
+                    regular = duration;
+                    overtime = 0;
+                    // Do not add to dailyAccumulator, so they don't consume capacity for *other* potential entries (if half day)
                 } else {
+                    // Standard Logic
                     if (dailyAccumulator >= capacity) {
                         overtime = duration; // Already over capacity
                     } else if (round(dailyAccumulator + duration) <= capacity) {
                         regular = duration; // Fits within capacity
                     } else {
-                        // Spans the threshold
+                        // Split
                         regular = round(capacity - dailyAccumulator);
                         overtime = round(duration - regular);
                     }
-                    dailyAccumulator = round(dailyAccumulator + duration);
+                    dailyAccumulator += duration;
                 }
 
-                // Billable breakdown
+                // Update User Totals
+                user.totals.regular += regular;
+                user.totals.overtime += overtime;
+                user.totals.total += duration;
+
+                if (isBillable && !isBreak) {
+                    user.totals.billableWorked += regular; // Special entries count as 'worked' for billing? "THEY FOLLOW REGULAR TIME ENTRY LOGIC". Yes.
+                    user.totals.billableOT += overtime;
+                    // Note: If special entry is billable, it goes to billableWorked.
+                } else if (!isBreak) {
+                    user.totals.nonBillableWorked += regular;
+                    user.totals.nonBillableOT += overtime;
+                }
+
+                // Cost Calculation
                 if (!isBreak) {
-                    if (isBillable) {
-                        user.totals.billableWorked += regular;
-                        user.totals.billableOT += overtime;
-                    } else {
-                        user.totals.nonBillableWorked += regular;
-                        user.totals.nonBillableOT += overtime;
+                    const baseAmount = duration * hourlyRate;
+                    // ... (Premium logic) ...
+                    // Special entries follow regular logic. If they are not OT, no premium.
+                    // But if standard OT has premium...
+                    // Here overtime is 0 for special entries, so no premium.
+
+                    let entryPremium = 0;
+                    if (overtime > 0) {
+                        const multiplier = userMultiplier > 0 ? userMultiplier : 1;
+                        entryPremium = (overtime * hourlyRate * multiplier) - (overtime * hourlyRate);
                     }
-                }
 
-                // Costs
-                const baseCost = (regular + overtime) * hourlyRate;
-                const premiumCost = overtime * hourlyRate * (userMultiplier - 1);
+                    user.totals.amount += baseAmount + entryPremium;
+                    user.totals.otPremium += entryPremium;
 
-                // Enhance Entry object for UI
-                const tags = [];
-                if (isHoliday) tags.push('HOLIDAY');
-                if (isNonWorking) tags.push('OFF-DAY');
-                if (isTimeOff) tags.push('TIME-OFF');
-
-                entry.analysis = {
-                    regular,
-                    overtime,
-                    isBillable,
-                    isBreak,
-                    totalCost: baseCost + premiumCost,
-                    tags
-                };
-
-                // Aggregates
-                if (!isBreak) {
-                    user.totals.total += duration;
-                    user.totals.regular += regular;
-                    user.totals.overtime += overtime;
-                    user.totals.amount += baseCost + premiumCost;
-                    user.totals.otPremium += premiumCost;
+                    // Attach analysis to entry for Detailed View
+                    entry.analysis = {
+                        regular,
+                        overtime,
+                        isBillable,
+                        cost: baseAmount + entryPremium
+                    };
                 }
             });
         });
