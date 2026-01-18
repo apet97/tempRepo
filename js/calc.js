@@ -307,8 +307,11 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
                 // Cost Calculation
                 if (!isBreak) {
-                    const baseAmount = duration * hourlyRate;
-                    // ... (Premium logic) ...
+                    // Safety: Only billable entries contribute to Amount (Revenue)
+                    // Even if hourlyRate is present, if isBillable is false, revenue is 0.
+                    const effectiveRate = isBillable ? hourlyRate : 0;
+                    const baseAmount = duration * effectiveRate;
+
                     // Special entries follow regular logic. If they are not OT, no premium.
                     // But if standard OT has premium...
                     // Here overtime is 0 for special entries, so no premium.
@@ -316,7 +319,9 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                     let entryPremium = 0;
                     if (overtime > 0) {
                         const multiplier = userMultiplier > 0 ? userMultiplier : 1;
-                        entryPremium = (overtime * hourlyRate * multiplier) - (overtime * hourlyRate);
+                        // Premium is based on the effective rate? Usually yes.
+                        // If unbillable, no premium revenue either.
+                        entryPremium = (overtime * effectiveRate * multiplier) - (overtime * effectiveRate);
                     }
 
                     user.totals.amount += baseAmount + entryPremium;
