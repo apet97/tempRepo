@@ -364,10 +364,7 @@ export const Api = {
             const batchResults = await Promise.all(batchPromises);
             batchResults.forEach(({ userId, data, failed }) => {
                 if (failed) failedCount++;
-                if (data) {
-                    console.log(`[DEBUG] fetchAllHolidays: User ${userId} has ${data.length} holidays:`, data);
-                    results.set(userId, data);
-                }
+                if (data) results.set(userId, data);
             });
         }
 
@@ -399,17 +396,11 @@ export const Api = {
 
         if (failed) {
             store.apiStatus.timeOffFailed = users.length;
-            console.log('[DEBUG] fetchAllTimeOff: Request FAILED');
             return new Map();
         }
 
         // Build per-user per-date map
         const results = new Map();
-
-        // DEBUG: Log the raw response structure
-        console.log('[DEBUG] fetchAllTimeOff: Raw data structure:', JSON.stringify(data, null, 2).substring(0, 500));
-        console.log('[DEBUG] fetchAllTimeOff: data.requests exists?', !!data?.requests);
-        console.log('[DEBUG] fetchAllTimeOff: data type:', typeof data, Array.isArray(data) ? '(is array)' : '');
 
         // Try multiple possible response formats
         let requests = [];
@@ -422,22 +413,17 @@ export const Api = {
             requests = data.timeOffRequests;
         }
 
-        console.log('[DEBUG] fetchAllTimeOff: Found', requests.length, 'time-off requests');
-
         requests.forEach(request => {
             // FIX: Status is an object with statusType property, not a string
             const statusType = request.status?.statusType || request.status;
-            console.log('[DEBUG] fetchAllTimeOff: Processing request:', request.id, 'statusType:', statusType, 'userId:', request.userId || request.requesterUserId);
 
             // Filter by status - only process approved requests
             if (statusType !== 'APPROVED') {
-                console.log('[DEBUG] fetchAllTimeOff: Skipping non-APPROVED request');
                 return;
             }
 
             const userId = request.userId || request.requesterUserId;
             if (!userId) {
-                console.log('[DEBUG] fetchAllTimeOff: Skipping request with no userId');
                 return;
             }
 
@@ -449,8 +435,6 @@ export const Api = {
             const innerPeriod = timeOffPeriod.period || {};
             const startKey = IsoUtils.extractDateKey(innerPeriod.start || timeOffPeriod.start || timeOffPeriod.startDate);
             const endKey = IsoUtils.extractDateKey(innerPeriod.end || timeOffPeriod.end || timeOffPeriod.endDate);
-
-            console.log('[DEBUG] fetchAllTimeOff: Period data:', timeOffPeriod, 'innerPeriod:', innerPeriod, 'startKey:', startKey, 'endKey:', endKey);
 
             if (startKey) {
                 const isFullDay = !timeOffPeriod.halfDay && (request.timeUnit === 'DAYS' || !timeOffPeriod.halfDayHours);
@@ -468,8 +452,6 @@ export const Api = {
                 }
             }
         });
-
-        console.log('[DEBUG] fetchAllTimeOff: Final results size:', results.size);
 
         store.apiStatus.timeOffFailed = 0;
         return results;

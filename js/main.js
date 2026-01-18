@@ -331,14 +331,12 @@ export async function handleGenerateReport() {
                 name: 'holidays',
                 promise: Api.fetchAllHolidays(store.claims.workspaceId, store.users, startDate, endDate, { signal })
                     .then(holidays => {
-                        console.log('[DEBUG] main.js: Processing holidays, map size:', holidays.size);
                         holidays.forEach((hList, userId) => {
                             const hMap = new Map();
-                            console.log(`[DEBUG] main.js: User ${userId} has ${(hList || []).length} holidays`);
                             (hList || []).forEach(h => {
                                 const startKey = IsoUtils.extractDateKey(h.datePeriod?.startDate);
                                 const endKey = IsoUtils.extractDateKey(h.datePeriod?.endDate);
-                                console.log(`[DEBUG] main.js: Holiday "${h.name}" - startKey=${startKey}, endKey=${endKey}`);
+
                                 if (startKey) {
                                     if (!endKey || endKey === startKey) {
                                         hMap.set(startKey, h);
@@ -349,10 +347,8 @@ export async function handleGenerateReport() {
                                     }
                                 }
                             });
-                            console.log(`[DEBUG] main.js: After processing, hMap keys for user ${userId}:`, Array.from(hMap.keys()));
                             store.holidays.set(userId, hMap);
                         });
-                        console.log('[DEBUG] main.js: store.holidays size after processing:', store.holidays.size);
                     })
             });
         }
@@ -363,11 +359,6 @@ export async function handleGenerateReport() {
                 name: 'timeOff',
                 promise: Api.fetchAllTimeOff(store.claims.workspaceId, store.users, startDate, endDate, { signal })
                     .then(timeOff => {
-                        console.log('[DEBUG] main.js: Received timeOff map. Size:', timeOff.size);
-                        if (timeOff.size > 0) {
-                            const firstUser = timeOff.keys().next().value;
-                            console.log(`[DEBUG] main.js: Sample timeOff for user ${firstUser}:`, Array.from(timeOff.get(firstUser).keys()));
-                        }
                         store.timeOff = timeOff;
                     })
             });
