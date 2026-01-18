@@ -268,7 +268,7 @@ export const Api = {
 
             // Transform report entries to match time-entries API format
             const transformed = entries.map(e => ({
-                id: e.id,
+                id: e._id || e.id,  // Reports API uses _id
                 description: e.description,
                 userId: e.userId,
                 userName: e.userName,
@@ -277,13 +277,15 @@ export const Api = {
                 projectName: e.projectName,
                 taskId: e.taskId,
                 taskName: e.taskName,
-                type: e.type || 'REGULAR', // Reports API may not include type
+                type: e.type || 'REGULAR',
                 timeInterval: {
                     start: e.timeInterval?.start,
                     end: e.timeInterval?.end,
-                    duration: e.timeInterval?.duration ? `PT${e.timeInterval.duration}S` : null
+                    // Duration from Reports API is in SECONDS (integer), convert to ISO format
+                    duration: e.timeInterval?.duration != null ? `PT${e.timeInterval.duration}S` : null
                 },
-                hourlyRate: e.rate ? { amount: e.rate * 100, currency: 'USD' } : { amount: 0, currency: 'USD' },
+                // Rate from Reports API is direct field in cents (e.g., 15300 = $153.00)
+                hourlyRate: { amount: e.rate || 0, currency: 'USD' },
                 tags: e.tags || []
             }));
 
