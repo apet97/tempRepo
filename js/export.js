@@ -58,8 +58,15 @@ export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
     const rows = [];
 
     analysis.forEach(user => {
-        Array.from(user.days.values()).forEach(day => {
-            day.entries.forEach(e => {
+        Array.from(user.days.entries()).forEach(([dateKey, day]) => {
+            // Ensure gapless export: include a placeholder row for days with no time entries
+            const entriesToLoop = day.entries.length > 0 ? day.entries : [{
+                description: '(no entries)',
+                timeInterval: { start: dateKey + 'T00:00:00Z', duration: 'PT0H' },
+                analysis: { regular: 0, overtime: 0, isBillable: false }
+            }];
+
+            entriesToLoop.forEach(e => {
                 // Sanitize all text fields to prevent CSV injection
                 const userName = sanitizeFormulaInjection(user.userName);
                 const description = sanitizeFormulaInjection(e.description);

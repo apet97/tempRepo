@@ -69,7 +69,7 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
     async function waitForToken() {
         while (true) {
             const now = Date.now();
-            if (now - lastRefill > REFILL_INTERVAL) {
+            if (now - lastRefill >= REFILL_INTERVAL) {
                 tokens = RATE_LIMIT;
                 lastRefill = now;
             }
@@ -115,7 +115,6 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
                 if (attempt < retries) {
                     console.warn(`Rate limit exceeded (attempt ${attempt + 1}/${retries + 1}). Retrying after ${waitMs}ms`);
                     await delay(waitMs);
-                    attempt++; // Properly increment attempt counter
                     continue;
                 } else {
                     console.error('Rate limit exceeded, no retries left');

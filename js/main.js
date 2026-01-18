@@ -369,12 +369,15 @@ export async function handleGenerateReport() {
             const results = await Promise.allSettled(optionalPromises.map(p => p.promise));
             results.forEach((result, index) => {
                 if (result.status === 'rejected') {
-                    const name = optionalPromises[index].name;
-                    console.warn(`Optional fetch '${name}' failed:`, result.reason);
-                    // Track failures for UI status display
-                    if (name === 'profiles') store.apiStatus.profilesFailed = store.users.length;
-                    if (name === 'holidays') store.apiStatus.holidaysFailed = store.users.length;
-                    if (name === 'timeOff') store.apiStatus.timeOffFailed = store.users.length;
+                    // ONLY report failure if the error is NOT an AbortError
+                    if (result.reason?.name !== 'AbortError') {
+                        const name = optionalPromises[index].name;
+                        console.warn(`Optional fetch '${name}' failed:`, result.reason);
+                        // Track failures for UI status display
+                        if (name === 'profiles') store.apiStatus.profilesFailed = store.users.length;
+                        if (name === 'holidays') store.apiStatus.holidaysFailed = store.users.length;
+                        if (name === 'timeOff') store.apiStatus.timeOffFailed = store.users.length;
+                    }
                 }
             });
         }
