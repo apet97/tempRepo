@@ -9,7 +9,8 @@
     "TIME_ENTRY_READ",
     "USER_READ",
     "TIME_OFF_READ",
-    "WORKSPACE_READ"
+    "WORKSPACE_READ",
+    "REPORTS_READ"
   ],
   "components": [
     {

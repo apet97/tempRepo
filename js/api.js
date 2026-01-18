@@ -241,18 +241,14 @@ export const Api = {
         console.log(`Fetching detailed report for ${startIso} to ${endIso}...`);
 
         while (hasMore) {
+            // Minimal request - only required params
             const requestBody = {
                 dateRangeStart: startIso,
                 dateRangeEnd: endIso,
                 detailedFilter: {
                     page: page,
-                    pageSize: pageSize,
-                    sortColumn: 'DATE'
-                },
-                sortOrder: 'ASCENDING',
-                exportType: 'JSON',
-                amountShown: 'EARNED',
-                amounts: ['EARNED', 'COST']
+                    pageSize: pageSize
+                }
             };
 
             const { data, failed } = await fetchWithAuth(reportsUrl, {

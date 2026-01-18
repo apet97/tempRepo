@@ -5,8 +5,8 @@
  */
 
 import { store } from './state.js';
-import { Api } from './api.js?v=9';
-import { calculateAnalysis } from './calc.js?v=9';
+import { Api } from './api.js?v=10';
+import { calculateAnalysis } from './calc.js?v=10';
 import { downloadCsv } from './export.js';
 import * as UI from './ui.js';
 import { IsoUtils, debounce, parseIsoDuration } from './utils.js';
@@ -293,10 +293,9 @@ export async function handleGenerateReport() {
     const requestDateRange = { start: startDate, end: endDate };
 
     try {
-        // Fetch Entries via per-user API (Reports API requires REPORTS_READ permission)
-        const entries = await Api.fetchEntries(
+        // Fetch Entries via Detailed Report API (requires REPORTS_READ permission in manifest)
+        const entries = await Api.fetchDetailedReport(
             store.claims.workspaceId,
-            store.users,
             `${startDate}T00:00:00Z`,
             `${endDate}T23:59:59Z`,
             { signal }
