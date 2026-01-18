@@ -4,13 +4,7 @@
   "name": "Overtime Summary",
   "baseUrl": "https://apet97.github.io/tempRepo",
   "description": "Analyze overtime hours and capacity utilization with configurable thresholds.",
-  "author": {
-    "name": "OTPLUS Team",
-    "email": "support@example.com",
-    "url": "https://github.com/apet97/tempRepo"
-  },
   "minimalSubscriptionPlan": "FREE",
-  "categories": ["REPORTING", "PRODUCTIVITY"],
   "scopes": [
     "TIME_ENTRY_READ",
     "USER_READ",
