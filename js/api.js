@@ -230,7 +230,9 @@ export const Api = {
      * @returns {Promise<Array<TimeEntry>>} Combined list of all time entries.
      */
     async fetchDetailedReport(workspaceId, startIso, endIso, options = {}) {
-        const reportsUrl = `https://reports.api.clockify.me/v1/workspaces/${workspaceId}/reports/detailed`;
+        // Use dynamic reportsUrl from addon claims (not hardcoded)
+        const baseReportsUrl = store.claims?.reportsUrl || 'https://reports.api.clockify.me';
+        const reportsUrl = `${baseReportsUrl}/v1/workspaces/${workspaceId}/reports/detailed`;
         const allEntries = [];
         let page = 1;
         const pageSize = 200; // Max allowed
