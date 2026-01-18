@@ -5,8 +5,8 @@
  */
 
 import { store } from './state.js';
-import { Api } from './api.js?v=10';
-import { calculateAnalysis } from './calc.js?v=10';
+import { Api } from './api.js?v=11';
+import { calculateAnalysis } from './calc.js?v=11';
 import { downloadCsv } from './export.js';
 import * as UI from './ui.js';
 import { IsoUtils, debounce, parseIsoDuration } from './utils.js';
@@ -293,7 +293,8 @@ export async function handleGenerateReport() {
     const requestDateRange = { start: startDate, end: endDate };
 
     try {
-        // Fetch Entries via Detailed Report API (requires REPORTS_READ permission in manifest)
+        // Fetch via Detailed Report API (single request for ALL users)
+        // Includes type field for HOLIDAY/TIME_OFF identification
         const entries = await Api.fetchDetailedReport(
             store.claims.workspaceId,
             `${startDate}T00:00:00Z`,
