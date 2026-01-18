@@ -399,19 +399,45 @@ export const Api = {
 
         if (failed) {
             store.apiStatus.timeOffFailed = users.length;
+            console.log('[DEBUG] fetchAllTimeOff: Request FAILED');
             return new Map();
         }
 
         // Build per-user per-date map
         const results = new Map();
-        const requests = data?.requests || [];
+
+        // DEBUG: Log the raw response structure
+        console.log('[DEBUG] fetchAllTimeOff: Raw data structure:', JSON.stringify(data, null, 2).substring(0, 500));
+        console.log('[DEBUG] fetchAllTimeOff: data.requests exists?', !!data?.requests);
+        console.log('[DEBUG] fetchAllTimeOff: data type:', typeof data, Array.isArray(data) ? '(is array)' : '');
+
+        // Try multiple possible response formats
+        let requests = [];
+        if (Array.isArray(data?.requests)) {
+            requests = data.requests;
+        } else if (Array.isArray(data)) {
+            // API might return array directly
+            requests = data;
+        } else if (data?.timeOffRequests) {
+            requests = data.timeOffRequests;
+        }
+
+        console.log('[DEBUG] fetchAllTimeOff: Found', requests.length, 'time-off requests');
 
         requests.forEach(request => {
+            console.log('[DEBUG] fetchAllTimeOff: Processing request:', request.id, 'status:', request.status, 'userId:', request.userId || request.requesterUserId);
+
             // Filter by status - only process approved requests
-            if (request.status !== 'APPROVED') return;
+            if (request.status !== 'APPROVED') {
+                console.log('[DEBUG] fetchAllTimeOff: Skipping non-APPROVED request');
+                return;
+            }
 
             const userId = request.userId || request.requesterUserId;
-            if (!userId) return;
+            if (!userId) {
+                console.log('[DEBUG] fetchAllTimeOff: Skipping request with no userId');
+                return;
+            }
 
             if (!results.has(userId)) results.set(userId, new Map());
             const userMap = results.get(userId);
@@ -419,6 +445,8 @@ export const Api = {
             const period = request.timeOffPeriod || {};
             const startKey = IsoUtils.extractDateKey(period.start || period.startDate);
             const endKey = IsoUtils.extractDateKey(period.end || period.endDate);
+
+            console.log('[DEBUG] fetchAllTimeOff: Period data:', period, 'startKey:', startKey, 'endKey:', endKey);
 
             if (startKey) {
                 const isFullDay = !period.halfDay && (request.timeUnit === 'DAYS' || !period.halfDayHours);
@@ -436,6 +464,8 @@ export const Api = {
                 }
             }
         });
+
+        console.log('[DEBUG] fetchAllTimeOff: Final results size:', results.size);
 
         store.apiStatus.timeOffFailed = 0;
         return results;
