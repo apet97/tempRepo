@@ -90,6 +90,7 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
         try {
             const headers = {
                 'X-Addon-Token': store.token,
+                'Accept': 'application/json',
                 ...options.headers
             };
 
@@ -129,6 +130,13 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
             if (!response.ok) {
                 const error = new Error(`API Error: ${response.status}`);
                 error.status = response.status;
+                // Log the response body for debugging purposes if it's a validation error
+                try {
+                    const errorData = await response.json();
+                    console.error('API Validation Error details:', errorData);
+                } catch (e) {
+                    // Ignore parsing errors
+                }
                 throw error;
             }
 
@@ -262,7 +270,7 @@ export const Api = {
         const end = endIso.split('T')[0];
         
         const { data, failed, status } = await fetchWithAuth(
-            `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assignedTo=${encodeURIComponent(userId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+            `${store.claims.backendUrl}${BASE_API}/${workspaceId}/holidays/in-period?assigned-to=${encodeURIComponent(userId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
             options
         );
         return { data, failed, status };
@@ -273,8 +281,8 @@ export const Api = {
      * 
      * @param {string} workspaceId
      * @param {Array<string>} userIds
-     * @param {string} startDate
-     * @param {string} endDate
+     * @param {string} startDate - Full ISO 8601 string
+     * @param {string} endDate - Full ISO 8601 string
      * @param {Object} [options] - Options including retry configuration
      * @returns {Promise<{data: Object, failed: boolean, status: number}>} Data contains `requests` array.
      */
@@ -286,8 +294,8 @@ export const Api = {
             pageSize: 200,
             users: userIds,
             statuses: ['APPROVED'],
-            dateRangeStart: startDate,
-            dateRangeEnd: endDate
+            start: startDate,
+            end: endDate
         };
 
         const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 2;
