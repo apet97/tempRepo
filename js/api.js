@@ -263,7 +263,8 @@ export const Api = {
                 break;
             }
 
-            const entries = data.timeEntries || [];
+            // Reports API uses 'timeentries' (lowercase) not 'timeEntries'
+            const entries = data.timeentries || data.timeEntries || [];
             console.log(`Page ${page}: Retrieved ${entries.length} entries`);
 
             // Transform report entries to match time-entries API format

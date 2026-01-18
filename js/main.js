@@ -5,8 +5,8 @@
  */
 
 import { store } from './state.js';
-import { Api } from './api.js?v=12';
-import { calculateAnalysis } from './calc.js?v=12';
+import { Api } from './api.js?v=13';
+import { calculateAnalysis } from './calc.js?v=13';
 import { downloadCsv } from './export.js';
 import * as UI from './ui.js';
 import { IsoUtils, debounce, parseIsoDuration } from './utils.js';
