@@ -42,14 +42,16 @@ class Store {
             overtimeBasis: 'daily'
         };
 
-        /** 
+        /**
          * Numeric parameters for calculation logic.
          * @type {Object}
          */
         this.calcParams = {
             dailyThreshold: 8,
             weeklyThreshold: 40,
-            overtimeMultiplier: 1.5
+            overtimeMultiplier: 1.5,
+            tier2ThresholdHours: 0,
+            tier2Multiplier: 2.0
         };
 
         // Load persisted config from LocalStorage
@@ -138,6 +140,12 @@ class Store {
                     }
                     if (typeof cp.overtimeMultiplier === 'number' && cp.overtimeMultiplier >= 1) {
                         this.calcParams.overtimeMultiplier = cp.overtimeMultiplier;
+                    }
+                    if (typeof cp.tier2ThresholdHours === 'number' && cp.tier2ThresholdHours >= 0) {
+                        this.calcParams.tier2ThresholdHours = cp.tier2ThresholdHours;
+                    }
+                    if (typeof cp.tier2Multiplier === 'number' && cp.tier2Multiplier >= 1) {
+                        this.calcParams.tier2Multiplier = cp.tier2Multiplier;
                     }
                 }
             }
@@ -247,6 +255,14 @@ class Store {
                 console.warn(`Multiplier must be at least 1: ${value}`);
                 return false;
             }
+            if (field === 'tier2Threshold' && numValue < 0) {
+                console.warn(`Tier2 threshold cannot be negative: ${value}`);
+                return false;
+            }
+            if (field === 'tier2Multiplier' && numValue < 1) {
+                console.warn(`Tier2 multiplier must be at least 1: ${value}`);
+                return false;
+            }
 
             this.overrides[userId][field] = value;
         }
@@ -328,6 +344,14 @@ class Store {
                 console.warn(`Multiplier must be at least 1: ${value}`);
                 return false;
             }
+            if (field === 'tier2Threshold' && numValue < 0) {
+                console.warn(`Per-day tier2Threshold cannot be negative: ${value}`);
+                return false;
+            }
+            if (field === 'tier2Multiplier' && numValue < 1) {
+                console.warn(`Per-day tier2Multiplier must be at least 1: ${value}`);
+                return false;
+            }
 
             this.overrides[userId].perDayOverrides[dateKey][field] = value;
         }
@@ -356,6 +380,8 @@ class Store {
 
         const globalCapacity = override.capacity;
         const globalMultiplier = override.multiplier;
+        const globalTier2Threshold = override.tier2Threshold;
+        const globalTier2Multiplier = override.tier2Multiplier;
 
         // Copy global values to all days in range
         dates.forEach(dateKey => {
@@ -368,6 +394,12 @@ class Store {
             }
             if (globalMultiplier !== undefined && globalMultiplier !== '') {
                 override.perDayOverrides[dateKey].multiplier = globalMultiplier;
+            }
+            if (globalTier2Threshold !== undefined && globalTier2Threshold !== '') {
+                override.perDayOverrides[dateKey].tier2Threshold = globalTier2Threshold;
+            }
+            if (globalTier2Multiplier !== undefined && globalTier2Multiplier !== '') {
+                override.perDayOverrides[dateKey].tier2Multiplier = globalTier2Multiplier;
             }
         });
 
@@ -406,6 +438,8 @@ class Store {
             if (isNaN(numValue)) return false;
             if (field === 'capacity' && numValue < 0) return false;
             if (field === 'multiplier' && numValue < 1) return false;
+            if (field === 'tier2Threshold' && numValue < 0) return false;
+            if (field === 'tier2Multiplier' && numValue < 1) return false;
             this.overrides[userId].weeklyOverrides[weekday][field] = value;
         }
 
@@ -432,6 +466,12 @@ class Store {
             }
             if (override.multiplier !== undefined && override.multiplier !== '') {
                 override.weeklyOverrides[weekday].multiplier = override.multiplier;
+            }
+            if (override.tier2Threshold !== undefined && override.tier2Threshold !== '') {
+                override.weeklyOverrides[weekday].tier2Threshold = override.tier2Threshold;
+            }
+            if (override.tier2Multiplier !== undefined && override.tier2Multiplier !== '') {
+                override.weeklyOverrides[weekday].tier2Multiplier = override.tier2Multiplier;
             }
         });
 

@@ -112,12 +112,13 @@ export function renderSummaryStrip(users) {
     acc.amount += u.totals.amount;
     acc.amountBase += (u.totals.amountBase || 0);
     acc.otPremium += u.totals.otPremium;
+    acc.otPremiumTier2 += (u.totals.otPremiumTier2 || 0);
     acc.holidayCount += u.totals.holidayCount;
     acc.timeOffCount += u.totals.timeOffCount;
     acc.holidayHours += (u.totals.holidayHours || 0);
     acc.timeOffHours += (u.totals.timeOffHours || 0);
     return acc;
-  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
+  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, otPremiumTier2: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
 
   const showBillable = store.config.showBillableBreakdown;
 
@@ -138,6 +139,7 @@ export function renderSummaryStrip(users) {
     <div class="summary-item"><span class="summary-label">Time Off</span><span class="summary-value">${totals.timeOffCount}</span></div>
     <div class="summary-item highlight"><span class="summary-label">Total (with OT)</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
+    <div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>
     <div class="summary-item"><span class="summary-label">Amount (no OT)</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
   `;
 }
@@ -595,7 +597,7 @@ function renderPerDayInputs(userId, perDayOverrides, profileCapacity, defaultPla
   }
 
   html += '<table class="per-day-table">';
-  html += '<thead><tr><th>Date</th><th>Day</th><th>Capacity</th><th>Multiplier</th></tr></thead>';
+  html += '<thead><tr><th>Date</th><th>Day</th><th>Capacity</th><th>Multiplier</th><th>Tier2 Threshold</th><th>Tier2 Mult</th></tr></thead>';
   html += '<tbody>';
 
   dates.forEach(dateKey => {
@@ -623,6 +625,26 @@ function renderPerDayInputs(userId, perDayOverrides, profileCapacity, defaultPla
                        data-field="multiplier"
                        value="${dayOverride.multiplier || ''}"
                        placeholder="${store.calcParams.overtimeMultiplier}"
+                       step="0.1" min="1" max="5" />
+            </td>
+            <td>
+                <input type="number"
+                       class="per-day-input"
+                       data-userid="${userId}"
+                       data-datekey="${dateKey}"
+                       data-field="tier2Threshold"
+                       value="${dayOverride.tier2Threshold || ''}"
+                       placeholder="0"
+                       step="1" min="0" max="999" />
+            </td>
+            <td>
+                <input type="number"
+                       class="per-day-input"
+                       data-userid="${userId}"
+                       data-datekey="${dateKey}"
+                       data-field="tier2Multiplier"
+                       value="${dayOverride.tier2Multiplier || ''}"
+                       placeholder="${store.calcParams.tier2Multiplier || 2.0}"
                        step="0.1" min="1" max="5" />
             </td>
         </tr>`;
@@ -658,7 +680,7 @@ function renderWeeklyInputs(userId, weeklyOverrides, profileCapacity, defaultPla
   }
 
   html += '<table class="weekly-table">';
-  html += '<thead><tr><th>Weekday</th><th>Capacity (hrs)</th><th>Multiplier (x)</th></tr></thead>';
+  html += '<thead><tr><th>Weekday</th><th>Capacity (hrs)</th><th>Multiplier (x)</th><th>Tier2 Threshold</th><th>Tier2 Mult</th></tr></thead>';
   html += '<tbody>';
 
   weekdays.forEach(weekday => {
@@ -683,6 +705,24 @@ function renderWeeklyInputs(userId, weeklyOverrides, profileCapacity, defaultPla
                    data-field="multiplier"
                    value="${dayOverride.multiplier || ''}"
                    placeholder="${store.calcParams.overtimeMultiplier}"
+                   step="0.1" min="1" max="5" />
+        </td>
+        <td>
+            <input type="number" class="weekly-input"
+                   data-userid="${userId}"
+                   data-weekday="${weekday}"
+                   data-field="tier2Threshold"
+                   value="${dayOverride.tier2Threshold || ''}"
+                   placeholder="0"
+                   step="1" min="0" max="999" />
+        </td>
+        <td>
+            <input type="number" class="weekly-input"
+                   data-userid="${userId}"
+                   data-weekday="${weekday}"
+                   data-field="tier2Multiplier"
+                   value="${dayOverride.tier2Multiplier || ''}"
+                   placeholder="${store.calcParams.tier2Multiplier || 2.0}"
                    step="0.1" min="1" max="5" />
         </td>
     </tr>`;
@@ -746,6 +786,26 @@ export function renderOverridesTable() {
                step="0.1" min="1" max="5"
                aria-label="Overtime multiplier for ${escapeHtml(user.name)}">
       </td>
+      <td>
+        <input type="number"
+               class="override-input ${override.tier2Threshold ? '' : 'inherited'}"
+               data-userid="${user.id}"
+               data-field="tier2Threshold"
+               placeholder="0"
+               value="${override.tier2Threshold || ''}"
+               step="1" min="0" max="999"
+               aria-label="Tier2 Threshold for ${escapeHtml(user.name)}">
+      </td>
+      <td>
+        <input type="number"
+               class="override-input ${override.tier2Multiplier ? '' : 'inherited'}"
+               data-userid="${user.id}"
+               data-field="tier2Multiplier"
+               placeholder="${store.calcParams.tier2Multiplier || 2.0}"
+               value="${override.tier2Multiplier || ''}"
+               step="0.1" min="1" max="5"
+               aria-label="Tier2 Multiplier for ${escapeHtml(user.name)}">
+      </td>
     `;
     fragment.appendChild(tr);
 
@@ -756,7 +816,7 @@ export function renderOverridesTable() {
       expandedRow.dataset.userid = user.id;
 
       const expandedCell = document.createElement('td');
-      expandedCell.colSpan = 4;
+      expandedCell.colSpan = 6;
 
       // Render per-day inputs
       expandedCell.innerHTML = renderPerDayInputs(user.id, override.perDayOverrides || {}, profileCapacity, placeholder);
@@ -771,7 +831,7 @@ export function renderOverridesTable() {
       expandedRow.dataset.userid = user.id;
 
       const expandedCell = document.createElement('td');
-      expandedCell.colSpan = 4;
+      expandedCell.colSpan = 6;
 
       // Render weekly inputs
       expandedCell.innerHTML = renderWeeklyInputs(user.id, override.weeklyOverrides || {}, profileCapacity, placeholder);

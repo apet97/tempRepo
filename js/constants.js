@@ -32,6 +32,10 @@ export const CONSTANTS = {
     DEFAULT_WEEKLY_CAPACITY: 40,
     /** Default overtime multiplier (1.5x). */
     DEFAULT_MULTIPLIER: 1.5,
+    /** Default tier 2 threshold in OT hours (0 = disabled). */
+    DEFAULT_TIER2_THRESHOLD: 0,
+    /** Default tier 2 multiplier (2.0x). */
+    DEFAULT_TIER2_MULTIPLIER: 2.0,
     /** Standard ISO date format used by API. */
     DATE_FORMAT_ISO: 'YYYY-MM-DD'
 };

@@ -195,6 +195,26 @@ export function bindConfigEvents() {
         }, 300));
     }
 
+    const tier2ThresholdEl = document.getElementById('configTier2Threshold');
+    if (tier2ThresholdEl) {
+        tier2ThresholdEl.value = store.calcParams.tier2ThresholdHours || 0;
+        tier2ThresholdEl.addEventListener('input', debounce((e) => {
+            store.calcParams.tier2ThresholdHours = parseFloat(e.target.value) || 0;
+            store.saveConfig();
+            if (store.rawEntries) runCalculation();
+        }, 300));
+    }
+
+    const tier2MultiplierEl = document.getElementById('configTier2Multiplier');
+    if (tier2MultiplierEl) {
+        tier2MultiplierEl.value = store.calcParams.tier2Multiplier || 2.0;
+        tier2MultiplierEl.addEventListener('input', debounce((e) => {
+            store.calcParams.tier2Multiplier = parseFloat(e.target.value) || 2.0;
+            store.saveConfig();
+            if (store.rawEntries) runCalculation();
+        }, 300));
+    }
+
     // Config toggle collapse
     const configToggle = document.getElementById('configToggle');
     const configContent = document.getElementById('configContent');

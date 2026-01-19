@@ -55,7 +55,9 @@ describe('State Module - Store Class', () => {
       expect(store.calcParams).toEqual({
         dailyThreshold: 8,
         weeklyThreshold: 40,
-        overtimeMultiplier: 1.5
+        overtimeMultiplier: 1.5,
+        tier2ThresholdHours: 0,
+        tier2Multiplier: 2.0
       });
     });
 

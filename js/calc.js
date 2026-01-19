@@ -269,6 +269,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 amount: 0,
                 amountBase: 0,  // Base cost without OT premium
                 otPremium: 0,
+                otPremiumTier2: 0,  // Additional Tier 2 premium
                 expectedCapacity: 0,
                 holidayCount: 0,
                 timeOffCount: 0,
@@ -296,7 +297,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 userId: entry.userId,
                 userName: entry.userName || 'Unknown',
                 days: new Map(),
-                totals: { regular: 0, overtime: 0, total: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, expectedCapacity: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0, vacationEntryHours: 0 }
+                totals: { regular: 0, overtime: 0, total: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, otPremiumTier2: 0, expectedCapacity: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0, vacationEntryHours: 0 }
             };
             usersMap.set(entry.userId, user);
         }
@@ -312,8 +313,14 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
         ? IsoUtils.generateDateRange(dateRange.start, dateRange.end)
         : [];
 
+    // Track cumulative OT hours per user for tier 2 calculation
+    const userCumulativeOT = new Map();
+
     // 3. Process each user for each day in range
     usersMap.forEach(user => {
+        // Initialize cumulative OT tracker for this user
+        userCumulativeOT.set(user.userId, 0);
+
         // Iterate over the FULL date range, not just days with entries
         const daysToProcess = allDateKeys.length > 0 ? allDateKeys : Array.from(user.days.keys()).sort();
 
@@ -345,6 +352,52 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 // Fall through to global multiplier
                 else if (override.multiplier !== undefined && override.multiplier !== '') {
                     userMultiplier = parseFloat(override.multiplier);
+                }
+            }
+
+            // Extract tier2 threshold and multiplier with same precedence as multiplier
+            let userTier2Threshold = calcParams.tier2ThresholdHours || 0;
+            let userTier2Multiplier = calcParams.tier2Multiplier || 2.0;
+
+            if (override) {
+                // Check per-day override first
+                if (override.mode === 'perDay' && override.perDayOverrides?.[dateKey]?.tier2Threshold !== undefined) {
+                    userTier2Threshold = parseFloat(override.perDayOverrides[dateKey].tier2Threshold);
+                }
+                else if (override.mode === 'weekly' && override.weeklyOverrides) {
+                    const weekday = IsoUtils.getWeekdayKey(dateKey);
+                    const weekdayOverride = override.weeklyOverrides[weekday];
+                    if (weekdayOverride?.tier2Threshold !== undefined) {
+                        userTier2Threshold = parseFloat(weekdayOverride.tier2Threshold);
+                    }
+                    // Fall through to global if no weekly override for this day
+                    else if (override.tier2Threshold !== undefined && override.tier2Threshold !== '') {
+                        userTier2Threshold = parseFloat(override.tier2Threshold);
+                    }
+                }
+                // Fall through to global override
+                else if (override.tier2Threshold !== undefined && override.tier2Threshold !== '') {
+                    userTier2Threshold = parseFloat(override.tier2Threshold);
+                }
+
+                // Same for tier2Multiplier
+                if (override.mode === 'perDay' && override.perDayOverrides?.[dateKey]?.tier2Multiplier !== undefined) {
+                    userTier2Multiplier = parseFloat(override.perDayOverrides[dateKey].tier2Multiplier);
+                }
+                else if (override.mode === 'weekly' && override.weeklyOverrides) {
+                    const weekday = IsoUtils.getWeekdayKey(dateKey);
+                    const weekdayOverride = override.weeklyOverrides[weekday];
+                    if (weekdayOverride?.tier2Multiplier !== undefined) {
+                        userTier2Multiplier = parseFloat(weekdayOverride.tier2Multiplier);
+                    }
+                    // Fall through to global if no weekly override for this day
+                    else if (override.tier2Multiplier !== undefined && override.tier2Multiplier !== '') {
+                        userTier2Multiplier = parseFloat(override.tier2Multiplier);
+                    }
+                }
+                // Fall through to global override
+                else if (override.tier2Multiplier !== undefined && override.tier2Multiplier !== '') {
+                    userTier2Multiplier = parseFloat(override.tier2Multiplier);
                 }
             }
 
@@ -435,15 +488,45 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 const effectiveRate = isBillable ? hourlyRate : 0;
                 const baseAmount = duration * effectiveRate;
 
-                let entryPremium = 0;
+                let tier1Premium = 0;
+                let tier2Premium = 0;
+
                 if (overtime > 0) {
+                    // Tier 1 premium (existing logic)
                     const multiplier = userMultiplier > 0 ? userMultiplier : 1;
-                    entryPremium = (overtime * effectiveRate * multiplier) - (overtime * effectiveRate);
+                    tier1Premium = overtime * effectiveRate * (multiplier - 1);
+
+                    // Tier 2 premium calculation
+                    if (userTier2Threshold >= 0 && userTier2Multiplier > multiplier) {
+                        const cumulativeBefore = userCumulativeOT.get(user.userId) || 0;
+                        const cumulativeAfter = cumulativeBefore + overtime;
+
+                        // Calculate how many hours exceed the threshold
+                        let tier2EligibleHours = 0;
+                        if (cumulativeAfter > userTier2Threshold) {
+                            if (cumulativeBefore >= userTier2Threshold) {
+                                // All OT hours in this entry are tier 2
+                                tier2EligibleHours = overtime;
+                            } else {
+                                // Only portion beyond threshold is tier 2
+                                tier2EligibleHours = cumulativeAfter - userTier2Threshold;
+                            }
+                        }
+
+                        // Tier 2 premium = additional premium beyond tier 1
+                        tier2Premium = tier2EligibleHours * effectiveRate * (userTier2Multiplier - multiplier);
+                    }
+
+                    // Update cumulative OT
+                    userCumulativeOT.set(user.userId, (userCumulativeOT.get(user.userId) || 0) + overtime);
                 }
+
+                const entryPremium = tier1Premium + tier2Premium;
 
                 user.totals.amount += baseAmount + entryPremium;
                 user.totals.amountBase += baseAmount;  // Track base cost without OT premium
-                user.totals.otPremium += entryPremium;
+                user.totals.otPremium += tier1Premium;          // Keep as Tier 1 only
+                user.totals.otPremiumTier2 += tier2Premium;     // Track Tier 2 separately
 
                 // Attach analysis to ALL entries
                 const tags = [];

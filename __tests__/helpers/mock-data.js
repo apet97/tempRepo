@@ -191,7 +191,9 @@ export function createMockStore(options = {}) {
     calcParams: {
       dailyThreshold: 8,
       weeklyThreshold: 40,
-      overtimeMultiplier: 1.5
+      overtimeMultiplier: 1.5,
+      tier2ThresholdHours: 9999,  // High threshold to not trigger in legacy tests
+      tier2Multiplier: 2.0
     },
     profiles: new Map(
       users.map((u, i) => [
