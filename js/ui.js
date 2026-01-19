@@ -122,7 +122,8 @@ export function renderSummaryStrip(users) {
 
   const showBillable = store.config.showBillableBreakdown;
 
-  strip.innerHTML = `
+  // Time metrics (always on top row)
+  const timeMetrics = `
     <div class="summary-item"><span class="summary-label">Users</span><span class="summary-value">${totals.users}</span></div>
     <div class="summary-item"><span class="summary-label">Capacity</span><span class="summary-value">${formatHours(totals.capacity)}</span></div>
     <div class="summary-item"><span class="summary-label">Total time</span><span class="summary-value">${formatHours(totals.worked)}</span></div>
@@ -137,10 +138,52 @@ export function renderSummaryStrip(users) {
     ` : ''}
     <div class="summary-item"><span class="summary-label">Holidays</span><span class="summary-value">${totals.holidayCount}</span></div>
     <div class="summary-item"><span class="summary-label">Time Off</span><span class="summary-value">${totals.timeOffCount}</span></div>
+  `;
+
+  // Money metrics (on bottom row when billable breakdown is ON)
+  const moneyMetrics = `
     <div class="summary-item highlight"><span class="summary-label">Total (with OT)</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
     <div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>
     <div class="summary-item"><span class="summary-label">Amount (no OT)</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
+  `;
+
+  // Two-row layout when billable breakdown is ON
+  if (showBillable) {
+    strip.innerHTML = `
+      <div class="summary-row summary-row-top">${timeMetrics}</div>
+      <div class="summary-row summary-row-bottom">${moneyMetrics}</div>
+    `;
+  } else {
+    // Single row layout when OFF
+    strip.innerHTML = timeMetrics + moneyMetrics;
+  }
+}
+
+/**
+ * Renders the summary expand/collapse toggle button.
+ * Only shows when billable breakdown is enabled.
+ */
+export function renderSummaryExpandToggle() {
+  const container = document.getElementById('summaryExpandToggleContainer');
+  if (!container) return;
+
+  // Only render if billable breakdown is enabled
+  if (!store.config.showBillableBreakdown) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const expanded = store.ui.summaryExpanded;
+  const icon = expanded ? '▾' : '▸';
+  const text = expanded ? 'Hide breakdown' : 'Show breakdown';
+
+  container.innerHTML = `
+    <button type="button" id="summaryExpandToggle" class="btn-text btn-xs"
+            style="display: flex; align-items: center; gap: 4px;">
+      <span class="expand-icon">${icon}</span>
+      <span class="expand-text">${text}</span>
+    </button>
   `;
 }
 
@@ -497,6 +540,11 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">Regular</th>
           <th class="text-right">Overtime</th>
           <th class="text-right">Billable</th>
+          <th class="text-right">Rate ($/hr)</th>
+          <th class="text-right">Regular $</th>
+          <th class="text-right">OT $</th>
+          <th class="text-right">Tier2 $</th>
+          <th class="text-right">Total $</th>
           <th class="text-right">Tags</th>
         </tr>
       </thead>
@@ -544,6 +592,11 @@ export function renderDetailedTable(users, activeFilter = null) {
         <td class="text-right">${formatHours(e.analysis?.regular || 0)}</td>
         <td class="text-right ${(e.analysis?.overtime || 0) > 0 ? 'text-danger' : ''}">${formatHours(e.analysis?.overtime || 0)}</td>
         <td class="text-right">${billable}</td>
+        <td class="text-right">${formatCurrency(e.analysis?.hourlyRate || 0)}</td>
+        <td class="text-right">${formatCurrency(e.analysis?.regularAmount || 0)}</td>
+        <td class="text-right">${formatCurrency((e.analysis?.overtimeAmountBase || 0) + (e.analysis?.tier1Premium || 0))}</td>
+        <td class="text-right">${formatCurrency(e.analysis?.tier2Premium || 0)}</td>
+        <td class="text-right highlight">${formatCurrency(e.analysis?.totalAmountWithOT || 0)}</td>
         <td class="text-right" style="gap:4px; display:flex; justify-content:flex-end;">${tags.join(' ') || '—'}</td>
     </tr>`;
   });

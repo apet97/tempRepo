@@ -698,6 +698,37 @@ body.density-spacious {
   display: none;
 }
 
+/* Two-row summary layout support */
+.summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  align-items: center;
+}
+
+.summary-row-top {
+  flex: 1;
+  min-width: 100%;
+}
+
+.summary-row-bottom {
+  flex: 1;
+  min-width: 100%;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+/* Ensure items stretch appropriately */
+.summary-row-top .summary-item {
+  flex: 0 1 auto;
+}
+
+.summary-row-bottom .summary-item {
+  flex: 0 0 auto;
+}
+
 /* Tables */
 .table-scroll {
   width: 100%;

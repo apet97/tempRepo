@@ -36,6 +36,9 @@
           <input type="date" id="endDate" class="compact-date" aria-label="End date">
         </div>
         <div class="button-group" style="margin-left: 12px; align-self: flex-end;">
+          <button class="btn-text btn-xs" id="datePresetThisWeek">This Week</button>
+          <button class="btn-text btn-xs" id="datePresetLastWeek">Last Week</button>
+          <button class="btn-text btn-xs" id="datePresetLast2Weeks">Last 2 Weeks</button>
           <button class="btn-text btn-xs" id="datePresetLastMonth">Last Month</button>
           <button class="btn-text btn-xs" id="datePresetThisMonth">This Month</button>
         </div>
@@ -74,6 +77,9 @@
             Daily Threshold <input type="number" id="configDaily" value="8" min="1" max="24" class="config-input-sm"
               aria-label="Daily Capacity Threshold in Hours">
             hrs
+            <span id="dailyThresholdHelper" class="config-helper" style="display:none; font-size:11px; color:var(--text-muted); margin-left:8px;">
+              (Using profile capacity)
+            </span>
           </label>
           <label class="config-item">
             Multiplier <input type="number" id="configMultiplier" value="1.5" min="1" max="5" step="0.1"
@@ -127,10 +133,7 @@
             <option value="date">Date</option>
             <option value="week">Week</option>
           </select>
-          <button type="button" id="summaryExpandToggle" class="btn-text btn-xs" style="display: flex; align-items: center; gap: 4px;">
-            <span class="expand-icon">▸</span>
-            <span class="expand-text">Show breakdown</span>
-          </button>
+          <div id="summaryExpandToggleContainer"></div>
         </div>
         <div class="table-scroll">
           <table class="report-table" aria-label="User summary">

@@ -168,9 +168,9 @@ export function generateMockAnalysisData(userCount = 5) {
  */
 export function createMockStore(options = {}) {
   const userCount = options.userCount || 5;
-  const users = generateMockUsers(userCount);
+  const users = options.users || generateMockUsers(userCount);
 
-  return {
+  const defaults = {
     token: 'mock-jwt-token-' + Date.now(),
     claims: {
       workspaceId: 'ws_test_' + Date.now(),
@@ -179,7 +179,7 @@ export function createMockStore(options = {}) {
     },
     users: users,
     rawEntries: null,
-    analysisResults: generateMockAnalysisData(userCount),
+    analysisResults: generateMockAnalysisData(users.length),
     config: {
       useProfileCapacity: true,
       useProfileWorkingDays: true,
@@ -209,7 +209,7 @@ export function createMockStore(options = {}) {
     ),
     holidays: new Map(),
     timeOff: new Map(),
-    overrides: options.overrides || {},
+    overrides: {},
     apiStatus: { profilesFailed: 0, holidaysFailed: 0, timeOffFailed: 0 },
     ui: {
       isLoading: false,
@@ -217,8 +217,16 @@ export function createMockStore(options = {}) {
       summaryGroupBy: 'user',
       overridesCollapsed: true,
       activeTab: 'summary'
-    },
-    ...options
+    }
+  };
+
+  // Deep merge: merge config and calcParams separately to preserve defaults
+  return {
+    ...defaults,
+    ...options,
+    config: { ...defaults.config, ...(options.config || {}) },
+    calcParams: { ...defaults.calcParams, ...(options.calcParams || {}) },
+    overrides: options.overrides || defaults.overrides
   };
 }
 

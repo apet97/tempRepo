@@ -335,23 +335,35 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             if (override) {
                 // Check per-day multiplier first (need dateKey context)
                 if (override.mode === 'perDay' && override.perDayOverrides?.[dateKey]?.multiplier) {
-                    userMultiplier = parseFloat(override.perDayOverrides[dateKey].multiplier);
+                    const parsed = parseFloat(override.perDayOverrides[dateKey].multiplier);
+                    if (!isNaN(parsed) && parsed > 0) {
+                        userMultiplier = parsed;
+                    }
                 }
                 // Check weekly multiplier
                 else if (override.mode === 'weekly' && override.weeklyOverrides) {
                     const weekday = IsoUtils.getWeekdayKey(dateKey);
                     const weekdayOverride = override.weeklyOverrides[weekday];
                     if (weekdayOverride?.multiplier) {
-                        userMultiplier = parseFloat(weekdayOverride.multiplier);
+                        const parsed = parseFloat(weekdayOverride.multiplier);
+                        if (!isNaN(parsed) && parsed > 0) {
+                            userMultiplier = parsed;
+                        }
                     }
                     // Fall through to global multiplier if no weekly override for this day
                     else if (override.multiplier !== undefined && override.multiplier !== '') {
-                        userMultiplier = parseFloat(override.multiplier);
+                        const parsed = parseFloat(override.multiplier);
+                        if (!isNaN(parsed) && parsed > 0) {
+                            userMultiplier = parsed;
+                        }
                     }
                 }
                 // Fall through to global multiplier
                 else if (override.multiplier !== undefined && override.multiplier !== '') {
-                    userMultiplier = parseFloat(override.multiplier);
+                    const parsed = parseFloat(override.multiplier);
+                    if (!isNaN(parsed) && parsed > 0) {
+                        userMultiplier = parsed;
+                    }
                 }
             }
 
@@ -490,6 +502,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
                 let tier1Premium = 0;
                 let tier2Premium = 0;
+                let tier2EligibleHours = 0;  // Track for per-entry analysis
 
                 if (overtime > 0) {
                     // Tier 1 premium (existing logic)
@@ -502,7 +515,6 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                         const cumulativeAfter = cumulativeBefore + overtime;
 
                         // Calculate how many hours exceed the threshold
-                        let tier2EligibleHours = 0;
                         if (cumulativeAfter > userTier2Threshold) {
                             if (cumulativeBefore >= userTier2Threshold) {
                                 // All OT hours in this entry are tier 2
@@ -534,12 +546,45 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 if (isNonWorking) tags.push('OFF-DAY');
                 if (isTimeOff) tags.push('TIME-OFF');
 
+                // Calculate per-entry money components
+                const regularAmount = regular * effectiveRate;
+                const overtimeAmountBase = overtime * effectiveRate;
+
+                // Calculate effective overtime rate (only meaningful when overtime > 0)
+                const multiplier = userMultiplier > 0 ? userMultiplier : 1;
+                let effectiveOvertimeRate = effectiveRate;
+                if (overtime > 0) {
+                    // Weighted average rate including tier2 if applicable
+                    const tier1Hours = overtime - tier2EligibleHours;
+                    const tier1Rate = effectiveRate * multiplier;
+
+                    if (tier2EligibleHours > 0) {
+                        // Has tier2 component - calculate weighted average
+                        const tier2Rate = effectiveRate * userTier2Multiplier;
+                        effectiveOvertimeRate = (tier1Hours * tier1Rate + tier2EligibleHours * tier2Rate) / overtime;
+                    } else {
+                        // Only tier1 - use tier1 rate
+                        effectiveOvertimeRate = tier1Rate;
+                    }
+                }
+
                 entry.analysis = {
                     regular,
                     overtime,
                     isBillable,
-                    cost: baseAmount + entryPremium,
-                    tags
+                    cost: baseAmount + entryPremium,  // Keep for compatibility
+                    tags,
+
+                    // NEW per-entry money fields
+                    hourlyRate: effectiveRate,
+                    regularRate: effectiveRate,
+                    overtimeRate: effectiveOvertimeRate,
+                    regularAmount,
+                    overtimeAmountBase,
+                    tier1Premium,
+                    tier2Premium,
+                    totalAmountWithOT: regularAmount + overtimeAmountBase + tier1Premium + tier2Premium,
+                    totalAmountNoOT: regularAmount + overtimeAmountBase
                 };
             });
         });

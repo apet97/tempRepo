@@ -151,6 +151,29 @@ export async function loadInitialData() {
 // --- Configuration Wiring ---
 
 /**
+ * Updates the Daily Threshold input state based on Profile Capacity setting.
+ * Disables the input and shows helper text when Profile Capacity is ON.
+ */
+function updateDailyThresholdState() {
+    const dailyInput = document.getElementById('configDaily');
+    const helper = document.getElementById('dailyThresholdHelper');
+    if (!dailyInput || !helper) return;
+
+    const useProfile = store.config.useProfileCapacity;
+    dailyInput.disabled = useProfile;
+    helper.style.display = useProfile ? 'inline' : 'none';
+
+    // Visual feedback
+    if (useProfile) {
+        dailyInput.style.opacity = '0.5';
+        dailyInput.style.cursor = 'not-allowed';
+    } else {
+        dailyInput.style.opacity = '1';
+        dailyInput.style.cursor = '';
+    }
+}
+
+/**
  * Binds event listeners to configuration controls (toggles, inputs).
  * Handles persistence to localStorage and auto-recalculation.
  */
@@ -170,6 +193,17 @@ export function bindConfigEvents() {
             el.addEventListener('change', (e) => {
                 store.config[key] = e.target.checked;
                 store.saveConfig();
+
+                // Update expand toggle visibility when billable breakdown changes
+                if (key === 'showBillableBreakdown') {
+                    UI.renderSummaryExpandToggle();
+                }
+
+                // Update Daily Threshold state when Profile Capacity changes
+                if (key === 'useProfileCapacity') {
+                    updateDailyThresholdState();
+                }
+
                 if (store.rawEntries) runCalculation();
             });
         }
@@ -214,6 +248,9 @@ export function bindConfigEvents() {
             if (store.rawEntries) runCalculation();
         }, 300));
     }
+
+    // Initialize Daily Threshold state based on Profile Capacity
+    updateDailyThresholdState();
 
     // Config toggle collapse
     const configToggle = document.getElementById('configToggle');
@@ -261,6 +298,32 @@ export function bindConfigEvents() {
         document.getElementById('endDate').value = IsoUtils.toISODate(end);
     };
 
+    document.getElementById('datePresetThisWeek')?.addEventListener('click', () => {
+        const now = new Date();
+        const dayOfWeek = now.getUTCDay(); // 0 = Sunday
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday = start of week
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset));
+        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        setDateRange(start, end);
+    });
+
+    document.getElementById('datePresetLastWeek')?.addEventListener('click', () => {
+        const now = new Date();
+        const dayOfWeek = now.getUTCDay();
+        const lastMondayOffset = dayOfWeek === 0 ? -13 : -6 - dayOfWeek;
+        const lastSundayOffset = dayOfWeek === 0 ? -7 : -dayOfWeek;
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + lastMondayOffset));
+        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + lastSundayOffset));
+        setDateRange(start, end);
+    });
+
+    document.getElementById('datePresetLast2Weeks')?.addEventListener('click', () => {
+        const now = new Date();
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 13)); // 14 days including today
+        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        setDateRange(start, end);
+    });
+
     document.getElementById('datePresetLastMonth')?.addEventListener('click', () => {
         const now = new Date();
         const start = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
@@ -301,31 +364,22 @@ export function bindConfigEvents() {
         });
     }
 
-    // Summary Expand/Collapse Toggle
-    const summaryExpandToggle = document.getElementById('summaryExpandToggle');
-    if (summaryExpandToggle) {
-        // Initialize from stored state
-        const icon = summaryExpandToggle.querySelector('.expand-icon');
-        const text = summaryExpandToggle.querySelector('.expand-text');
-        if (store.ui.summaryExpanded) {
-            icon.textContent = '▾';
-            text.textContent = 'Hide breakdown';
-        }
+    // Summary Expand/Collapse Toggle - use event delegation
+    const summaryExpandToggleContainer = document.getElementById('summaryExpandToggleContainer');
+    if (summaryExpandToggleContainer) {
+        // Initialize button
+        UI.renderSummaryExpandToggle();
 
-        summaryExpandToggle.addEventListener('click', () => {
+        // Event delegation for expand toggle (button may not exist initially)
+        summaryExpandToggleContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('#summaryExpandToggle');
+            if (!btn) return;
+
             store.ui.summaryExpanded = !store.ui.summaryExpanded;
             store.saveUIState();
 
             // Update button UI
-            const icon = summaryExpandToggle.querySelector('.expand-icon');
-            const text = summaryExpandToggle.querySelector('.expand-text');
-            if (store.ui.summaryExpanded) {
-                icon.textContent = '▾';
-                text.textContent = 'Hide breakdown';
-            } else {
-                icon.textContent = '▸';
-                text.textContent = 'Show breakdown';
-            }
+            UI.renderSummaryExpandToggle();
 
             // Re-render table with new state
             if (store.analysisResults) {

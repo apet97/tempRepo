@@ -136,6 +136,9 @@ describe('UI Module - Additional Coverage', () => {
 
   describe('renderSummaryTable', () => {
     it('should render with billable breakdown columns', () => {
+      // Enable both billable breakdown and expanded state to show columns
+      store.ui.summaryExpanded = true;
+
       const entries = [{
         id: 'entry1',
         userId: 'user1',
