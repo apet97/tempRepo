@@ -847,6 +847,10 @@ body.density-spacious {
   white-space: nowrap;
 }
 
+#detailedCard .report-table th {
+  text-align: center;
+}
+
 .report-table th:not(:last-child) {
   border-right: 1px solid var(--border-color);
 }

@@ -566,11 +566,11 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th>Description</th>
           <th class="text-right">Regular</th>
           <th class="text-right">Overtime</th>
-          <th class="text-right">Billable</th>
+          <th class="text-right">Bill</th>
           <th class="text-right">Rate</th>
-          <th class="text-right">Regular $</th>
+          <th class="text-right">Reg $</th>
           <th class="text-right">OT $</th>
-          <th class="text-right">Tier2 $</th>
+          <th class="text-right">T2 $</th>
           <th class="text-right">Total $</th>
           <th class="text-right">Tags</th>
         </tr>
