@@ -144,7 +144,7 @@ export function renderSummaryStrip(users) {
   const moneyMetrics = `
     <div class="summary-item highlight"><span class="summary-label">Total (with OT)</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
-    <div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>
+    ${showBillable ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>` : ''}
     <div class="summary-item"><span class="summary-label">Amount (no OT)</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
   `;
 
@@ -155,8 +155,8 @@ export function renderSummaryStrip(users) {
       <div class="summary-row summary-row-bottom">${moneyMetrics}</div>
     `;
   } else {
-    // Single row layout when OFF
-    strip.innerHTML = timeMetrics + moneyMetrics;
+    // Single row layout when OFF so the strip doesn't look sparse
+    strip.innerHTML = `<div class="summary-row summary-row-top">${timeMetrics}${moneyMetrics}</div>`;
   }
 }
 
@@ -464,13 +464,22 @@ export function renderDetailedTable(users, activeFilter = null) {
   const Elements = getElements();
   const container = document.getElementById('detailedTableContainer');
   if (!container) return;
+  const detailedCard = document.getElementById('detailedCard');
+  const showBillable = store.config.showBillableBreakdown;
+  if (detailedCard) {
+    detailedCard.classList.toggle('billable-off', !showBillable);
+  }
 
   // Use stored filter if not provided, otherwise update store
   if (activeFilter) {
     store.ui.activeDetailedFilter = activeFilter;
     store.ui.detailedPage = 1; // Reset to page 1 on filter change
   }
-  const currentFilter = store.ui.activeDetailedFilter || 'all';
+  let currentFilter = store.ui.activeDetailedFilter || 'all';
+  if (!showBillable && currentFilter === 'billable') {
+    currentFilter = 'all';
+    store.ui.activeDetailedFilter = 'all';
+  }
 
   // Flatten entries and attach day metadata
   // MEDIUM FIX #18: Access d.meta.* instead of d.* for day metadata
@@ -553,28 +562,47 @@ export function renderDetailedTable(users, activeFilter = null) {
   pageEntries.forEach(e => {
     const date = (e.timeInterval.start || '').split('T')[0];
     const tags = [];
+    const tagKeys = new Set();
+    const addTag = (key, html) => {
+      if (tagKeys.has(key)) return;
+      tagKeys.add(key);
+      tags.push(html);
+    };
 
     if (e.dayMeta.isHoliday) {
-      tags.push(`<span class="badge badge-holiday" title="${escapeHtml(e.dayMeta.holidayName || 'Holiday')}">HOLIDAY</span>`);
+      addTag('HOLIDAY', `<span class="badge badge-holiday" title="${escapeHtml(e.dayMeta.holidayName || 'Holiday')}">HOLIDAY</span>`);
     }
     if (e.dayMeta.isNonWorking) {
-      tags.push('<span class="badge badge-offday">OFF-DAY</span>');
+      addTag('OFF-DAY', '<span class="badge badge-offday">OFF-DAY</span>');
     }
     if (e.dayMeta.isTimeOff) {
-      tags.push('<span class="badge badge-timeoff">TIME-OFF</span>');
+      addTag('TIME-OFF', '<span class="badge badge-timeoff">TIME-OFF</span>');
     }
 
     // BREAK badge
     const entryClass = classifyEntryForOvertime(e);
     if (entryClass === 'break') {
-      tags.push('<span class="badge badge-break">BREAK</span>');
+      addTag('BREAK', '<span class="badge badge-break">BREAK</span>');
+    }
+
+    const normalizedDescription = (e.description || '').trim().toUpperCase();
+    if (e.type === 'HOLIDAY' || normalizedDescription === 'HOLIDAY TIME ENTRY') {
+      addTag('HOLIDAY-TIME-ENTRY', '<span class="badge badge-holiday">HOLIDAY TIME ENTRY</span>');
+    }
+    if (e.type === 'TIME_OFF' || normalizedDescription === 'TIME OFF TIME ENTRY') {
+      addTag('TIME-OFF-TIME-ENTRY', '<span class="badge badge-timeoff">TIME OFF TIME ENTRY</span>');
     }
 
     // Existing entry tags
-    const systemTags = ['HOLIDAY', 'OFF-DAY', 'TIME-OFF'];
+    const systemTags = new Set(['HOLIDAY', 'OFF-DAY', 'TIME-OFF', 'BREAK']);
     (e.analysis?.tags || []).forEach(t => {
-      if (!systemTags.includes(t)) {
-        tags.push(`<span class="badge badge-offday">${escapeHtml(t)}</span>`);
+      if (!systemTags.has(t)) {
+        addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
+      }
+    });
+    (Array.isArray(e.tags) ? e.tags : []).forEach(t => {
+      if (!systemTags.has(t)) {
+        addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
       }
     });
 
@@ -597,7 +625,7 @@ export function renderDetailedTable(users, activeFilter = null) {
         <td class="text-right">${formatCurrency((e.analysis?.overtimeAmountBase || 0) + (e.analysis?.tier1Premium || 0))}</td>
         <td class="text-right">${formatCurrency(e.analysis?.tier2Premium || 0)}</td>
         <td class="text-right highlight">${formatCurrency(e.analysis?.totalAmountWithOT || 0)}</td>
-        <td class="text-right" style="gap:4px; display:flex; justify-content:flex-end;">${tags.join(' ') || '—'}</td>
+        <td class="text-right"><div class="tags-cell">${tags.join(' ') || '—'}</div></td>
     </tr>`;
   });
 

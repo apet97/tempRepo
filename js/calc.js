@@ -267,7 +267,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 billableOT: 0,
                 nonBillableOT: 0,
                 amount: 0,
-                amountBase: 0,  // Base cost without OT premium
+                amountBase: 0,  // Base cost with all hours at base rate (Clockify "Amount total" without OT premium)
                 otPremium: 0,
                 otPremiumTier2: 0,  // Additional Tier 2 premium
                 expectedCapacity: 0,
@@ -536,7 +536,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 const entryPremium = tier1Premium + tier2Premium;
 
                 user.totals.amount += baseAmount + entryPremium;
-                user.totals.amountBase += baseAmount;  // Track base cost without OT premium
+                user.totals.amountBase += baseAmount;  // Base amount includes OT hours at base rate (no premium)
                 user.totals.otPremium += tier1Premium;          // Keep as Tier 1 only
                 user.totals.otPremiumTier2 += tier2Premium;     // Track Tier 2 separately
 
