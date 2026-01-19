@@ -654,7 +654,8 @@ body.density-spacious {
 /* Summary Strip */
 .summary-inline {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--summary-gap);
   padding: var(--summary-padding);
   background: var(--bg-subtle);
@@ -712,6 +713,7 @@ body.density-spacious {
 }
 
 .summary-row-bottom {
+  display: flex;
   flex: 1;
   min-width: 100%;
   justify-content: flex-end;
@@ -739,6 +741,81 @@ body.density-spacious {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--table-body-font);
+  table-layout: fixed;
+}
+
+/* Detailed table column widths - fixed layout */
+#detailedCard .report-table th:nth-child(1),  /* Date */
+#detailedCard .report-table td:nth-child(1) {
+  width: 8%;
+  min-width: 70px;
+}
+
+#detailedCard .report-table th:nth-child(2),  /* Start */
+#detailedCard .report-table td:nth-child(2),
+#detailedCard .report-table th:nth-child(3),  /* End */
+#detailedCard .report-table td:nth-child(3) {
+  width: 6%;
+  min-width: 55px;
+}
+
+#detailedCard .report-table th:nth-child(4),  /* User */
+#detailedCard .report-table td:nth-child(4) {
+  width: 10%;
+  min-width: 80px;
+}
+
+#detailedCard .report-table th:nth-child(5),  /* Description */
+#detailedCard .report-table td:nth-child(5) {
+  width: 15%;
+  min-width: 100px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#detailedCard .report-table th:nth-child(6),  /* Regular */
+#detailedCard .report-table td:nth-child(6),
+#detailedCard .report-table th:nth-child(7),  /* Overtime */
+#detailedCard .report-table td:nth-child(7) {
+  width: 7%;
+  min-width: 60px;
+}
+
+#detailedCard .report-table th:nth-child(8),  /* Billable */
+#detailedCard .report-table td:nth-child(8) {
+  width: 6%;
+  min-width: 50px;
+}
+
+#detailedCard .report-table th:nth-child(9),  /* Rate */
+#detailedCard .report-table td:nth-child(9),
+#detailedCard .report-table th:nth-child(10), /* Regular $ */
+#detailedCard .report-table td:nth-child(10),
+#detailedCard .report-table th:nth-child(11), /* OT $ */
+#detailedCard .report-table td:nth-child(11),
+#detailedCard .report-table th:nth-child(12), /* Tier2 $ */
+#detailedCard .report-table td:nth-child(12),
+#detailedCard .report-table th:nth-child(13)  /* Total $ */
+#detailedCard .report-table td:nth-child(13) {
+  width: 7%;
+  min-width: 60px;
+}
+
+#detailedCard .report-table th:nth-child(14), /* Tags */
+#detailedCard .report-table td:nth-child(14) {
+  width: 10%;
+  min-width: 80px;
+}
+
+/* Fix tags column flex wrapping */
+#detailedCard .report-table td:nth-child(14) {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .report-table th {

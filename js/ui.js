@@ -434,7 +434,7 @@ export function renderSummaryTable(users) {
   const rows = computeSummaryRows(users, groupBy);
 
   // Update header
-  const thead = document.querySelector('#summaryCard thead tr');
+  const thead = document.getElementById('summaryHeaderRow');
   if (thead) {
     thead.innerHTML = renderSummaryHeaders(groupBy, expanded, showBillable);
   }
@@ -588,7 +588,7 @@ export function renderDetailedTable(users, activeFilter = null) {
         <td>${formatTime(e.timeInterval?.start)}</td>
         <td>${formatTime(e.timeInterval?.end)}</td>
         <td>${escapeHtml(e.userName)}</td>
-        <td>${escapeHtml(e.description || '(No description)')}</td>
+        <td title="${escapeHtml(e.description || '(No description)')}">${escapeHtml(e.description || '(No description)')}</td>
         <td class="text-right">${formatHours(e.analysis?.regular || 0)}</td>
         <td class="text-right ${(e.analysis?.overtime || 0) > 0 ? 'text-danger' : ''}">${formatHours(e.analysis?.overtime || 0)}</td>
         <td class="text-right">${billable}</td>
