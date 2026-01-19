@@ -226,7 +226,7 @@ describe('UI Module', () => {
       expect(tbody.children.length).toBe(2); // Two users
     });
 
-    it('should display HIGH OT badge for users with >30% overtime', () => {
+    it('should not display HIGH OT badge for users with >30% overtime', () => {
       const entries = [
         {
           id: 'entry_1',
@@ -262,7 +262,7 @@ describe('UI Module', () => {
       UI.renderSummaryTable(analysis);
 
       const tbody = document.getElementById('summaryTableBody');
-      expect(tbody.innerHTML).toContain('HIGH OT');
+      expect(tbody.innerHTML).not.toContain('HIGH OT');
     });
   });
 

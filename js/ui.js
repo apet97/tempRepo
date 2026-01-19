@@ -368,17 +368,36 @@ function renderSummaryHeaders(groupBy, expanded, showBillable) {
  * @param {boolean} showBillable - Whether billable breakdown is enabled.
  * @returns {string} HTML string for table row.
  */
+const SWATCH_COLORS = [
+  '#3b82f6',
+  '#0ea5e9',
+  '#22c55e',
+  '#f59e0b',
+  '#ef4444',
+  '#14b8a6',
+  '#64748b',
+  '#84cc16'
+];
+
+function getSwatchColor(key) {
+  const str = String(key || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return SWATCH_COLORS[hash % SWATCH_COLORS.length];
+}
+
 function renderSummaryRow(row, groupBy, expanded, showBillable) {
-  const isHighOt = row.total > 0 && (row.overtime / row.total) > 0.3;
 
   // For user grouping, show avatar
   let nameCell;
   if (groupBy === 'user') {
-    const initials = row.groupName.slice(0, 2).toUpperCase();
+    const swatchColor = getSwatchColor(row.groupKey || row.groupName);
     nameCell = `
       <td class="text-left">
-        <div class="user-cell" style="display:flex; align-items:center; gap:8px;">
-          <span class="user-avatar" style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#03a9f4; color:#fff; border-radius:50%; font-size:10px;">${escapeHtml(initials)}</span>
+        <div class="user-cell">
+          <span class="user-swatch" style="background-color: ${swatchColor};"></span>
           <span class="user-name">${escapeHtml(row.groupName)}</span>
         </div>
       </td>

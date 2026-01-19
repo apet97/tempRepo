@@ -189,7 +189,7 @@ describe('UI Module - Additional Coverage', () => {
       expect(thead.innerHTML).not.toContain('Bill');
     });
 
-    it('should show HIGH OT badge for >30% overtime', () => {
+    it('should not show HIGH OT badge for >30% overtime', () => {
       const entries = [{
         id: 'entry1',
         userId: 'user1',
@@ -210,7 +210,7 @@ describe('UI Module - Additional Coverage', () => {
       UI.renderSummaryTable(analysis);
 
       const tbody = document.getElementById('summaryTableBody');
-      expect(tbody.innerHTML).toContain('HIGH OT');
+      expect(tbody.innerHTML).not.toContain('HIGH OT');
     });
   });
 

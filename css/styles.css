@@ -371,6 +371,25 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.user-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.user-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .cl-theme-dark {
   /* Background colors - dark theme */
   --bg-page: #1a1a2e;
