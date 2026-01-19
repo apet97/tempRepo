@@ -110,33 +110,35 @@ export function renderSummaryStrip(users) {
     acc.billableOT += u.totals.billableOT;
     acc.nonBillableOT += u.totals.nonBillableOT;
     acc.amount += u.totals.amount;
+    acc.amountBase += (u.totals.amountBase || 0);
     acc.otPremium += u.totals.otPremium;
     acc.holidayCount += u.totals.holidayCount;
     acc.timeOffCount += u.totals.timeOffCount;
     acc.holidayHours += (u.totals.holidayHours || 0);
     acc.timeOffHours += (u.totals.timeOffHours || 0);
     return acc;
-  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, otPremium: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
+  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
 
   const showBillable = store.config.showBillableBreakdown;
 
   strip.innerHTML = `
     <div class="summary-item"><span class="summary-label">Users</span><span class="summary-value">${totals.users}</span></div>
     <div class="summary-item"><span class="summary-label">Capacity</span><span class="summary-value">${formatHours(totals.capacity)}</span></div>
-    <div class="summary-item"><span class="summary-label">Worked</span><span class="summary-value">${formatHours(totals.worked)}</span></div>
+    <div class="summary-item"><span class="summary-label">Total time</span><span class="summary-value">${formatHours(totals.worked)}</span></div>
     <div class="summary-item"><span class="summary-label">Break</span><span class="summary-value">${formatHours(totals.breaks)}</span></div>
     <div class="summary-item"><span class="summary-label">Regular</span><span class="summary-value">${formatHours(totals.regular)}</span></div>
     <div class="summary-item danger"><span class="summary-label">Overtime</span><span class="summary-value">${formatHours(totals.overtime)}</span></div>
     ${showBillable ? `
-      <div class="summary-item more"><span class="summary-label">Billable Worked</span><span class="summary-value">${formatHours(totals.billableWorked)}</span></div>
-      <div class="summary-item more"><span class="summary-label">Non-Bill Worked</span><span class="summary-value">${formatHours(totals.nonBillableWorked)}</span></div>
-      <div class="summary-item more"><span class="summary-label">Billable OT</span><span class="summary-value">${formatHours(totals.billableOT)}</span></div>
-      <div class="summary-item more"><span class="summary-label">Non-Bill OT</span><span class="summary-value">${formatHours(totals.nonBillableOT)}</span></div>
+      <div class="summary-item"><span class="summary-label">Billable time</span><span class="summary-value">${formatHours(totals.billableWorked)}</span></div>
+      <div class="summary-item"><span class="summary-label">Non-billable time</span><span class="summary-value">${formatHours(totals.nonBillableWorked)}</span></div>
+      <div class="summary-item"><span class="summary-label">Billable OT</span><span class="summary-value">${formatHours(totals.billableOT)}</span></div>
+      <div class="summary-item"><span class="summary-label">Non-billable OT</span><span class="summary-value">${formatHours(totals.nonBillableOT)}</span></div>
     ` : ''}
     <div class="summary-item"><span class="summary-label">Holidays</span><span class="summary-value">${totals.holidayCount}</span></div>
     <div class="summary-item"><span class="summary-label">Time Off</span><span class="summary-value">${totals.timeOffCount}</span></div>
-    <div class="summary-item highlight"><span class="summary-label">Total</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
+    <div class="summary-item highlight"><span class="summary-label">Total (with OT)</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
+    <div class="summary-item"><span class="summary-label">Amount (no OT)</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
   `;
 }
 
@@ -469,12 +471,25 @@ export function renderDetailedTable(users, activeFilter = null) {
   const end = start + pageSize;
   const pageEntries = allEntries.slice(start, end);
 
+  // Helper to format time as HH:mm
+  const formatTime = (isoString) => {
+    if (!isoString) return '—';
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch {
+      return '—';
+    }
+  };
+
   let html = `
   <div class="table-scroll" style="margin-top: 10px;">
     <table class="report-table">
       <thead>
         <tr>
           <th>Date</th>
+          <th>Start</th>
+          <th>End</th>
           <th>User</th>
           <th>Description</th>
           <th class="text-right">Regular</th>
@@ -520,6 +535,8 @@ export function renderDetailedTable(users, activeFilter = null) {
     html += `
     <tr>
         <td>${escapeHtml(date)}</td>
+        <td>${formatTime(e.timeInterval?.start)}</td>
+        <td>${formatTime(e.timeInterval?.end)}</td>
         <td>${escapeHtml(e.userName)}</td>
         <td>${escapeHtml(e.description || '(No description)')}</td>
         <td class="text-right">${formatHours(e.analysis?.regular || 0)}</td>

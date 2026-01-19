@@ -116,7 +116,7 @@ describe('UI Module', () => {
       expect(strip.textContent).toContain('Users');
       expect(strip.textContent).toContain('2');
       expect(strip.textContent).toContain('Capacity');
-      expect(strip.textContent).toContain('Worked');
+      expect(strip.textContent).toContain('Total time');
     });
 
     it('should display overtime in danger color', () => {
