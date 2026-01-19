@@ -271,8 +271,10 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 // SPECIAL LOGIC: Holiday/Time Off Entries
                 // User requirement: "THEY DO NOT COUNT TOWARDS OVERTIME. HOWEVER, THEY DO COUNT TOWARDS TIME AND AMOUNT... THEY FOLLOW REGULAR TIME ENTRY LOGIC"
                 // Check types or project ID match
-                const isSpecialEntry = (entry.type === 'HOLIDAY' || entry.type === 'TIME_OFF') ||
-                    (isHoliday && dayData.meta.holidayProjectId && entry.projectId === dayData.meta.holidayProjectId);
+                // EXCEPTION: Billable entries are treated as WORK (Overtime), not special leave
+                const isSystemLeave = entry.type === 'HOLIDAY' || entry.type === 'TIME_OFF';
+                const isProjectLeave = isHoliday && dayData.meta.holidayProjectId && entry.projectId === dayData.meta.holidayProjectId;
+                const isSpecialEntry = !isBillable && (isSystemLeave || isProjectLeave);
 
                 let regular = 0;
                 let overtime = 0;
