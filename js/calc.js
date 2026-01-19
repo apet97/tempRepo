@@ -44,18 +44,48 @@ function calculateDuration(entry) {
 }
 
 /**
+ * Detect holiday/time-off context from entry types in the day's entries.
+ * Fallback mechanism for when API fetch fails or is disabled.
+ *
+ * @param {Array<Object>} entries - Array of time entries for the day.
+ * @returns {Object} Detection result.
+ * @property {boolean} hasHoliday - True if any entry has type='HOLIDAY'.
+ * @property {boolean} hasTimeOff - True if any entry has type='TIME_OFF'.
+ * @property {number} timeOffHours - Total hours from TIME_OFF entries.
+ */
+function detectDayContextFromEntries(entries) {
+    let hasHoliday = false;
+    let hasTimeOff = false;
+    let timeOffHours = 0;
+
+    for (const entry of entries) {
+        if (entry.type === 'HOLIDAY') {
+            hasHoliday = true;
+        } else if (entry.type === 'TIME_OFF') {
+            hasTimeOff = true;
+            const duration = parseIsoDuration(entry.timeInterval?.duration || 'PT0H');
+            timeOffHours += duration;
+        }
+    }
+
+    return { hasHoliday, hasTimeOff, timeOffHours };
+}
+
+/**
  * Determines the effective daily capacity and anomaly status for a user on a specific date.
- * 
+ *
  * Precedence Order:
  * 1. User Override (Manual UI input)
  * 2. Member Profile (API `workCapacity`)
  * 3. Global Default (Config `dailyThreshold`)
- * 
+ *
  * Also checks for Holidays and Time Off if enabled in config.
- * 
+ * Fallback: Detects holiday/time-off from entry types if API data unavailable.
+ *
  * @param {string} dateKey - ISO date string YYYY-MM-DD.
  * @param {string} userId - ID of the user.
  * @param {Object} storeRef - Reference to the global state store containing profiles/holidays/config.
+ * @param {Array<Object>} dayEntries - Optional array of entries for this day (for fallback detection).
  * @returns {Object} Result object.
  * @property {number} capacity - The calculated capacity in hours.
  * @property {boolean} isNonWorking - True if it's a non-working day per profile.
@@ -63,7 +93,7 @@ function calculateDuration(entry) {
  * @property {string|null} holidayName - Name of the holiday if applicable.
  * @property {boolean} isTimeOff - True if user has approved time off.
  */
-function getEffectiveCapacity(dateKey, userId, storeRef) {
+function getEffectiveCapacity(dateKey, userId, storeRef, dayEntries = []) {
     const { overrides, profiles, holidays, timeOff, config, calcParams } = storeRef;
     const userOverride = overrides[userId] || {};
     const profile = profiles.get(userId);
@@ -75,6 +105,8 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
     let isHoliday = false;
     let holidayName = null;
     let isTimeOff = false;
+    let holidayHours = 0;
+    let timeOffHours = 0;
 
     // 1. Determine Base Capacity: Per-Day Override > Global Override > Profile > Global Default
     let capacity = calcParams.dailyThreshold;
@@ -117,7 +149,6 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
 
     // 4. Time Off (reduce capacity) - can coexist with holiday (though redundant capacity-wise)
     // Track time off independently, but don't double-reduce capacity if already a holiday
-    let timeOffHours = 0;
     if (config.applyTimeOff && userTimeOff?.has(dateKey)) {
         const toInfo = userTimeOff.get(dateKey);
         isTimeOff = true;
@@ -141,10 +172,38 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
         }
     }
 
+    // 5. Fallback: Detect holiday/time-off from entry types (ONLY when API is disabled)
+    // This ensures graceful degradation when API is disabled or not available
+    if (dayEntries.length > 0) {
+        const entryContext = detectDayContextFromEntries(dayEntries);
+
+        // Apply holiday detection from entries (only if API is disabled AND not already detected)
+        if (!config.applyHolidays && !isHoliday && entryContext.hasHoliday) {
+            isHoliday = true;
+            capacity = 0;
+            holidayName = 'Holiday (detected from entry)';
+            holidayHours = baseCapacity;
+        }
+
+        // Apply time-off detection from entries (only if API is disabled AND not already detected)
+        if (!config.applyTimeOff && !isTimeOff && entryContext.hasTimeOff && entryContext.timeOffHours > 0) {
+            isTimeOff = true;
+
+            // Only adjust capacity if not already a holiday
+            if (!isHoliday) {
+                const reduction = Math.min(entryContext.timeOffHours, capacity);
+                timeOffHours = reduction;
+                capacity = Math.max(0, capacity - reduction);
+            } else {
+                // Holiday already set capacity to 0, just track the hours
+                timeOffHours = entryContext.timeOffHours;
+            }
+        }
+    }
+
     // Determine Holiday Hours (if holiday, it takes the full base capacity or remaining capacity?)
     // Usually holiday replaces the full working day.
-    let holidayHours = 0;
-    if (isHoliday) {
+    if (isHoliday && holidayHours === 0) {
         holidayHours = baseCapacity;
     }
 
@@ -245,7 +304,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
         daysToProcess.forEach(dateKey => {
             const dayData = user.days.get(dateKey) || { entries: [] };
-            const { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff, holidayHours, timeOffHours } = getEffectiveCapacity(dateKey, user.userId, storeRef);
+            const { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff, holidayHours, timeOffHours } = getEffectiveCapacity(dateKey, user.userId, storeRef, dayData.entries);
 
             // Extract multiplier with per-day override support
             let userMultiplier = calcParams.overtimeMultiplier;

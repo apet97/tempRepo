@@ -254,6 +254,54 @@ export function bindConfigEvents() {
             }
         });
     }
+
+    // Summary Group By Selector
+    const groupBySelect = document.getElementById('groupBySelect');
+    if (groupBySelect) {
+        // Initialize from stored state
+        groupBySelect.value = store.ui.summaryGroupBy || 'user';
+
+        groupBySelect.addEventListener('change', (e) => {
+            store.ui.summaryGroupBy = e.target.value;
+            store.saveUIState();
+            if (store.analysisResults) {
+                UI.renderSummaryTable(store.analysisResults);
+            }
+        });
+    }
+
+    // Summary Expand/Collapse Toggle
+    const summaryExpandToggle = document.getElementById('summaryExpandToggle');
+    if (summaryExpandToggle) {
+        // Initialize from stored state
+        const icon = summaryExpandToggle.querySelector('.expand-icon');
+        const text = summaryExpandToggle.querySelector('.expand-text');
+        if (store.ui.summaryExpanded) {
+            icon.textContent = '▾';
+            text.textContent = 'Hide breakdown';
+        }
+
+        summaryExpandToggle.addEventListener('click', () => {
+            store.ui.summaryExpanded = !store.ui.summaryExpanded;
+            store.saveUIState();
+
+            // Update button UI
+            const icon = summaryExpandToggle.querySelector('.expand-icon');
+            const text = summaryExpandToggle.querySelector('.expand-text');
+            if (store.ui.summaryExpanded) {
+                icon.textContent = '▾';
+                text.textContent = 'Hide breakdown';
+            } else {
+                icon.textContent = '▸';
+                text.textContent = 'Show breakdown';
+            }
+
+            // Re-render table with new state
+            if (store.analysisResults) {
+                UI.renderSummaryTable(store.analysisResults);
+            }
+        });
+    }
 }
 
 // --- Report Logic ---

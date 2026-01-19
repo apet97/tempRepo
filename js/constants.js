@@ -16,7 +16,9 @@ export const STORAGE_KEYS = {
     /** Prefix for user-specific capacity/multiplier overrides. */
     OVERRIDES_PREFIX: 'overtime_overrides_',
     /** Prefix for UI state persistence. */
-    OVERRIDES_UI_PREFIX: 'overtime_overrides_ui_'
+    OVERRIDES_UI_PREFIX: 'overtime_overrides_ui_',
+    /** UI state persistence (summary grouping, expand/collapse states). */
+    UI_STATE: 'otplus_ui_state'
 };
 
 /**

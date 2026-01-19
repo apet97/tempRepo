@@ -75,6 +75,138 @@ If adding new tooling (lint/e2e), add it as an npm script and document here.
 - If the codebase implements splitting: split entries at day boundary before bucketing.
 - If not implemented: document the limitation clearly and keep behavior consistent.
 
+## Overtime Calculation Guide (Detailed Report)
+
+### Data Source
+- Uses Clockify **Reports API** (`/v1/workspaces/{id}/reports/detailed`)
+- NOT the standard time-entries API
+- Pagination: 200 entries per page, max 50 pages (safety limit)
+- Returns enriched entries with billable flags, rates, project/client/task info
+
+### Entry Classification
+
+Entries are classified into 3 types for overtime purposes:
+
+| Entry Type | Classification | Counts as Regular? | Triggers OT for Other Entries? | Can Be OT? |
+|------------|----------------|-------------------|-------------------------------|-----------|
+| `type === 'BREAK'` | **BREAK** | ✅ YES (duration) | ❌ NO | ❌ NO |
+| `type === 'HOLIDAY'` | **PTO** | ✅ YES (duration) | ❌ NO | ❌ NO |
+| `type === 'TIME_OFF'` | **PTO** | ✅ YES (duration) | ❌ NO | ❌ NO |
+| All others (including `'REGULAR'`) | **WORK** | Varies (tail attribution) | ✅ YES | ✅ YES |
+
+**Critical Rule**: BREAK and PTO entries:
+- Count as regular hours in totals
+- NEVER become overtime themselves
+- NEVER trigger overtime for other entries (don't accumulate toward capacity)
+- Still contribute to billable/non-billable breakdown if flagged as billable
+
+### Effective Capacity Calculation
+
+**Precedence** (per user, per day):
+1. Per-day user override (`overrides[userId].perDayOverrides[dateKey].capacity`)
+2. Global user override (`overrides[userId].capacity`)
+3. Profile capacity (`profiles.get(userId).workCapacityHours`) — if `useProfileCapacity` enabled
+4. Global daily threshold (`calcParams.dailyThreshold`, default 8h)
+
+**Adjustments**:
+- **Non-working day** (per profile `workingDays`): capacity → 0
+- **Holiday**: capacity → 0
+- **Time-off**: capacity → max(0, capacity - timeOffHours)
+  - Full-day time-off: capacity → 0
+  - Half-day: reduced by half
+  - Hourly: reduced by hours
+
+**Precedence for Anomalies**:
+- Holiday takes precedence over time-off (both result in 0 capacity)
+- Non-working day takes precedence over time-off
+
+### Day Context Detection
+
+**Dual-source detection** (fallback mechanism):
+1. **Primary**: API-derived Maps (from holiday/time-off API endpoints)
+2. **Fallback**: Entry type detection from Detailed Report entries
+
+**Holiday Detection**:
+- If `applyHolidays` enabled AND holiday API returns data → use API Map
+- OR if `applyHolidays` **disabled** AND any entry has `type === 'HOLIDAY'` → treat as holiday day
+- Result: capacity = 0 for WORK entries (all WORK is overtime)
+
+**Time-Off Detection**:
+- If `applyTimeOff` enabled AND time-off API returns data → use API Map
+- OR if `applyTimeOff` **disabled** AND any entry has `type === 'TIME_OFF'` → sum durations, reduce capacity
+- Result: capacity reduced by time-off hours
+
+**Why dual-source?**
+- Graceful degradation if API fetch fails or is disabled
+- Ensures correct overtime even with partial data
+- **Only activates when API is disabled** to avoid conflicts
+
+### Tail Attribution Algorithm
+
+For each day:
+1. Sort all entries by `timeInterval.start` (chronological order)
+2. Initialize `dailyAccumulator = 0`
+3. For each entry:
+   - **If BREAK or PTO**: `regular = duration, overtime = 0`, skip accumulation
+   - **If WORK**:
+     - If `dailyAccumulator >= capacity`: entire entry is OT (`regular = 0, overtime = duration`)
+     - Else if `dailyAccumulator + duration <= capacity`: entire entry is regular (`regular = duration, overtime = 0`)
+     - Else: **split entry** at capacity boundary:
+       ```javascript
+       regular = capacity - dailyAccumulator
+       overtime = duration - regular
+       ```
+     - Increment `dailyAccumulator += duration`
+
+**Example**:
+- Day capacity: 8h
+- Entries: [3h WORK, 2h BREAK, 5h WORK]
+- Processing:
+  - 3h WORK: accumulator=0, 0+3≤8 → regular=3h, overtime=0h, accumulator→3h
+  - 2h BREAK: regular=2h, overtime=0h, accumulator→3h (unchanged)
+  - 5h WORK: accumulator=3h, 3+5>8 → split: regular=5h, overtime=0h, accumulator→8h
+- Result: regular=10h (3+2+5), overtime=0h
+
+### Billable Breakdown
+
+Tracks 4 independent buckets:
+- `billableWorked` = sum of `entry.analysis.regular` where `entry.billable === true`
+- `nonBillableWorked` = sum of `entry.analysis.regular` where `entry.billable === false`
+- `billableOT` = sum of `entry.analysis.overtime` where `entry.billable === true`
+- `nonBillableOT` = sum of `entry.analysis.overtime` where `entry.billable === false`
+
+**Important**: BREAK and PTO entries contribute to worked buckets if flagged as billable, at regular rate (no premium).
+
+### Cost Calculation
+
+For each entry:
+```javascript
+const regularCost = entry.analysis.regular * (entry.hourlyRate.amount / 100);
+const overtimeCost = entry.analysis.overtime * (entry.hourlyRate.amount / 100) * effectiveMultiplier;
+entry.analysis.cost = regularCost + overtimeCost;
+```
+
+**Multiplier precedence**:
+1. Per-day user override
+2. Global user override
+3. Global overtime multiplier (`calcParams.overtimeMultiplier`, default 1.5)
+
+**OT Premium**: `(effectiveMultiplier - 1) * overtimeHours * hourlyRate`
+
+### Rounding
+
+- Apply `round()` at aggregation boundary (after summing totals)
+- Precision: 4 decimals for hours, 2 decimals for currency
+- Prevents floating-point drift across large summations
+
+### Edge Cases
+
+- **Midnight-spanning entries**: Attributed entirely to start day (no splitting across dates)
+- **Missing rate**: Defaults to 0, no crash
+- **Malformed duration**: Skipped with warning, doesn't break calculation
+- **Unknown users**: Initialized with fallback profile (global defaults)
+- **Empty date range**: Returns empty analysis, no error
+
 ## Performance budget (optimize safely)
 - Target: <5s for 100 users / ~1 month.
 - Prefer:

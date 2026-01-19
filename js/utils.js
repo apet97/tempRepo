@@ -498,6 +498,71 @@ export const IsoUtils = {
 };
 
 /**
+ * Calculates the ISO week number for a given date.
+ * ISO week 1 is the week containing the first Thursday of the year.
+ *
+ * @param {Date} date - The date object.
+ * @returns {number} ISO week number (1-53).
+ */
+export function getISOWeek(date) {
+    const target = new Date(date.valueOf());
+    const dayNumber = (date.getDay() + 6) % 7; // Mon=0, Sun=6
+    target.setDate(target.getDate() - dayNumber + 3); // Thursday of the week
+    const firstThursday = new Date(target.getFullYear(), 0, 4);
+    const diff = target - firstThursday;
+    const weekNumber = 1 + Math.round(diff / 604800000); // 604800000ms = 1 week
+    return weekNumber;
+}
+
+/**
+ * Formats a date key (YYYY-MM-DD) to a human-readable string (e.g., "Jan 20, 2025").
+ *
+ * @param {string} dateKey - Date string in YYYY-MM-DD format.
+ * @returns {string} Formatted date string.
+ */
+export function formatDate(dateKey) {
+    const date = IsoUtils.parseDate(dateKey);
+    if (!date) return dateKey;
+
+    const options = { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' };
+    return date.toLocaleDateString(undefined, options);
+}
+
+/**
+ * Generates a week key (YYYY-W##) for a given date string.
+ *
+ * @param {string} dateKey - Date string in YYYY-MM-DD format.
+ * @returns {string} Week key in format YYYY-W##.
+ */
+export function getWeekKey(dateKey) {
+    const date = IsoUtils.parseDate(dateKey);
+    if (!date) return '';
+
+    // Find Thursday of this week to determine which year the week belongs to
+    const target = new Date(date.valueOf());
+    const dayNumber = (date.getUTCDay() + 6) % 7; // Mon=0, Sun=6
+    target.setUTCDate(target.getUTCDate() - dayNumber + 3); // Thursday
+
+    const year = target.getUTCFullYear();
+    const week = getISOWeek(date);
+    return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+/**
+ * Formats a week key (YYYY-W##) to a human-readable string (e.g., "Week 3, 2025").
+ *
+ * @param {string} weekKey - Week key in format YYYY-W##.
+ * @returns {string} Formatted week string.
+ */
+export function formatWeekKey(weekKey) {
+    const match = weekKey.match(/^(\d{4})-W(\d{2})$/);
+    if (!match) return weekKey;
+
+    const [, year, week] = match;
+    return `Week ${parseInt(week)}, ${year}`;
+}
+
+/**
  * Classifies a time entry for overtime calculation.
  * Determines if an entry should be treated as BREAK, PTO, or WORK.
  *

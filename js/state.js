@@ -54,6 +54,7 @@ class Store {
 
         // Load persisted config from LocalStorage
         this._loadConfig();
+        this._loadUIState();
 
         /** @type {Map<string, Object>} Cache of user profiles (Key: userId). */
         this.profiles = new Map();
@@ -386,6 +387,31 @@ class Store {
     clearFetchCache() {
         this.holidays.clear();
         this.timeOff.clear();
+    }
+
+    /**
+     * Loads UI state from LocalStorage.
+     * @private
+     */
+    _loadUIState() {
+        const saved = localStorage.getItem(STORAGE_KEYS.UI_STATE);
+        if (saved) {
+            const parsed = safeJSONParse(saved, null);
+            if (parsed && typeof parsed === 'object') {
+                this.ui = { ...this.ui, ...parsed };
+            }
+        }
+    }
+
+    /**
+     * Saves UI state to LocalStorage.
+     */
+    saveUIState() {
+        localStorage.setItem(STORAGE_KEYS.UI_STATE, JSON.stringify({
+            summaryExpanded: this.ui.summaryExpanded,
+            summaryGroupBy: this.ui.summaryGroupBy,
+            overridesCollapsed: this.ui.overridesCollapsed
+        }));
     }
 }
 

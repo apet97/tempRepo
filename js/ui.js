@@ -6,7 +6,7 @@
  */
 
 import { store } from './state.js';
-import { escapeHtml, formatHours, formatCurrency, IsoUtils } from './utils.js';
+import { escapeHtml, formatHours, formatCurrency, IsoUtils, formatDate, getWeekKey, formatWeekKey, classifyEntryForOvertime, parseIsoDuration } from './utils.js';
 
 let Elements = null;
 
@@ -141,61 +141,265 @@ export function renderSummaryStrip(users) {
 }
 
 /**
+ * Computes summary rows grouped by the specified criterion.
+ *
+ * @param {Array<Object>} analysisUsers - List of user analysis objects.
+ * @param {string} groupBy - Grouping criterion ('user', 'project', 'client', 'task', 'date', 'week').
+ * @returns {Array<Object>} Array of grouped summary rows.
+ */
+function computeSummaryRows(analysisUsers, groupBy) {
+  const groups = new Map();
+
+  for (const user of analysisUsers) {
+    for (const [dateKey, dayData] of user.days) {
+      for (const entry of dayData.entries) {
+        // Determine group key and name
+        let groupKey, groupName;
+        switch (groupBy) {
+          case 'user':
+            groupKey = user.userId;
+            groupName = user.userName;
+            break;
+          case 'project':
+            groupKey = entry.projectId || '(No Project)';
+            groupName = entry.projectName || '(No Project)';
+            break;
+          case 'client':
+            groupKey = entry.clientId || '(No Client)';
+            groupName = entry.clientName || '(No Client)';
+            break;
+          case 'task':
+            groupKey = entry.taskId || '(No Task)';
+            groupName = entry.taskName || '(No Task)';
+            break;
+          case 'date':
+            groupKey = dateKey;
+            groupName = formatDate(dateKey);
+            break;
+          case 'week':
+            groupKey = getWeekKey(dateKey);
+            groupName = formatWeekKey(groupKey);
+            break;
+          default:
+            groupKey = user.userId;
+            groupName = user.userName;
+        }
+
+        // Initialize group if not exists
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, {
+            groupKey,
+            groupName,
+            capacity: groupBy === 'user' ? user.totals.expectedCapacity : null,
+            regular: 0,
+            overtime: 0,
+            breaks: 0,
+            total: 0,
+            billableWorked: 0,
+            billableOT: 0,
+            nonBillableOT: 0,
+            vacationEntryHours: 0,
+            amount: 0,
+            otPremium: 0
+          });
+        }
+
+        const group = groups.get(groupKey);
+        const duration = parseIsoDuration(entry.timeInterval?.duration || 'PT0H');
+
+        // Accumulate regular and overtime from entry analysis
+        group.regular += entry.analysis?.regular || 0;
+        group.overtime += entry.analysis?.overtime || 0;
+        group.total += duration;
+
+        // Accumulate breaks and vacation
+        const entryClass = classifyEntryForOvertime(entry);
+        if (entryClass === 'break') {
+          group.breaks += duration;
+        } else if (entryClass === 'pto') {
+          group.vacationEntryHours += duration;
+        }
+
+        // Billable breakdown
+        if (entry.billable) {
+          group.billableWorked += entry.analysis?.regular || 0;
+          group.billableOT += entry.analysis?.overtime || 0;
+        } else {
+          // Non-billable includes both worked and OT, but we only track non-billable OT separately
+          group.nonBillableOT += entry.analysis?.overtime || 0;
+        }
+
+        // Cost
+        group.amount += entry.analysis?.cost || 0;
+
+        // Calculate OT premium
+        const regularCost = (entry.analysis?.regular || 0) * ((entry.hourlyRate?.amount || 0) / 100);
+        const otCost = (entry.analysis?.cost || 0) - regularCost;
+        const otPremiumOnly = otCost - ((entry.analysis?.overtime || 0) * ((entry.hourlyRate?.amount || 0) / 100));
+        group.otPremium += otPremiumOnly;
+      }
+    }
+
+    // For user grouping, if a user has no entries, still include them
+    if (groupBy === 'user' && !groups.has(user.userId)) {
+      groups.set(user.userId, {
+        groupKey: user.userId,
+        groupName: user.userName,
+        capacity: user.totals.expectedCapacity,
+        regular: 0,
+        overtime: 0,
+        breaks: 0,
+        total: 0,
+        billableWorked: 0,
+        billableOT: 0,
+        nonBillableOT: 0,
+        vacationEntryHours: 0,
+        amount: 0,
+        otPremium: 0
+      });
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) => a.groupName.localeCompare(b.groupName));
+}
+
+/**
+ * Renders summary table headers based on grouping and expanded state.
+ *
+ * @param {string} groupBy - Grouping criterion.
+ * @param {boolean} expanded - Whether advanced columns are shown.
+ * @param {boolean} showBillable - Whether billable breakdown is enabled.
+ * @returns {string} HTML string for table headers.
+ */
+function renderSummaryHeaders(groupBy, expanded, showBillable) {
+  const groupLabel = {
+    user: 'User',
+    project: 'Project',
+    client: 'Client',
+    task: 'Task',
+    date: 'Date',
+    week: 'Week'
+  }[groupBy] || 'User';
+
+  let headers = `<th>${groupLabel}</th>`;
+
+  // Capacity only shown for user grouping
+  if (groupBy === 'user') {
+    headers += `<th class="text-right">Capacity</th>`;
+  }
+
+  headers += `
+    <th class="text-right">Regular</th>
+    <th class="text-right">Overtime</th>
+    <th class="text-right">Breaks</th>
+  `;
+
+  // Advanced columns (shown when expanded and billable breakdown enabled)
+  if (expanded && showBillable) {
+    headers += `
+      <th class="text-right">Bill. Worked</th>
+      <th class="text-right">Bill. OT</th>
+      <th class="text-right">Non-Bill OT</th>
+    `;
+  }
+
+  headers += `
+    <th class="text-right">Total</th>
+    <th class="text-right">Vacation</th>
+    <th class="text-right">Amount</th>
+  `;
+
+  return headers;
+}
+
+/**
+ * Renders a single summary table row.
+ *
+ * @param {Object} row - Summary row data.
+ * @param {string} groupBy - Grouping criterion.
+ * @param {boolean} expanded - Whether advanced columns are shown.
+ * @param {boolean} showBillable - Whether billable breakdown is enabled.
+ * @returns {string} HTML string for table row.
+ */
+function renderSummaryRow(row, groupBy, expanded, showBillable) {
+  const isHighOt = row.total > 0 && (row.overtime / row.total) > 0.3;
+
+  // For user grouping, show avatar
+  let nameCell;
+  if (groupBy === 'user') {
+    const initials = row.groupName.slice(0, 2).toUpperCase();
+    nameCell = `
+      <td class="text-left">
+        <div class="user-cell" style="display:flex; align-items:center; gap:8px;">
+          <span class="user-avatar" style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#03a9f4; color:#fff; border-radius:50%; font-size:10px;">${escapeHtml(initials)}</span>
+          <span class="user-name">${escapeHtml(row.groupName)}</span>
+          ${isHighOt ? '<span style="font-size:9px; color:red; border:1px solid red; padding:0 4px; border-radius:4px;">HIGH OT</span>' : ''}
+        </div>
+      </td>
+    `;
+  } else {
+    nameCell = `<td class="text-left">${escapeHtml(row.groupName)}</td>`;
+  }
+
+  let html = nameCell;
+
+  // Capacity column (only for user grouping)
+  if (groupBy === 'user') {
+    html += `<td class="text-right">${formatHours(row.capacity || 0)}</td>`;
+  }
+
+  html += `
+    <td class="text-right">${formatHours(row.regular)}</td>
+    <td class="text-right ${row.overtime > 0 ? 'text-danger' : ''}">${formatHours(row.overtime)}</td>
+    <td class="text-right">${formatHours(row.breaks)}</td>
+  `;
+
+  // Advanced columns
+  if (expanded && showBillable) {
+    html += `
+      <td class="text-right">${formatHours(row.billableWorked)}</td>
+      <td class="text-right">${formatHours(row.billableOT)}</td>
+      <td class="text-right">${formatHours(row.nonBillableOT)}</td>
+    `;
+  }
+
+  html += `
+    <td class="text-right font-bold">${formatHours(row.total)}</td>
+    <td class="text-right" title="Vacation Entry Hours">${formatHours(row.vacationEntryHours)}</td>
+    <td class="text-right font-bold">${formatCurrency(row.amount)}</td>
+  `;
+
+  return html;
+}
+
+/**
  * Renders the Summary Table (per-user rows).
- * 
+ *
  * @param {Array<Object>} users - List of user analysis objects.
  */
 export function renderSummaryTable(users) {
   const Elements = getElements();
-  const fragment = document.createDocumentFragment();
+  const groupBy = store.ui.summaryGroupBy || 'user';
+  const expanded = store.ui.summaryExpanded || false;
   const showBillable = store.config.showBillableBreakdown;
+
+  // Compute grouped rows
+  const rows = computeSummaryRows(users, groupBy);
 
   // Update header
   const thead = document.querySelector('#summaryCard thead tr');
   if (thead) {
-    thead.innerHTML = `
-      <th>User</th>
-      <th class="text-right">Capacity</th>
-      <th class="text-right">Regular</th>
-      <th class="text-right">Overtime</th>
-      <th class="text-right">Breaks</th>
-      ${showBillable ? '<th class="text-right">Bill. Worked</th><th class="text-right">Bill. OT</th><th class="text-right">Non-Bill OT</th>' : ''}
-      <th class="text-right">Total</th>
-      <th class="text-right">Vacation</th>
-      <th class="text-right">Amount</th>
-    `;
+    thead.innerHTML = renderSummaryHeaders(groupBy, expanded, showBillable);
   }
 
-  users.forEach(user => {
+  // Render rows
+  const fragment = document.createDocumentFragment();
+  for (const row of rows) {
     const tr = document.createElement('tr');
     tr.className = 'summary-row';
-    const initials = user.userName.slice(0, 2).toUpperCase();
-    const vacationHours = user.totals.vacationEntryHours || 0;
-    const isHighOt = user.totals.total > 0 && (user.totals.overtime / user.totals.total) > 0.3;
-
-    tr.innerHTML = `
-      <td class="text-left">
-        <div class="user-cell" style="display:flex; align-items:center; gap:8px;">
-          <span class="user-avatar" style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#03a9f4; color:#fff; border-radius:50%; font-size:10px;">${escapeHtml(initials)}</span>
-          <span class="user-name">${escapeHtml(user.userName)}</span>
-          ${isHighOt ? '<span style="font-size:9px; color:red; border:1px solid red; padding:0 4px; border-radius:4px;">HIGH OT</span>' : ''}
-        </div>
-      </td>
-      <td class="text-right">${formatHours(user.totals.expectedCapacity)}</td>
-      <td class="text-right">${formatHours(user.totals.regular)}</td>
-      <td class="text-right ${user.totals.overtime > 0 ? 'text-danger' : ''}">${formatHours(user.totals.overtime)}</td>
-      <td class="text-right">${formatHours(user.totals.breaks)}</td>
-      ${showBillable ? `
-        <td class="text-right">${formatHours(user.totals.billableWorked)}</td>
-        <td class="text-right">${formatHours(user.totals.billableOT)}</td>
-        <td class="text-right">${formatHours(user.totals.nonBillableOT)}</td>
-      ` : ''}
-      <td class="text-right font-bold">${formatHours(user.totals.total)}</td>
-      <td class="text-right" title="Vacation Entry Hours">${formatHours(vacationHours)}</td>
-      <td class="text-right font-bold">${formatCurrency(user.totals.amount)}</td>
-    `;
+    tr.innerHTML = renderSummaryRow(row, groupBy, expanded, showBillable);
     fragment.appendChild(tr);
-  });
+  }
 
   Elements.summaryTableBody.innerHTML = '';
   Elements.summaryTableBody.appendChild(fragment);

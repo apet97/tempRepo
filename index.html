@@ -109,6 +109,21 @@
 
       <!-- Summary Card -->
       <div class="card" id="summaryCard" role="tabpanel" aria-labelledby="tab-summary">
+        <div class="summary-controls" style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
+          <label for="groupBySelect" style="font-size: 13px; font-weight: 500;">Group by:</label>
+          <select id="groupBySelect" class="cl-select" style="flex: 0 0 auto; min-width: 120px;">
+            <option value="user">User</option>
+            <option value="project">Project</option>
+            <option value="client">Client</option>
+            <option value="task">Task</option>
+            <option value="date">Date</option>
+            <option value="week">Week</option>
+          </select>
+          <button type="button" id="summaryExpandToggle" class="btn-text btn-xs" style="display: flex; align-items: center; gap: 4px;">
+            <span class="expand-icon">▸</span>
+            <span class="expand-text">Show breakdown</span>
+          </button>
+        </div>
         <div class="table-scroll">
           <table class="report-table" aria-label="User summary">
             <thead>
