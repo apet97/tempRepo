@@ -151,12 +151,12 @@ export function renderSummaryStrip(users) {
   // Two-row layout when billable breakdown is ON
   if (showBillable) {
     strip.innerHTML = `
-      <div class="summary-row summary-row-top">${timeMetrics}</div>
-      <div class="summary-row summary-row-bottom">${moneyMetrics}</div>
+      <div class="ot-summary-row ot-summary-row-top">${timeMetrics}</div>
+      <div class="ot-summary-row ot-summary-row-bottom">${moneyMetrics}</div>
     `;
   } else {
     // Single row layout when OFF so the strip doesn't look sparse
-    strip.innerHTML = `<div class="summary-row summary-row-top">${timeMetrics}${moneyMetrics}</div>`;
+    strip.innerHTML = `<div class="ot-summary-row ot-summary-row-top">${timeMetrics}${moneyMetrics}</div>`;
   }
 }
 

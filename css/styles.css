@@ -699,18 +699,18 @@ body.density-spacious {
 }
 
 /* Two-row summary layout support */
-.summary-row {
+.ot-summary-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px 18px;
   align-items: center;
 }
 
-.summary-row-top {
+.ot-summary-row-top {
   min-width: 100%;
 }
 
-.summary-row-bottom {
+.ot-summary-row-bottom {
   min-width: 100%;
   border-top: 1px solid var(--border-color);
   padding-top: 12px;

@@ -48,7 +48,7 @@ describe('UI Module - Additional Coverage', () => {
       <div id="apiStatusBanner" class="hidden"></div>
       <div id="detailedCard" class="hidden"></div>
       <div id="summaryCard">
-        <table><thead><tr></tr></thead></table>
+        <table><thead><tr id="summaryHeaderRow"></tr></thead></table>
       </div>
       <div id="detailedFilters">
         <button class="chip" data-filter="all">All</button>
