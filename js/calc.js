@@ -203,7 +203,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 userId: entry.userId,
                 userName: entry.userName || 'Unknown',
                 days: new Map(),
-                totals: { regular: 0, overtime: 0, total: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, otPremium: 0, expectedCapacity: 0, holidayCount: 0, timeOffCount: 0 }
+                totals: { regular: 0, overtime: 0, total: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, otPremium: 0, expectedCapacity: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0, vacationEntryHours: 0 }
             };
             usersMap.set(entry.userId, user);
         }
