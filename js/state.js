@@ -247,6 +247,123 @@ class Store {
     }
 
     /**
+     * Sets the override mode for a user (global or perDay).
+     * @param {string} userId - User ID.
+     * @param {'global'|'perDay'} mode - Override mode.
+     * @returns {boolean} True if successful, false if invalid mode.
+     */
+    setOverrideMode(userId, mode) {
+        if (!['global', 'perDay'].includes(mode)) {
+            console.warn(`Invalid override mode: ${mode}`);
+            return false;
+        }
+        if (!this.overrides[userId]) {
+            this.overrides[userId] = { mode };
+        } else {
+            this.overrides[userId].mode = mode;
+        }
+
+        // Initialize perDayOverrides if switching to perDay mode
+        if (mode === 'perDay' && !this.overrides[userId].perDayOverrides) {
+            this.overrides[userId].perDayOverrides = {};
+        }
+
+        this.saveOverrides();
+        return true;
+    }
+
+    /**
+     * Updates a per-day override for a specific user and date.
+     * @param {string} userId - User ID.
+     * @param {string} dateKey - Date in YYYY-MM-DD format.
+     * @param {string} field - Field to update (capacity/multiplier).
+     * @param {string|number} value - New value.
+     * @returns {boolean} True if update was successful, false if validation failed.
+     */
+    updatePerDayOverride(userId, dateKey, field, value) {
+        if (!this.overrides[userId]) {
+            this.overrides[userId] = { mode: 'perDay', perDayOverrides: {} };
+        }
+
+        if (!this.overrides[userId].perDayOverrides) {
+            this.overrides[userId].perDayOverrides = {};
+        }
+
+        if (!this.overrides[userId].perDayOverrides[dateKey]) {
+            this.overrides[userId].perDayOverrides[dateKey] = {};
+        }
+
+        // Same validation logic as updateOverride()
+        if (value === null || value === '') {
+            delete this.overrides[userId].perDayOverrides[dateKey][field];
+
+            // Cleanup empty day entries
+            if (Object.keys(this.overrides[userId].perDayOverrides[dateKey]).length === 0) {
+                delete this.overrides[userId].perDayOverrides[dateKey];
+            }
+        } else {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) {
+                console.warn(`Invalid per-day override value for ${field}: ${value}`);
+                return false;
+            }
+
+            if (field === 'capacity' && numValue < 0) {
+                console.warn(`Capacity cannot be negative: ${value}`);
+                return false;
+            }
+            if (field === 'multiplier' && numValue < 1) {
+                console.warn(`Multiplier must be at least 1: ${value}`);
+                return false;
+            }
+
+            this.overrides[userId].perDayOverrides[dateKey][field] = value;
+        }
+
+        this.saveOverrides();
+        return true;
+    }
+
+    /**
+     * Copies global override values to all days in the provided date range for per-day mode.
+     * @param {string} userId - User ID.
+     * @param {Array<string>} dates - Array of date keys (YYYY-MM-DD format).
+     * @returns {boolean} True if successful, false if preconditions not met.
+     */
+    copyGlobalToPerDay(userId, dates) {
+        const override = this.overrides[userId];
+        if (!override || override.mode !== 'perDay') {
+            console.warn(`Cannot copy: user ${userId} not in perDay mode`);
+            return false;
+        }
+
+        if (!dates || dates.length === 0) {
+            console.warn('Cannot copy: no dates provided');
+            return false;
+        }
+
+        const globalCapacity = override.capacity;
+        const globalMultiplier = override.multiplier;
+
+        // Copy global values to all days in range
+        dates.forEach(dateKey => {
+            if (!override.perDayOverrides[dateKey]) {
+                override.perDayOverrides[dateKey] = {};
+            }
+
+            if (globalCapacity !== undefined && globalCapacity !== '') {
+                override.perDayOverrides[dateKey].capacity = globalCapacity;
+            }
+            if (globalMultiplier !== undefined && globalMultiplier !== '') {
+                override.perDayOverrides[dateKey].multiplier = globalMultiplier;
+            }
+        });
+
+        this.saveOverrides();
+        return true;
+    }
+
+    /**
      * Retrieves overrides for a specific user.
      * @param {string} userId - User ID.
      * @returns {Object} Override object (empty if none).

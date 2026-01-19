@@ -212,8 +212,17 @@ export const WEEKDAYS = (() => {
 /**
  * User-specific overrides for calculation parameters.
  * @typedef {Object} UserOverride
- * @property {string} [capacity] - Custom capacity override in hours (stored as string from input)
- * @property {string} [multiplier] - Custom overtime multiplier (stored as string from input)
+ * @property {'global'|'perDay'} [mode='global'] - Override mode (global or per-day)
+ * @property {string} [capacity] - Global capacity override in hours (stored as string from input)
+ * @property {string} [multiplier] - Global overtime multiplier (stored as string from input)
+ * @property {Object.<string, PerDayOverride>} [perDayOverrides] - Per-day overrides keyed by dateKey (YYYY-MM-DD)
+ */
+
+/**
+ * Per-day override for a specific date.
+ * @typedef {Object} PerDayOverride
+ * @property {string|number} [capacity] - Capacity for specific day in hours
+ * @property {string|number} [multiplier] - Multiplier for specific day
  */
 
 /**

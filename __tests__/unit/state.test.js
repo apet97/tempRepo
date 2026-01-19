@@ -311,4 +311,178 @@ describe('State Module - Store Class', () => {
       expect(store.calcParams.overtimeMultiplier).toBe(2.0);
     });
   });
+
+  describe('Per-Day Overrides', () => {
+    beforeEach(() => {
+      store.setToken('mock_token', { workspaceId: 'workspace_123' });
+    });
+
+    describe('setOverrideMode', () => {
+      it('should set override mode to perDay', () => {
+        store.setOverrideMode('user1', 'perDay');
+        expect(store.overrides.user1.mode).toBe('perDay');
+        expect(store.overrides.user1.perDayOverrides).toEqual({});
+      });
+
+      it('should set override mode to global', () => {
+        store.setOverrideMode('user1', 'global');
+        expect(store.overrides.user1.mode).toBe('global');
+      });
+
+      it('should reject invalid mode', () => {
+        const result = store.setOverrideMode('user1', 'invalid');
+        expect(result).toBe(false);
+        expect(store.overrides.user1).toBeUndefined();
+      });
+
+      it('should initialize perDayOverrides when switching to perDay mode', () => {
+        store.setOverrideMode('user1', 'perDay');
+        expect(store.overrides.user1.perDayOverrides).toBeDefined();
+        expect(store.overrides.user1.perDayOverrides).toEqual({});
+      });
+
+      it('should persist mode to localStorage', () => {
+        store.setOverrideMode('user1', 'perDay');
+
+        const saved = localStorage.getItem(
+          `${STORAGE_KEYS.OVERRIDES_PREFIX}workspace_123`
+        );
+        const parsed = JSON.parse(saved);
+
+        expect(parsed.user1.mode).toBe('perDay');
+      });
+    });
+
+    describe('updatePerDayOverride', () => {
+      beforeEach(() => {
+        store.setOverrideMode('user1', 'perDay');
+      });
+
+      it('should set per-day capacity override', () => {
+        store.updatePerDayOverride('user1', '2025-01-15', 'capacity', 6);
+
+        expect(store.overrides.user1.perDayOverrides['2025-01-15'].capacity).toBe(6);
+      });
+
+      it('should set per-day multiplier override', () => {
+        store.updatePerDayOverride('user1', '2025-01-15', 'multiplier', 2.5);
+
+        expect(store.overrides.user1.perDayOverrides['2025-01-15'].multiplier).toBe(2.5);
+      });
+
+      it('should set multiple per-day overrides', () => {
+        store.updatePerDayOverride('user1', '2025-01-15', 'capacity', 6);
+        store.updatePerDayOverride('user1', '2025-01-15', 'multiplier', 2);
+
+        expect(store.overrides.user1.perDayOverrides['2025-01-15']).toEqual({
+          capacity: 6,
+          multiplier: 2
+        });
+      });
+
+      it('should handle multiple dates', () => {
+        store.updatePerDayOverride('user1', '2025-01-15', 'capacity', 6);
+        store.updatePerDayOverride('user1', '2025-01-16', 'capacity', 4);
+
+        expect(store.overrides.user1.perDayOverrides['2025-01-15'].capacity).toBe(6);
+        expect(store.overrides.user1.perDayOverrides['2025-01-16'].capacity).toBe(4);
+      });
+
+      it('should validate capacity constraints', () => {
+        const result = store.updatePerDayOverride('user1', '2025-01-15', 'capacity', -5);
+        expect(result).toBe(false);
+      });
+
+      it('should validate multiplier constraints', () => {
+        const result = store.updatePerDayOverride('user1', '2025-01-15', 'multiplier', 0.5);
+        expect(result).toBe(false);
+      });
+
+      it('should reject NaN values', () => {
+        const result = store.updatePerDayOverride('user1', '2025-01-15', 'capacity', 'invalid');
+        expect(result).toBe(false);
+      });
+
+      it('should cleanup empty per-day entries', () => {
+        store.updatePerDayOverride('user1', '2025-01-15', 'capacity', 6);
+        store.updatePerDayOverride('user1', '2025-01-15', 'capacity', '');
+
+        expect(store.overrides.user1.perDayOverrides['2025-01-15']).toBeUndefined();
+      });
+
+      it('should persist per-day overrides to localStorage', () => {
+        store.updatePerDayOverride('user1', '2025-01-15', 'capacity', 4);
+
+        const saved = localStorage.getItem(
+          `${STORAGE_KEYS.OVERRIDES_PREFIX}workspace_123`
+        );
+        const parsed = JSON.parse(saved);
+
+        expect(parsed.user1.mode).toBe('perDay');
+        expect(parsed.user1.perDayOverrides['2025-01-15'].capacity).toBe(4);
+      });
+
+      it('should initialize user override if not exists', () => {
+        store.updatePerDayOverride('user2', '2025-01-15', 'capacity', 5);
+
+        expect(store.overrides.user2.mode).toBe('perDay');
+        expect(store.overrides.user2.perDayOverrides['2025-01-15'].capacity).toBe(5);
+      });
+    });
+
+    describe('copyGlobalToPerDay', () => {
+      beforeEach(() => {
+        store.updateOverride('user1', 'capacity', 8);
+        store.updateOverride('user1', 'multiplier', 1.5);
+        store.setOverrideMode('user1', 'perDay');
+      });
+
+      it('should copy global values to all days in range', () => {
+        const dates = ['2025-01-15', '2025-01-16', '2025-01-17'];
+        store.copyGlobalToPerDay('user1', dates);
+
+        dates.forEach(dateKey => {
+          expect(store.overrides.user1.perDayOverrides[dateKey].capacity).toBe(8);
+          expect(store.overrides.user1.perDayOverrides[dateKey].multiplier).toBe(1.5);
+        });
+      });
+
+      it('should return false if user not in perDay mode', () => {
+        store.setOverrideMode('user2', 'global');
+        const result = store.copyGlobalToPerDay('user2', ['2025-01-15']);
+
+        expect(result).toBe(false);
+      });
+
+      it('should return false if no dates provided', () => {
+        const result = store.copyGlobalToPerDay('user1', []);
+
+        expect(result).toBe(false);
+      });
+
+      it('should handle missing global capacity', () => {
+        store.updateOverride('user3', 'multiplier', 2);
+        store.setOverrideMode('user3', 'perDay');
+
+        const dates = ['2025-01-15'];
+        store.copyGlobalToPerDay('user3', dates);
+
+        expect(store.overrides.user3.perDayOverrides['2025-01-15'].multiplier).toBe(2);
+        expect(store.overrides.user3.perDayOverrides['2025-01-15'].capacity).toBeUndefined();
+      });
+
+      it('should persist copied values to localStorage', () => {
+        const dates = ['2025-01-15', '2025-01-16'];
+        store.copyGlobalToPerDay('user1', dates);
+
+        const saved = localStorage.getItem(
+          `${STORAGE_KEYS.OVERRIDES_PREFIX}workspace_123`
+        );
+        const parsed = JSON.parse(saved);
+
+        expect(parsed.user1.perDayOverrides['2025-01-15'].capacity).toBe(8);
+        expect(parsed.user1.perDayOverrides['2025-01-16'].capacity).toBe(8);
+      });
+    });
+  });
 });

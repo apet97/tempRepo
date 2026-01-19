@@ -6,7 +6,7 @@
  */
 
 import { store } from './state.js';
-import { escapeHtml, formatHours, formatCurrency } from './utils.js';
+import { escapeHtml, formatHours, formatCurrency, IsoUtils } from './utils.js';
 
 let Elements = null;
 
@@ -133,8 +133,8 @@ export function renderSummaryStrip(users) {
       <div class="summary-item more"><span class="summary-label">Billable OT</span><span class="summary-value">${formatHours(totals.billableOT)}</span></div>
       <div class="summary-item more"><span class="summary-label">Non-Bill OT</span><span class="summary-value">${formatHours(totals.nonBillableOT)}</span></div>
     ` : ''}
-    <div class="summary-item"><span class="summary-label">Holiday Hours</span><span class="summary-value">${formatHours(totals.holidayHours)}</span></div>
-    <div class="summary-item"><span class="summary-label">Time Off Hours</span><span class="summary-value">${formatHours(totals.timeOffHours)}</span></div>
+    <div class="summary-item"><span class="summary-label">Holidays</span><span class="summary-value">${totals.holidayCount}</span></div>
+    <div class="summary-item"><span class="summary-label">Time Off</span><span class="summary-value">${totals.timeOffCount}</span></div>
     <div class="summary-item highlight"><span class="summary-label">Total</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
   `;
@@ -335,6 +335,77 @@ export function renderDetailedTable(users, activeFilter = null) {
 }
 
 /**
+ * Helper function to generate per-day override inputs HTML.
+ * @param {string} userId - User ID.
+ * @param {Object} perDayOverrides - Per-day overrides object.
+ * @param {number|null} profileCapacity - Profile capacity for placeholder.
+ * @param {number} defaultPlaceholder - Default placeholder capacity.
+ * @returns {string} HTML string for per-day inputs.
+ */
+function renderPerDayInputs(userId, perDayOverrides, profileCapacity, defaultPlaceholder) {
+  // Get date range from UI inputs
+  const startInput = document.getElementById('startDate');
+  const endInput = document.getElementById('endDate');
+
+  if (!startInput?.value || !endInput?.value) {
+    return '<p class="muted" style="padding: 1rem;">Select a date range to configure per-day overrides.</p>';
+  }
+
+  const dates = IsoUtils.generateDateRange(startInput.value, endInput.value);
+  const override = store.overrides[userId] || {};
+  const hasGlobalValues = override.capacity || override.multiplier;
+
+  let html = '<div class="per-day-inputs-container">';
+
+  // Add "Copy from global" button if global values exist
+  if (hasGlobalValues) {
+    html += '<div class="per-day-actions">';
+    html += `<button class="copy-from-global-btn" data-userid="${userId}">`;
+    html += '📋 Copy from global override';
+    html += '</button>';
+    html += '<span class="muted"> (Capacity: ' + (override.capacity || 'default') + ', Multiplier: ' + (override.multiplier || 'default') + ')</span>';
+    html += '</div>';
+  }
+
+  html += '<table class="per-day-table">';
+  html += '<thead><tr><th>Date</th><th>Day</th><th>Capacity</th><th>Multiplier</th></tr></thead>';
+  html += '<tbody>';
+
+  dates.forEach(dateKey => {
+    const weekday = IsoUtils.getWeekdayKey(dateKey);
+    const dayOverride = perDayOverrides[dateKey] || {};
+
+    html += `<tr>
+            <td>${dateKey}</td>
+            <td class="weekday">${weekday}</td>
+            <td>
+                <input type="number"
+                       class="per-day-input"
+                       data-userid="${userId}"
+                       data-datekey="${dateKey}"
+                       data-field="capacity"
+                       value="${dayOverride.capacity || ''}"
+                       placeholder="${defaultPlaceholder}"
+                       step="0.5" min="0" max="24" />
+            </td>
+            <td>
+                <input type="number"
+                       class="per-day-input"
+                       data-userid="${userId}"
+                       data-datekey="${dateKey}"
+                       data-field="multiplier"
+                       value="${dayOverride.multiplier || ''}"
+                       placeholder="${store.calcParams.overtimeMultiplier}"
+                       step="0.1" min="1" max="5" />
+            </td>
+        </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+/**
  * Renders the User Overrides table (configuration inputs per user).
  */
 export function renderOverridesTable() {
@@ -345,6 +416,7 @@ export function renderOverridesTable() {
 
   store.users.forEach(user => {
     const override = store.getUserOverride(user.id);
+    const mode = override.mode || 'global';
     const profile = store.profiles.get(user.id);
     const profileCapacity = profile?.workCapacityHours;
     const tr = document.createElement('tr');
@@ -359,20 +431,28 @@ export function renderOverridesTable() {
         ${profileCapacity != null ? `<span style="font-size:9px; color:var(--text-muted); margin-left:4px;">(${profileCapacity}h profile)</span>` : ''}
       </td>
       <td>
-        <input type="number" 
-               class="override-input ${override.capacity ? '' : 'inherited'}" 
-               data-userid="${user.id}" 
-               data-field="capacity" 
+        <button class="mode-toggle-btn"
+                data-userid="${user.id}"
+                data-currentmode="${mode}"
+                aria-label="Toggle override mode for ${escapeHtml(user.name)}">
+          ${mode === 'global' ? 'Global' : 'Per Day'}
+        </button>
+      </td>
+      <td>
+        <input type="number"
+               class="override-input ${override.capacity ? '' : 'inherited'}"
+               data-userid="${user.id}"
+               data-field="capacity"
                placeholder="${placeholder}"
                value="${override.capacity || ''}"
                step="0.5" min="0" max="24"
                aria-label="Capacity override for ${escapeHtml(user.name)}">
       </td>
       <td>
-        <input type="number" 
-               class="override-input ${override.multiplier ? '' : 'inherited'}" 
-               data-userid="${user.id}" 
-               data-field="multiplier" 
+        <input type="number"
+               class="override-input ${override.multiplier ? '' : 'inherited'}"
+               data-userid="${user.id}"
+               data-field="multiplier"
                placeholder="${store.calcParams.overtimeMultiplier}"
                value="${override.multiplier || ''}"
                step="0.1" min="1" max="5"
@@ -380,6 +460,22 @@ export function renderOverridesTable() {
       </td>
     `;
     fragment.appendChild(tr);
+
+    // Add per-day editor row if mode is perDay
+    if (mode === 'perDay') {
+      const expandedRow = document.createElement('tr');
+      expandedRow.className = 'per-day-editor-row';
+      expandedRow.dataset.userid = user.id;
+
+      const expandedCell = document.createElement('td');
+      expandedCell.colSpan = 4;
+
+      // Render per-day inputs
+      expandedCell.innerHTML = renderPerDayInputs(user.id, override.perDayOverrides || {}, profileCapacity, placeholder);
+
+      expandedRow.appendChild(expandedCell);
+      fragment.appendChild(expandedRow);
+    }
   });
 
   Elements.userOverridesBody.innerHTML = '';
@@ -468,9 +564,31 @@ export function bindEvents(callbacks) {
   }, { passive: false });
 
   Elements.userOverridesBody.addEventListener('input', (e) => {
+    // Existing global override handler
     if (e.target.matches('input.override-input')) {
       const { userid, field } = e.target.dataset;
       callbacks.onOverrideChange(userid, field, e.target.value);
+    }
+
+    // NEW: Per-day override handler
+    if (e.target.matches('input.per-day-input')) {
+      const { userid, datekey, field } = e.target.dataset;
+      callbacks.onPerDayOverrideChange(userid, datekey, field, e.target.value);
+    }
+  });
+
+  Elements.userOverridesBody.addEventListener('click', (e) => {
+    // NEW: Mode toggle handler
+    if (e.target.matches('button.mode-toggle-btn')) {
+      const { userid, currentmode } = e.target.dataset;
+      const newMode = currentmode === 'global' ? 'perDay' : 'global';
+      callbacks.onOverrideModeChange(userid, newMode);
+    }
+
+    // NEW: Copy from global button
+    if (e.target.matches('button.copy-from-global-btn')) {
+      const { userid } = e.target.dataset;
+      callbacks.onCopyFromGlobal(userid);
     }
   });
 

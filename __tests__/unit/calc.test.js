@@ -615,4 +615,251 @@ describe('Calculation Module - calculateAnalysis', () => {
       expect(userResult.totals.timeOffCount).toBe(1);
     });
   });
+
+  describe('Per-Day Override Calculations', () => {
+    let mockStore;
+    let dateRange;
+
+    beforeEach(() => {
+      mockStore = {
+        users: [{ id: 'user0', name: 'User 0' }],
+        overrides: {},
+        profiles: new Map(),
+        holidays: new Map(),
+        timeOff: new Map(),
+        config: {
+          useProfileCapacity: false,
+          useProfileWorkingDays: false,
+          applyHolidays: false,
+          applyTimeOff: false
+        },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5
+        }
+      };
+
+      dateRange = {
+        start: '2025-01-15',
+        end: '2025-01-15'
+      };
+    });
+
+    it('should use per-day capacity override over global', () => {
+      mockStore.overrides = {
+        'user0': {
+          mode: 'perDay',
+          capacity: 8,  // Global fallback
+          perDayOverrides: {
+            '2025-01-15': { capacity: 4 }  // Specific day
+          }
+        }
+      };
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T15:00:00Z',
+          duration: 'PT6H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+      const dayData = results[0].days.get('2025-01-15');
+
+      // Should use per-day capacity of 4, not global 8
+      expect(dayData.meta.capacity).toBe(4);
+      // 6 hours of work with 4 hour capacity = 4 regular + 2 OT
+      expect(results[0].totals.regular).toBe(4);
+      expect(results[0].totals.overtime).toBe(2);
+    });
+
+    it('should use per-day multiplier in OT calculations', () => {
+      mockStore.overrides = {
+        'user0': {
+          mode: 'perDay',
+          multiplier: 1.5,  // Global fallback
+          perDayOverrides: {
+            '2025-01-15': { multiplier: 3.0 }  // Triple OT on this day
+          }
+        }
+      };
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T19:00:00Z',
+          duration: 'PT10H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      // 2 hours OT * $50 * 3.0 multiplier = $300 total
+      // Premium = (3.0 - 1) * 2 * 50 = $200
+      expect(results[0].totals.overtime).toBe(2);
+      expect(results[0].totals.otPremium).toBe(200);
+    });
+
+    it('should fall back to global override when per-day not set', () => {
+      mockStore.overrides = {
+        'user0': {
+          mode: 'perDay',
+          capacity: 6,  // Global fallback
+          perDayOverrides: {
+            '2025-01-15': { capacity: 4 }  // Only one day specified
+          }
+        }
+      };
+
+      dateRange = {
+        start: '2025-01-15',
+        end: '2025-01-16'
+      };
+
+      const entries = [
+        {
+          id: 'entry_1',
+          userId: 'user0',
+          userName: 'User 0',
+          timeInterval: {
+            start: '2025-01-15T09:00:00Z',
+            end: '2025-01-15T15:00:00Z',
+            duration: 'PT6H'
+          },
+          hourlyRate: { amount: 5000 },
+          billable: true
+        },
+        {
+          id: 'entry_2',
+          userId: 'user0',
+          userName: 'User 0',
+          timeInterval: {
+            start: '2025-01-16T09:00:00Z',
+            end: '2025-01-16T15:00:00Z',
+            duration: 'PT6H'
+          },
+          hourlyRate: { amount: 5000 },
+          billable: true
+        }
+      ];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      const day15 = results[0].days.get('2025-01-15');
+      const day16 = results[0].days.get('2025-01-16');
+
+      expect(day15.meta.capacity).toBe(4);  // Per-day override
+      expect(day16.meta.capacity).toBe(6);  // Falls back to global
+    });
+
+    it('should use global mode when mode is not perDay', () => {
+      mockStore.overrides = {
+        'user0': {
+          mode: 'global',
+          capacity: 7,
+          perDayOverrides: {
+            '2025-01-15': { capacity: 4 }  // Should be ignored in global mode
+          }
+        }
+      };
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T17:00:00Z',
+          duration: 'PT8H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+      const dayData = results[0].days.get('2025-01-15');
+
+      // Should use global capacity of 7, not per-day 4
+      expect(dayData.meta.capacity).toBe(7);
+      expect(results[0].totals.regular).toBe(7);
+      expect(results[0].totals.overtime).toBe(1);
+    });
+
+    it('should handle missing mode as global by default', () => {
+      mockStore.overrides = {
+        'user0': {
+          capacity: 7,
+          // No mode field - should default to global behavior
+          perDayOverrides: {
+            '2025-01-15': { capacity: 4 }
+          }
+        }
+      };
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T17:00:00Z',
+          duration: 'PT8H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+      const dayData = results[0].days.get('2025-01-15');
+
+      // Should use global capacity of 7 (backward compatibility)
+      expect(dayData.meta.capacity).toBe(7);
+    });
+
+    it('should combine per-day capacity and multiplier', () => {
+      mockStore.overrides = {
+        'user0': {
+          mode: 'perDay',
+          perDayOverrides: {
+            '2025-01-15': {
+              capacity: 6,
+              multiplier: 2.0
+            }
+          }
+        }
+      };
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T19:00:00Z',
+          duration: 'PT10H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      // 6 hour capacity, so 4 hours OT
+      expect(results[0].totals.regular).toBe(6);
+      expect(results[0].totals.overtime).toBe(4);
+      // Premium = (2.0 - 1) * 4 * 50 = $200
+      expect(results[0].totals.otPremium).toBe(200);
+    });
+  });
 });

@@ -109,6 +109,30 @@ export async function loadInitialData() {
         onOverrideChange: (userId, field, value) => {
             store.updateOverride(userId, field, value);
             if (store.rawEntries) runCalculation();
+        },
+        // NEW: Mode toggle handler
+        onOverrideModeChange: (userId, mode) => {
+            store.setOverrideMode(userId, mode);
+            UI.renderOverridesTable();  // Re-render to show/hide per-day editor
+            if (store.rawEntries) runCalculation();
+        },
+        // NEW: Per-day override handler
+        onPerDayOverrideChange: (userId, dateKey, field, value) => {
+            store.updatePerDayOverride(userId, dateKey, field, value);
+            if (store.rawEntries) runCalculation();
+        },
+        // NEW: Copy from global button handler
+        onCopyFromGlobal: (userId) => {
+            const startInput = document.getElementById('startDate');
+            const endInput = document.getElementById('endDate');
+            if (startInput?.value && endInput?.value) {
+                import('./utils.js').then(({ IsoUtils }) => {
+                    const dates = IsoUtils.generateDateRange(startInput.value, endInput.value);
+                    store.copyGlobalToPerDay(userId, dates);
+                    UI.renderOverridesTable();  // Re-render to show copied values
+                    if (store.rawEntries) runCalculation();
+                });
+            }
         }
     });
 }

@@ -76,9 +76,18 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
     let holidayName = null;
     let isTimeOff = false;
 
-    // 1. Determine Base Capacity: Override > Profile > Global Default
+    // 1. Determine Base Capacity: Per-Day Override > Global Override > Profile > Global Default
     let capacity = calcParams.dailyThreshold;
-    if (userOverride.capacity !== undefined && userOverride.capacity !== '') {
+
+    // Check per-day override first
+    if (userOverride.mode === 'perDay' && userOverride.perDayOverrides?.[dateKey]) {
+        const dayOverride = userOverride.perDayOverrides[dateKey];
+        if (dayOverride.capacity !== undefined && dayOverride.capacity !== '') {
+            capacity = parseFloat(dayOverride.capacity);
+        }
+    }
+    // Fall through to global override if no per-day override
+    else if (userOverride.capacity !== undefined && userOverride.capacity !== '') {
         capacity = parseFloat(userOverride.capacity);
     } else if (config.useProfileCapacity && profile?.workCapacityHours != null) {
         capacity = profile.workCapacityHours;
@@ -107,18 +116,28 @@ function getEffectiveCapacity(dateKey, userId, storeRef) {
     }
 
     // 4. Time Off (reduce capacity) - can coexist with holiday (though redundant capacity-wise)
-    // Only process Time Off if it is NOT already a full-day holiday to avoid double counting "days off" in stats
+    // Track time off independently, but don't double-reduce capacity if already a holiday
     let timeOffHours = 0;
-    if (config.applyTimeOff && userTimeOff?.has(dateKey) && !isHoliday) {
+    if (config.applyTimeOff && userTimeOff?.has(dateKey)) {
         const toInfo = userTimeOff.get(dateKey);
         isTimeOff = true;
 
-        if (toInfo.isFullDay) {
-            timeOffHours = baseCapacity; // Lost full day capacity
-            capacity = 0;
-        } else if (toInfo.hours > 0) {
-            timeOffHours = toInfo.hours;
-            capacity = Math.max(0, capacity - toInfo.hours);
+        // Only adjust capacity if not already a holiday (which already set capacity to 0)
+        if (!isHoliday) {
+            if (toInfo.isFullDay) {
+                timeOffHours = baseCapacity; // Lost full day capacity
+                capacity = 0;
+            } else if (toInfo.hours > 0) {
+                timeOffHours = toInfo.hours;
+                capacity = Math.max(0, capacity - toInfo.hours);
+            }
+        } else {
+            // Holiday already set capacity to 0, just track the time off hours for stats
+            if (toInfo.isFullDay) {
+                timeOffHours = baseCapacity;
+            } else if (toInfo.hours > 0) {
+                timeOffHours = toInfo.hours;
+            }
         }
     }
 
@@ -221,8 +240,6 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
     // 3. Process each user for each day in range
     usersMap.forEach(user => {
-        const userMultiplier = parseFloat(overrides[user.userId]?.multiplier || calcParams.overtimeMultiplier);
-
         // Iterate over the FULL date range, not just days with entries
         const daysToProcess = allDateKeys.length > 0 ? allDateKeys : Array.from(user.days.keys()).sort();
 
@@ -230,14 +247,25 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             const dayData = user.days.get(dateKey) || { entries: [] };
             const { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff, holidayHours, timeOffHours } = getEffectiveCapacity(dateKey, user.userId, storeRef);
 
-            // Only add capacity for days with activity (entries, time off, or holiday)
-            // Skip "idle" days where user had no entries and no leave
-            const hasEntries = dayData.entries && dayData.entries.length > 0;
-            const hasActivity = hasEntries || isHoliday || isTimeOff;
+            // Extract multiplier with per-day override support
+            let userMultiplier = calcParams.overtimeMultiplier;
+            const override = overrides[user.userId];
 
-            if (hasActivity) {
-                user.totals.expectedCapacity += capacity;
+            if (override) {
+                // Check per-day multiplier first (need dateKey context)
+                if (override.mode === 'perDay' && override.perDayOverrides?.[dateKey]?.multiplier) {
+                    userMultiplier = parseFloat(override.perDayOverrides[dateKey].multiplier);
+                }
+                // Fall through to global multiplier
+                else if (override.multiplier !== undefined && override.multiplier !== '') {
+                    userMultiplier = parseFloat(override.multiplier);
+                }
             }
+
+            // CRITICAL FIX #1: Accumulate capacity for ALL days in range to ensure deterministic calculation
+            // Working days contribute their capacity (8 hours default), non-working days/holidays/time-off contribute 0
+            // This fixes the bug where idle working days were incorrectly excluded from expected capacity
+            user.totals.expectedCapacity += capacity;
 
             // Track anomalies (all can coexist)
             // Track anomalies (all can coexist)
@@ -305,7 +333,10 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 // Update User Totals
                 user.totals.regular += regular;
                 user.totals.overtime += overtime;
-                user.totals.total += duration;
+                // Only count non-break entries in total worked hours
+                if (!isBreak) {
+                    user.totals.total += duration;
+                }
 
                 if (isBillable && !isBreak) {
                     user.totals.billableWorked += regular; // Special entries count as 'worked' for billing? "THEY FOLLOW REGULAR TIME ENTRY LOGIC". Yes.
@@ -339,11 +370,18 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                     user.totals.otPremium += entryPremium;
 
                     // Attach analysis to entry for Detailed View
+                    // Build tags array for special circumstances
+                    const tags = [];
+                    if (isHoliday) tags.push('HOLIDAY');
+                    if (isNonWorking) tags.push('OFF-DAY');
+                    if (isTimeOff) tags.push('TIME-OFF');
+
                     entry.analysis = {
                         regular,
                         overtime,
                         isBillable,
-                        cost: baseAmount + entryPremium
+                        cost: baseAmount + entryPremium,
+                        tags
                     };
                 }
             });

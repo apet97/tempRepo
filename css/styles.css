@@ -998,3 +998,96 @@ body.density-spacious {
     max-height: 200px;
   }
 }
+
+/* --- Per-Day Override Styles --- */
+
+/* Mode toggle button */
+.mode-toggle-btn {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-toggle-btn:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+/* Per-day editor container */
+.per-day-editor-row {
+  background: var(--bg-tertiary);
+}
+
+.per-day-inputs-container {
+  padding: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Copy from global button section */
+.per-day-actions {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy-from-global-btn {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copy-from-global-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.per-day-table {
+  width: 100%;
+  font-size: 0.9rem;
+  border-collapse: collapse;
+}
+
+.per-day-table th {
+  background: var(--bg-secondary);
+  padding: 0.5rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.per-day-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.per-day-table td.weekday {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.per-day-input {
+  width: 80px;
+  padding: 4px 8px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+}
+
+.per-day-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
