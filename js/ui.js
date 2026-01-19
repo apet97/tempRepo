@@ -380,7 +380,6 @@ function renderSummaryRow(row, groupBy, expanded, showBillable) {
         <div class="user-cell" style="display:flex; align-items:center; gap:8px;">
           <span class="user-avatar" style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#03a9f4; color:#fff; border-radius:50%; font-size:10px;">${escapeHtml(initials)}</span>
           <span class="user-name">${escapeHtml(row.groupName)}</span>
-          ${isHighOt ? '<span style="font-size:9px; color:red; border:1px solid red; padding:0 4px; border-radius:4px;">HIGH OT</span>' : ''}
         </div>
       </td>
     `;
@@ -549,7 +548,7 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">Regular</th>
           <th class="text-right">Overtime</th>
           <th class="text-right">Billable</th>
-          <th class="text-right">Rate ($/hr)</th>
+          <th class="text-right">Rate</th>
           <th class="text-right">Regular $</th>
           <th class="text-right">OT $</th>
           <th class="text-right">Tier2 $</th>

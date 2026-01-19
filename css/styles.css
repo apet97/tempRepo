@@ -839,6 +839,27 @@ body.density-spacious {
   font-variant-numeric: tabular-nums;
 }
 
+#summaryCard .report-table th:first-child,
+#summaryCard .report-table td:first-child {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#detailedCard .report-table th:nth-child(9),
+#detailedCard .report-table td:nth-child(9),
+#detailedCard .report-table th:nth-child(10),
+#detailedCard .report-table td:nth-child(10),
+#detailedCard .report-table th:nth-child(11),
+#detailedCard .report-table td:nth-child(11),
+#detailedCard .report-table th:nth-child(12),
+#detailedCard .report-table td:nth-child(12),
+#detailedCard .report-table th:nth-child(13),
+#detailedCard .report-table td:nth-child(13) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .report-table td:not(:last-child) {
   border-right: 1px solid var(--border-color);
 }
