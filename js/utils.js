@@ -496,3 +496,21 @@ export const IsoUtils = {
         return dates;
     }
 };
+
+/**
+ * Classifies a time entry for overtime calculation.
+ * Determines if an entry should be treated as BREAK, PTO, or WORK.
+ *
+ * @param {Object} entry - Time entry object with a `type` field.
+ * @returns {'break' | 'pto' | 'work'} Entry classification.
+ */
+export function classifyEntryForOvertime(entry) {
+    if (!entry || !entry.type) return 'work';
+
+    const type = entry.type;
+
+    if (type === 'BREAK') return 'break';
+    if (type === 'HOLIDAY' || type === 'TIME_OFF') return 'pto';
+
+    return 'work';
+}

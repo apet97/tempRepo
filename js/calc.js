@@ -9,7 +9,7 @@
  * - Applying cost calculations and multipliers.
  */
 
-import { IsoUtils, round, parseIsoDuration } from './utils.js';
+import { IsoUtils, round, parseIsoDuration, classifyEntryForOvertime } from './utils.js';
 import { CONSTANTS } from './constants.js';
 
 // --- Helpers ---
@@ -293,84 +293,69 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             dayData.entries.forEach(entry => {
                 const duration = round(calculateDuration(entry));
                 const hourlyRate = (entry.hourlyRate?.amount || 0) / 100;
-                const isBreak = entry.type === 'BREAK';
                 const isBillable = entry.billable;
 
-                // SPECIAL LOGIC: Holiday/Time Off Entries
-                // User requirement: "THEY DO NOT COUNT TOWARDS OVERTIME. HOWEVER, THEY DO COUNT TOWARDS TIME AND AMOUNT... THEY FOLLOW REGULAR TIME ENTRY LOGIC"
-                // Check types or project ID match
-                // EXCEPTION: Billable entries are treated as WORK (Overtime), not special leave
-                const isSystemLeave = entry.type === 'HOLIDAY' || entry.type === 'TIME_OFF';
-                const isProjectLeave = isHoliday && dayData.meta.holidayProjectId && entry.projectId === dayData.meta.holidayProjectId;
-                const isSpecialEntry = !isBillable && (isSystemLeave || isProjectLeave);
+                // Classify entry using new helper
+                const entryClass = classifyEntryForOvertime(entry);
 
                 let regular = 0;
                 let overtime = 0;
 
-                if (isBreak) {
+                // Handle BREAK entries
+                if (entryClass === 'break') {
                     user.totals.breaks += duration;
-                } else if (isSpecialEntry) {
-                    // Force as Regular, do NOT check capacity, do NOT increment accumulator
-                    regular = duration;
-                    overtime = 0;
-                    // Track vacation entry hours separately
+                    // Do NOT add to dailyAccumulator or regular/overtime
+                }
+                // Handle PTO entries (HOLIDAY/TIME_OFF) - regardless of billable flag
+                else if (entryClass === 'pto') {
                     user.totals.vacationEntryHours += duration;
-                    // Do not add to dailyAccumulator, so they don't consume capacity for *other* potential entries (if half day)
-                } else {
-                    // Standard Logic
+                    // PTO never accumulates, never triggers OT
+                    // regular = 0, overtime = 0 (already initialized)
+                }
+                // Handle WORK entries
+                else {
+                    // Standard tail attribution logic
                     if (dailyAccumulator >= capacity) {
-                        overtime = duration; // Already over capacity
+                        overtime = duration;
                     } else if (round(dailyAccumulator + duration) <= capacity) {
-                        regular = duration; // Fits within capacity
+                        regular = duration;
                     } else {
-                        // Split
+                        // Split entry at capacity threshold
                         regular = round(capacity - dailyAccumulator);
                         overtime = round(duration - regular);
                     }
                     dailyAccumulator += duration;
                 }
 
-                // Update User Totals
-                user.totals.regular += regular;
-                user.totals.overtime += overtime;
-                // Only count non-break entries in total worked hours
-                if (!isBreak) {
+                // Update User Totals (only for non-break entries)
+                if (entryClass !== 'break') {
+                    user.totals.regular += regular;
+                    user.totals.overtime += overtime;
                     user.totals.total += duration;
-                }
 
-                if (isBillable && !isBreak) {
-                    user.totals.billableWorked += regular; // Special entries count as 'worked' for billing? "THEY FOLLOW REGULAR TIME ENTRY LOGIC". Yes.
-                    user.totals.billableOT += overtime;
-                    // Note: If special entry is billable, it goes to billableWorked.
-                } else if (!isBreak) {
-                    user.totals.nonBillableWorked += regular;
-                    user.totals.nonBillableOT += overtime;
-                }
+                    // Billable breakdown
+                    if (isBillable) {
+                        user.totals.billableWorked += regular;
+                        user.totals.billableOT += overtime;
+                    } else {
+                        user.totals.nonBillableWorked += regular;
+                        user.totals.nonBillableOT += overtime;
+                    }
 
-                // Cost Calculation
-                if (!isBreak) {
-                    // Safety: Only billable entries contribute to Amount (Revenue)
-                    // Even if hourlyRate is present, if isBillable is false, revenue is 0.
+                    // Cost Calculation
                     const effectiveRate = isBillable ? hourlyRate : 0;
                     const baseAmount = duration * effectiveRate;
-
-                    // Special entries follow regular logic. If they are not OT, no premium.
-                    // But if standard OT has premium...
-                    // Here overtime is 0 for special entries, so no premium.
 
                     let entryPremium = 0;
                     if (overtime > 0) {
                         const multiplier = userMultiplier > 0 ? userMultiplier : 1;
-                        // Premium is based on the effective rate? Usually yes.
-                        // If unbillable, no premium revenue either.
                         entryPremium = (overtime * effectiveRate * multiplier) - (overtime * effectiveRate);
                     }
 
                     user.totals.amount += baseAmount + entryPremium;
                     user.totals.otPremium += entryPremium;
 
-                    // Attach analysis to entry for Detailed View
-                    // Build tags array for special circumstances
+                    // Attach analysis to entry
                     const tags = [];
                     if (isHoliday) tags.push('HOLIDAY');
                     if (isNonWorking) tags.push('OFF-DAY');

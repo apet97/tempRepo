@@ -10,7 +10,8 @@ import {
   debounce,
   formatCurrency,
   formatHours,
-  IsoUtils
+  IsoUtils,
+  classifyEntryForOvertime
 } from '../../js/utils.js';
 
 describe('Utils Module', () => {
@@ -312,6 +313,56 @@ describe('IsoUtils', () => {
       expect(dates).toContain('2025-01-31');
       expect(dates).toContain('2025-02-01');
       expect(dates).toContain('2025-02-02');
+    });
+  });
+
+  describe('classifyEntryForOvertime', () => {
+    it('should classify BREAK entry', () => {
+      const entry = { type: 'BREAK' };
+      expect(classifyEntryForOvertime(entry)).toBe('break');
+    });
+
+    it('should classify HOLIDAY entry as pto', () => {
+      const entry = { type: 'HOLIDAY' };
+      expect(classifyEntryForOvertime(entry)).toBe('pto');
+    });
+
+    it('should classify TIME_OFF entry as pto', () => {
+      const entry = { type: 'TIME_OFF' };
+      expect(classifyEntryForOvertime(entry)).toBe('pto');
+    });
+
+    it('should classify REGULAR entry as work', () => {
+      const entry = { type: 'REGULAR' };
+      expect(classifyEntryForOvertime(entry)).toBe('work');
+    });
+
+    it('should classify unknown type as work', () => {
+      const entry = { type: 'UNKNOWN_TYPE' };
+      expect(classifyEntryForOvertime(entry)).toBe('work');
+    });
+
+    it('should return work for entry without type', () => {
+      const entry = {};
+      expect(classifyEntryForOvertime(entry)).toBe('work');
+    });
+
+    it('should return work for null entry', () => {
+      expect(classifyEntryForOvertime(null)).toBe('work');
+    });
+
+    it('should return work for undefined entry', () => {
+      expect(classifyEntryForOvertime(undefined)).toBe('work');
+    });
+
+    it('should classify billable HOLIDAY as pto (not work)', () => {
+      const entry = { type: 'HOLIDAY', billable: true };
+      expect(classifyEntryForOvertime(entry)).toBe('pto');
+    });
+
+    it('should classify billable TIME_OFF as pto (not work)', () => {
+      const entry = { type: 'TIME_OFF', billable: true };
+      expect(classifyEntryForOvertime(entry)).toBe('pto');
     });
   });
 });
