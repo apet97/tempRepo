@@ -70,7 +70,7 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       expect(userResult.totals.regular).toBe(8);
       expect(userResult.totals.overtime).toBe(1);
       expect(userResult.totals.vacationEntryHours).toBe(0);
-      expect(userResult.totals.total).toBe(9); // Only WORK counts
+      expect(userResult.totals.total).toBe(10); // BREAK (1h) + WORK (9h)
     });
   });
 
@@ -427,7 +427,7 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
   });
 
   describe('Entry Analysis Metadata: PTO/BREAK entries', () => {
-    it('should not have analysis metadata for BREAK entries', () => {
+    it('should have analysis metadata for BREAK entries with 0 regular and 0 overtime', () => {
       const entries = [
         {
           id: 'break_1',
@@ -446,9 +446,11 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
 
       calculateAnalysis(entries, mockStore, dateRange);
 
-      // BREAK entries should not have analysis metadata
+      // BREAK entries should have analysis metadata with 0 regular and 0 overtime
       const breakEntry = entries.find(e => e.id === 'break_1');
-      expect(breakEntry.analysis).toBeUndefined();
+      expect(breakEntry.analysis).toBeDefined();
+      expect(breakEntry.analysis.regular).toBe(0);
+      expect(breakEntry.analysis.overtime).toBe(0);
     });
 
     it('should have analysis metadata for PTO entries with 0 regular and 0 overtime', () => {

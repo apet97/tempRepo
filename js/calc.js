@@ -327,48 +327,47 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                     dailyAccumulator += duration;
                 }
 
-                // Update User Totals (only for non-break entries)
-                if (entryClass !== 'break') {
-                    user.totals.regular += regular;
-                    user.totals.overtime += overtime;
-                    user.totals.total += duration;
+                // Update User Totals - ALL entry types count toward totals
+                // (BREAK and PTO just have regular=0, overtime=0)
+                user.totals.regular += regular;
+                user.totals.overtime += overtime;
+                user.totals.total += duration;
 
-                    // Billable breakdown
-                    if (isBillable) {
-                        user.totals.billableWorked += regular;
-                        user.totals.billableOT += overtime;
-                    } else {
-                        user.totals.nonBillableWorked += regular;
-                        user.totals.nonBillableOT += overtime;
-                    }
-
-                    // Cost Calculation
-                    const effectiveRate = isBillable ? hourlyRate : 0;
-                    const baseAmount = duration * effectiveRate;
-
-                    let entryPremium = 0;
-                    if (overtime > 0) {
-                        const multiplier = userMultiplier > 0 ? userMultiplier : 1;
-                        entryPremium = (overtime * effectiveRate * multiplier) - (overtime * effectiveRate);
-                    }
-
-                    user.totals.amount += baseAmount + entryPremium;
-                    user.totals.otPremium += entryPremium;
-
-                    // Attach analysis to entry
-                    const tags = [];
-                    if (isHoliday) tags.push('HOLIDAY');
-                    if (isNonWorking) tags.push('OFF-DAY');
-                    if (isTimeOff) tags.push('TIME-OFF');
-
-                    entry.analysis = {
-                        regular,
-                        overtime,
-                        isBillable,
-                        cost: baseAmount + entryPremium,
-                        tags
-                    };
+                // Billable breakdown
+                if (isBillable) {
+                    user.totals.billableWorked += regular;
+                    user.totals.billableOT += overtime;
+                } else {
+                    user.totals.nonBillableWorked += regular;
+                    user.totals.nonBillableOT += overtime;
                 }
+
+                // Cost Calculation (billable entries contribute to amount)
+                const effectiveRate = isBillable ? hourlyRate : 0;
+                const baseAmount = duration * effectiveRate;
+
+                let entryPremium = 0;
+                if (overtime > 0) {
+                    const multiplier = userMultiplier > 0 ? userMultiplier : 1;
+                    entryPremium = (overtime * effectiveRate * multiplier) - (overtime * effectiveRate);
+                }
+
+                user.totals.amount += baseAmount + entryPremium;
+                user.totals.otPremium += entryPremium;
+
+                // Attach analysis to ALL entries
+                const tags = [];
+                if (isHoliday) tags.push('HOLIDAY');
+                if (isNonWorking) tags.push('OFF-DAY');
+                if (isTimeOff) tags.push('TIME-OFF');
+
+                entry.analysis = {
+                    regular,
+                    overtime,
+                    isBillable,
+                    cost: baseAmount + entryPremium,
+                    tags
+                };
             });
         });
     });
