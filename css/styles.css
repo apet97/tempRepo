@@ -716,7 +716,7 @@ body.density-spacious {
   display: flex;
   flex: 1;
   min-width: 100%;
-  justify-content: flex-end;
+  justify-content: flex-start;
   border-top: 1px solid var(--border-color);
   padding-top: 12px;
   margin-top: 4px;
@@ -735,6 +735,7 @@ body.density-spacious {
 .table-scroll {
   width: 100%;
   overflow-x: auto;
+  padding-right: 8px;
 }
 
 .report-table {
@@ -747,7 +748,7 @@ body.density-spacious {
 /* Detailed table column widths - fixed layout */
 #detailedCard .report-table th:nth-child(1),  /* Date */
 #detailedCard .report-table td:nth-child(1) {
-  width: 8%;
+  width: 7%;
   min-width: 70px;
 }
 
@@ -755,19 +756,19 @@ body.density-spacious {
 #detailedCard .report-table td:nth-child(2),
 #detailedCard .report-table th:nth-child(3),  /* End */
 #detailedCard .report-table td:nth-child(3) {
-  width: 6%;
+  width: 5%;
   min-width: 55px;
 }
 
 #detailedCard .report-table th:nth-child(4),  /* User */
 #detailedCard .report-table td:nth-child(4) {
-  width: 10%;
+  width: 9%;
   min-width: 80px;
 }
 
 #detailedCard .report-table th:nth-child(5),  /* Description */
 #detailedCard .report-table td:nth-child(5) {
-  width: 15%;
+  width: 14%;
   min-width: 100px;
   max-width: 200px;
   overflow: hidden;
@@ -779,13 +780,13 @@ body.density-spacious {
 #detailedCard .report-table td:nth-child(6),
 #detailedCard .report-table th:nth-child(7),  /* Overtime */
 #detailedCard .report-table td:nth-child(7) {
-  width: 7%;
+  width: 6%;
   min-width: 60px;
 }
 
 #detailedCard .report-table th:nth-child(8),  /* Billable */
 #detailedCard .report-table td:nth-child(8) {
-  width: 6%;
+  width: 5%;
   min-width: 50px;
 }
 
@@ -799,13 +800,13 @@ body.density-spacious {
 #detailedCard .report-table td:nth-child(12),
 #detailedCard .report-table th:nth-child(13)  /* Total $ */
 #detailedCard .report-table td:nth-child(13) {
-  width: 7%;
+  width: 6%;
   min-width: 60px;
 }
 
 #detailedCard .report-table th:nth-child(14), /* Tags */
 #detailedCard .report-table td:nth-child(14) {
-  width: 10%;
+  width: 13%;
   min-width: 80px;
 }
 

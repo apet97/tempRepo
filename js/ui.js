@@ -443,7 +443,7 @@ export function renderSummaryTable(users) {
   const fragment = document.createDocumentFragment();
   for (const row of rows) {
     const tr = document.createElement('tr');
-    tr.className = 'summary-row';
+    // Removed 'summary-row' class to avoid collision with flex container styles
     tr.innerHTML = renderSummaryRow(row, groupBy, expanded, showBillable);
     fragment.appendChild(tr);
   }
