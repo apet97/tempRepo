@@ -6,7 +6,7 @@
  */
 
 import { store } from './state.js';
-import { escapeHtml, formatHours, formatCurrency, IsoUtils, formatDate, getWeekKey, formatWeekKey, classifyEntryForOvertime, parseIsoDuration } from './utils.js';
+import { escapeHtml, formatHours, formatHoursDecimal, formatCurrency, IsoUtils, formatDate, getWeekKey, formatWeekKey, classifyEntryForOvertime, parseIsoDuration } from './utils.js';
 
 let Elements = null;
 
@@ -43,6 +43,10 @@ function getElements() {
     throw new Error('UI elements not initialized. Call initializeElements() first.');
   }
   return Elements;
+}
+
+function formatHoursDisplay(hours) {
+  return store.config.showDecimalTime ? formatHoursDecimal(hours) : formatHours(hours);
 }
 
 // --- Renderers ---
@@ -125,16 +129,16 @@ export function renderSummaryStrip(users) {
   // Time metrics (always on top row)
   const timeMetrics = `
     <div class="summary-item"><span class="summary-label">Users</span><span class="summary-value">${totals.users}</span></div>
-    <div class="summary-item"><span class="summary-label">Capacity</span><span class="summary-value">${formatHours(totals.capacity)}</span></div>
-    <div class="summary-item"><span class="summary-label">Total time</span><span class="summary-value">${formatHours(totals.worked)}</span></div>
-    <div class="summary-item"><span class="summary-label">Break</span><span class="summary-value">${formatHours(totals.breaks)}</span></div>
-    <div class="summary-item"><span class="summary-label">Regular</span><span class="summary-value">${formatHours(totals.regular)}</span></div>
-    <div class="summary-item danger"><span class="summary-label">Overtime</span><span class="summary-value">${formatHours(totals.overtime)}</span></div>
+    <div class="summary-item"><span class="summary-label">Capacity</span><span class="summary-value">${formatHoursDisplay(totals.capacity)}</span></div>
+    <div class="summary-item"><span class="summary-label">Total time</span><span class="summary-value">${formatHoursDisplay(totals.worked)}</span></div>
+    <div class="summary-item"><span class="summary-label">Break</span><span class="summary-value">${formatHoursDisplay(totals.breaks)}</span></div>
+    <div class="summary-item"><span class="summary-label">Regular</span><span class="summary-value">${formatHoursDisplay(totals.regular)}</span></div>
+    <div class="summary-item danger"><span class="summary-label">Overtime</span><span class="summary-value">${formatHoursDisplay(totals.overtime)}</span></div>
     ${showBillable ? `
-      <div class="summary-item"><span class="summary-label">Billable time</span><span class="summary-value">${formatHours(totals.billableWorked)}</span></div>
-      <div class="summary-item"><span class="summary-label">Non-billable time</span><span class="summary-value">${formatHours(totals.nonBillableWorked)}</span></div>
-      <div class="summary-item"><span class="summary-label">Billable OT</span><span class="summary-value">${formatHours(totals.billableOT)}</span></div>
-      <div class="summary-item"><span class="summary-label">Non-billable OT</span><span class="summary-value">${formatHours(totals.nonBillableOT)}</span></div>
+      <div class="summary-item"><span class="summary-label">Billable time</span><span class="summary-value">${formatHoursDisplay(totals.billableWorked)}</span></div>
+      <div class="summary-item"><span class="summary-label">Non-billable time</span><span class="summary-value">${formatHoursDisplay(totals.nonBillableWorked)}</span></div>
+      <div class="summary-item"><span class="summary-label">Billable OT</span><span class="summary-value">${formatHoursDisplay(totals.billableOT)}</span></div>
+      <div class="summary-item"><span class="summary-label">Non-billable OT</span><span class="summary-value">${formatHoursDisplay(totals.nonBillableOT)}</span></div>
     ` : ''}
     <div class="summary-item"><span class="summary-label">Holidays</span><span class="summary-value">${totals.holidayCount}</span></div>
     <div class="summary-item"><span class="summary-label">Time Off</span><span class="summary-value">${totals.timeOffCount}</span></div>
@@ -410,27 +414,27 @@ function renderSummaryRow(row, groupBy, expanded, showBillable) {
 
   // Capacity column (only for user grouping)
   if (groupBy === 'user') {
-    html += `<td class="text-right">${formatHours(row.capacity || 0)}</td>`;
+    html += `<td class="text-right">${formatHoursDisplay(row.capacity || 0)}</td>`;
   }
 
   html += `
-    <td class="text-right">${formatHours(row.regular)}</td>
-    <td class="text-right ${row.overtime > 0 ? 'text-danger' : ''}">${formatHours(row.overtime)}</td>
-    <td class="text-right">${formatHours(row.breaks)}</td>
+    <td class="text-right">${formatHoursDisplay(row.regular)}</td>
+    <td class="text-right ${row.overtime > 0 ? 'text-danger' : ''}">${formatHoursDisplay(row.overtime)}</td>
+    <td class="text-right">${formatHoursDisplay(row.breaks)}</td>
   `;
 
   // Advanced columns
   if (expanded && showBillable) {
     html += `
-      <td class="text-right">${formatHours(row.billableWorked)}</td>
-      <td class="text-right">${formatHours(row.billableOT)}</td>
-      <td class="text-right">${formatHours(row.nonBillableOT)}</td>
+      <td class="text-right">${formatHoursDisplay(row.billableWorked)}</td>
+      <td class="text-right">${formatHoursDisplay(row.billableOT)}</td>
+      <td class="text-right">${formatHoursDisplay(row.nonBillableOT)}</td>
     `;
   }
 
   html += `
-    <td class="text-right font-bold">${formatHours(row.total)}</td>
-    <td class="text-right" title="Vacation Entry Hours">${formatHours(row.vacationEntryHours)}</td>
+    <td class="text-right font-bold">${formatHoursDisplay(row.total)}</td>
+    <td class="text-right" title="Vacation Entry Hours">${formatHoursDisplay(row.vacationEntryHours)}</td>
     <td class="text-right font-bold">${formatCurrency(row.amount)}</td>
   `;
 
@@ -563,7 +567,6 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th>Start</th>
           <th>End</th>
           <th>User</th>
-          <th>Description</th>
           <th class="text-right">Regular</th>
           <th class="text-right">Overtime</th>
           <th class="text-right">Bill</th>
@@ -572,7 +575,7 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">OT $</th>
           <th class="text-right">T2 $</th>
           <th class="text-right">Total $</th>
-          <th class="text-right">Tags</th>
+          <th class="text-right">Status</th>
         </tr>
       </thead>
       <tbody>`;
@@ -634,9 +637,8 @@ export function renderDetailedTable(users, activeFilter = null) {
         <td>${formatTime(e.timeInterval?.start)}</td>
         <td>${formatTime(e.timeInterval?.end)}</td>
         <td>${escapeHtml(e.userName)}</td>
-        <td title="${escapeHtml(e.description || '(No description)')}">${escapeHtml(e.description || '(No description)')}</td>
-        <td class="text-right">${formatHours(e.analysis?.regular || 0)}</td>
-        <td class="text-right ${(e.analysis?.overtime || 0) > 0 ? 'text-danger' : ''}">${formatHours(e.analysis?.overtime || 0)}</td>
+        <td class="text-right">${formatHoursDisplay(e.analysis?.regular || 0)}</td>
+        <td class="text-right ${(e.analysis?.overtime || 0) > 0 ? 'text-danger' : ''}">${formatHoursDisplay(e.analysis?.overtime || 0)}</td>
         <td class="text-right">${billable}</td>
         <td class="text-right">${formatCurrency(e.analysis?.hourlyRate || 0)}</td>
         <td class="text-right">${formatCurrency(e.analysis?.regularAmount || 0)}</td>

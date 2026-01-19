@@ -398,6 +398,19 @@ export function formatHours(hours) {
     return mins === 0 ? `${whole}h` : `${whole}h ${mins}m`;
 }
 
+/**
+ * Formats decimal hours into a fixed two-decimal string (e.g., "8.50").
+ *
+ * @param {number} hours - Decimal hours.
+ * @param {number} [decimals=2] - Decimal places.
+ * @returns {string} Formatted decimal string.
+ */
+export function formatHoursDecimal(hours, decimals = 2) {
+    if (hours == null || isNaN(hours)) return '0.00';
+    const rounded = round(parseFloat(hours), decimals);
+    return rounded.toFixed(decimals);
+}
+
 // --- Timezone / Date Integrity Helpers (Antigravity Standard) ---
 
 export const IsoUtils = {

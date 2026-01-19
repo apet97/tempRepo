@@ -374,14 +374,14 @@ body {
 .user-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .user-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
   flex: 0 0 auto;
 }
 
@@ -767,52 +767,42 @@ body.density-spacious {
 
 #detailedCard .report-table th:nth-child(4),  /* User */
 #detailedCard .report-table td:nth-child(4) {
-  width: 9%;
-  min-width: 70px;
-}
-
-#detailedCard .report-table th:nth-child(5),  /* Description */
-#detailedCard .report-table td:nth-child(5) {
-  width: 14%;
+  width: 12%;
   min-width: 90px;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-#detailedCard .report-table th:nth-child(6),  /* Regular */
-#detailedCard .report-table td:nth-child(6),
-#detailedCard .report-table th:nth-child(7),  /* Overtime */
+#detailedCard .report-table th:nth-child(5),  /* Regular */
+#detailedCard .report-table td:nth-child(5),
+#detailedCard .report-table th:nth-child(6),  /* Overtime */
+#detailedCard .report-table td:nth-child(6) {
+  width: 6%;
+  min-width: 55px;
+}
+
+#detailedCard .report-table th:nth-child(7),  /* Bill */
 #detailedCard .report-table td:nth-child(7) {
-  width: 6%;
-  min-width: 55px;
+  width: 4%;
+  min-width: 40px;
 }
 
-#detailedCard .report-table th:nth-child(8),  /* Billable */
-#detailedCard .report-table td:nth-child(8) {
-  width: 5%;
-  min-width: 45px;
-}
-
-#detailedCard .report-table th:nth-child(9),  /* Rate */
+#detailedCard .report-table th:nth-child(8),  /* Rate */
+#detailedCard .report-table td:nth-child(8),
+#detailedCard .report-table th:nth-child(9),  /* Reg $ */
 #detailedCard .report-table td:nth-child(9),
-#detailedCard .report-table th:nth-child(10), /* Regular $ */
+#detailedCard .report-table th:nth-child(10), /* OT $ */
 #detailedCard .report-table td:nth-child(10),
-#detailedCard .report-table th:nth-child(11), /* OT $ */
+#detailedCard .report-table th:nth-child(11), /* T2 $ */
 #detailedCard .report-table td:nth-child(11),
-#detailedCard .report-table th:nth-child(12), /* Tier2 $ */
-#detailedCard .report-table td:nth-child(12),
-#detailedCard .report-table th:nth-child(13),  /* Total $ */
-#detailedCard .report-table td:nth-child(13) {
-  width: 6%;
-  min-width: 55px;
+#detailedCard .report-table th:nth-child(12), /* Total $ */
+#detailedCard .report-table td:nth-child(12) {
+  width: 7%;
+  min-width: 60px;
 }
 
-#detailedCard .report-table th:nth-child(14), /* Tags */
-#detailedCard .report-table td:nth-child(14) {
-  width: 13%;
-  min-width: 70px;
+#detailedCard .report-table th:nth-child(13), /* Status */
+#detailedCard .report-table td:nth-child(13) {
+  width: 18%;
+  min-width: 90px;
 }
 
 /* Fix tags column flex wrapping */
@@ -828,8 +818,8 @@ body.density-spacious {
   display: none;
 }
 
-#detailedCard.billable-off .report-table th:nth-child(8),
-#detailedCard.billable-off .report-table td:nth-child(8) {
+#detailedCard.billable-off .report-table th:nth-child(7),
+#detailedCard.billable-off .report-table td:nth-child(7) {
   display: none;
 }
 
@@ -868,6 +858,8 @@ body.density-spacious {
   overflow-wrap: anywhere;
 }
 
+#detailedCard .report-table th:nth-child(8),
+#detailedCard .report-table td:nth-child(8),
 #detailedCard .report-table th:nth-child(9),
 #detailedCard .report-table td:nth-child(9),
 #detailedCard .report-table th:nth-child(10),
@@ -875,9 +867,7 @@ body.density-spacious {
 #detailedCard .report-table th:nth-child(11),
 #detailedCard .report-table td:nth-child(11),
 #detailedCard .report-table th:nth-child(12),
-#detailedCard .report-table td:nth-child(12),
-#detailedCard .report-table th:nth-child(13),
-#detailedCard .report-table td:nth-child(13) {
+#detailedCard .report-table td:nth-child(12) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

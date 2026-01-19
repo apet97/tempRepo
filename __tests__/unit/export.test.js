@@ -136,6 +136,7 @@ describe('Export Module', () => {
         expect(csvContent).toContain('BillableOTHours');
         expect(csvContent).toContain('NonBillableOTHours');
         expect(csvContent).toContain('TotalHours');
+        expect(csvContent).toContain('TotalHoursDecimal');
         expect(csvContent).toContain('isHoliday');
         expect(csvContent).toContain('holidayName');
         expect(csvContent).toContain('isNonWorkingDay');

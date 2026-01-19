@@ -183,7 +183,8 @@ export function bindConfigEvents() {
         { id: 'useProfileWorkingDays', key: 'useProfileWorkingDays' },
         { id: 'applyHolidays', key: 'applyHolidays' },
         { id: 'applyTimeOff', key: 'applyTimeOff' },
-        { id: 'showBillableBreakdown', key: 'showBillableBreakdown' }
+        { id: 'showBillableBreakdown', key: 'showBillableBreakdown' },
+        { id: 'showDecimalTime', key: 'showDecimalTime' }
     ];
 
     configToggles.forEach(({ id, key }) => {
@@ -204,7 +205,17 @@ export function bindConfigEvents() {
                     updateDailyThresholdState();
                 }
 
-                if (store.rawEntries) runCalculation();
+                if (store.rawEntries) {
+                    if (key === 'showDecimalTime') {
+                        if (store.analysisResults) {
+                            UI.renderSummaryStrip(store.analysisResults);
+                            UI.renderSummaryTable(store.analysisResults);
+                            UI.renderDetailedTable(store.analysisResults);
+                        }
+                    } else {
+                        runCalculation();
+                    }
+                }
             });
         }
     });
@@ -597,4 +608,3 @@ export function runCalculation(dateRange) {
 if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
     init();
 }
-

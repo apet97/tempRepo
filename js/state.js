@@ -39,6 +39,7 @@ class Store {
             applyHolidays: true,
             applyTimeOff: true,
             showBillableBreakdown: true,
+            showDecimalTime: false,
             overtimeBasis: 'daily'
         };
 

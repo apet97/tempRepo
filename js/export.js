@@ -4,7 +4,7 @@
  * Includes security measures against CSV injection and robust formatting.
  */
 
-import { formatHours, parseIsoDuration, escapeCsv } from './utils.js';
+import { formatHours, formatHoursDecimal, parseIsoDuration, escapeCsv } from './utils.js';
 
 /**
  * Sanitizes a string to prevent CSV formula injection.
@@ -49,6 +49,7 @@ export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
         'NonBillableWorkedHours',
         'NonBillableOTHours',
         'TotalHours',
+        'TotalHoursDecimal',
         'isHoliday',
         'holidayName',
         'isNonWorkingDay',
@@ -77,6 +78,7 @@ export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
                 const billableOT = e.analysis?.isBillable ? (e.analysis?.overtime || 0) : 0;
                 const nonBillableWorked = !e.analysis?.isBillable ? (e.analysis?.regular || 0) : 0;
                 const nonBillableOT = !e.analysis?.isBillable ? (e.analysis?.overtime || 0) : 0;
+                const totalHours = e.timeInterval.duration ? parseIsoDuration(e.timeInterval.duration) : 0;
 
                 const row = [
                     (e.timeInterval.start || '').split('T')[0],
@@ -89,7 +91,8 @@ export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
                     formatHours(billableOT),
                     formatHours(nonBillableWorked),
                     formatHours(nonBillableOT),
-                    formatHours(e.timeInterval.duration ? parseIsoDuration(e.timeInterval.duration) : 0),
+                    formatHours(totalHours),
+                    formatHoursDecimal(totalHours),
                     day.meta?.isHoliday ? 'Yes' : 'No',
                     holidayName,
                     day.meta?.isNonWorking ? 'Yes' : 'No',
@@ -116,4 +119,3 @@ export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
     // CRITICAL FIX #6: Prevent memory leak by revoking object URL
     URL.revokeObjectURL(url);
 }
-
