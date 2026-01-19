@@ -113,8 +113,10 @@ export function renderSummaryStrip(users) {
     acc.otPremium += u.totals.otPremium;
     acc.holidayCount += u.totals.holidayCount;
     acc.timeOffCount += u.totals.timeOffCount;
+    acc.holidayHours += (u.totals.holidayHours || 0);
+    acc.timeOffHours += (u.totals.timeOffHours || 0);
     return acc;
-  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, otPremium: 0, holidayCount: 0, timeOffCount: 0 });
+  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, otPremium: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
 
   const showBillable = store.config.showBillableBreakdown;
 
@@ -131,8 +133,8 @@ export function renderSummaryStrip(users) {
       <div class="summary-item more"><span class="summary-label">Billable OT</span><span class="summary-value">${formatHours(totals.billableOT)}</span></div>
       <div class="summary-item more"><span class="summary-label">Non-Bill OT</span><span class="summary-value">${formatHours(totals.nonBillableOT)}</span></div>
     ` : ''}
-    <div class="summary-item"><span class="summary-label">Holiday Days</span><span class="summary-value">${totals.holidayCount}</span></div>
-    <div class="summary-item"><span class="summary-label">Time Off Days</span><span class="summary-value">${totals.timeOffCount}</span></div>
+    <div class="summary-item"><span class="summary-label">Holiday Hours</span><span class="summary-value">${formatHours(totals.holidayHours)}</span></div>
+    <div class="summary-item"><span class="summary-label">Time Off Hours</span><span class="summary-value">${formatHours(totals.timeOffHours)}</span></div>
     <div class="summary-item highlight"><span class="summary-label">Total</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
   `;
