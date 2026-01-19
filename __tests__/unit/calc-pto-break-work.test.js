@@ -67,7 +67,7 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       const userResult = results.find(u => u.userId === 'user0');
 
       expect(userResult.totals.breaks).toBe(1);
-      expect(userResult.totals.regular).toBe(8);
+      expect(userResult.totals.regular).toBe(9); // 1h BREAK + 8h WORK regular
       expect(userResult.totals.overtime).toBe(1);
       expect(userResult.totals.vacationEntryHours).toBe(0);
       expect(userResult.totals.total).toBe(10); // BREAK (1h) + WORK (9h)
@@ -118,9 +118,9 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user0');
 
-      // PTO entry should have 0 regular, 0 overtime
+      // PTO entry should count as regular hours
       const ptoEntry = entries.find(e => e.id === 'pto_1');
-      expect(ptoEntry.analysis?.regular || 0).toBe(0);
+      expect(ptoEntry.analysis?.regular || 0).toBe(8);
       expect(ptoEntry.analysis?.overtime || 0).toBe(0);
 
       // WORK entry should be all overtime (capacity=0 on holiday)
@@ -129,7 +129,7 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       expect(workEntry.analysis?.overtime || 0).toBe(2);
 
       expect(userResult.totals.vacationEntryHours).toBe(8);
-      expect(userResult.totals.regular).toBe(0);
+      expect(userResult.totals.regular).toBe(8); // PTO counts as regular
       expect(userResult.totals.overtime).toBe(2);
     });
   });
@@ -173,14 +173,14 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user0');
 
-      // PTO should not trigger OT
+      // PTO should count as regular hours, not trigger OT
       const ptoEntry = entries.find(e => e.id === 'pto_1');
-      expect(ptoEntry.analysis?.regular || 0).toBe(0);
+      expect(ptoEntry.analysis?.regular || 0).toBe(8);
       expect(ptoEntry.analysis?.overtime || 0).toBe(0);
 
       // WORK should be all overtime (full day PTO = 0 capacity)
       expect(userResult.totals.vacationEntryHours).toBe(8);
-      expect(userResult.totals.regular).toBe(0);
+      expect(userResult.totals.regular).toBe(8); // PTO counts as regular
       expect(userResult.totals.overtime).toBe(1);
     });
   });
@@ -224,14 +224,14 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user0');
 
-      // PTO should not accumulate
+      // PTO should count as regular hours, not accumulate toward capacity
       const ptoEntry = entries.find(e => e.id === 'pto_1');
-      expect(ptoEntry.analysis?.regular || 0).toBe(0);
+      expect(ptoEntry.analysis?.regular || 0).toBe(4);
       expect(ptoEntry.analysis?.overtime || 0).toBe(0);
 
       // WORK: effective capacity = 8 - 4 = 4h, so 6h WORK = 4h regular + 2h OT
       expect(userResult.totals.vacationEntryHours).toBe(4);
-      expect(userResult.totals.regular).toBe(4);
+      expect(userResult.totals.regular).toBe(8); // 4h PTO + 4h WORK regular
       expect(userResult.totals.overtime).toBe(2);
     });
   });
@@ -275,11 +275,11 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user0');
 
-      // PTO should not accumulate
+      // PTO should count as regular hours, not accumulate toward capacity
       expect(userResult.totals.vacationEntryHours).toBe(3);
 
       // WORK: effective capacity = 8 - 3 = 5h, so 7h WORK = 5h regular + 2h OT
-      expect(userResult.totals.regular).toBe(5);
+      expect(userResult.totals.regular).toBe(8); // 3h PTO + 5h WORK regular
       expect(userResult.totals.overtime).toBe(2);
     });
   });
@@ -318,19 +318,19 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user0');
 
-      // PTO entry should never accumulate (0 regular, 0 overtime)
+      // PTO entry should count as regular hours, never accumulate toward capacity
       const ptoEntry = entries.find(e => e.id === 'pto_1');
-      expect(ptoEntry.analysis?.regular || 0).toBe(0);
+      expect(ptoEntry.analysis?.regular || 0).toBe(8);
       expect(ptoEntry.analysis?.overtime || 0).toBe(0);
 
       // WORK 2h fits in 8h capacity = no OT
       expect(userResult.totals.vacationEntryHours).toBe(8);
-      expect(userResult.totals.regular).toBe(2);
+      expect(userResult.totals.regular).toBe(10); // 8h PTO + 2h WORK
       expect(userResult.totals.overtime).toBe(0);
 
-      // Billable PTO should count toward billable totals (0+0)
+      // Billable PTO should count toward billable totals
       // But NOT accumulate toward capacity
-      expect(userResult.totals.billableWorked).toBe(2); // Only WORK
+      expect(userResult.totals.billableWorked).toBe(10); // 8h PTO + 2h WORK
     });
   });
 
@@ -413,21 +413,21 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user0');
 
-      // PTO should not accumulate
+      // PTO should count as regular hours, not accumulate toward capacity
       const ptoEntry = entries.find(e => e.id === 'pto_1');
-      expect(ptoEntry.analysis?.regular || 0).toBe(0);
+      expect(ptoEntry.analysis?.regular || 0).toBe(2);
       expect(ptoEntry.analysis?.overtime || 0).toBe(0);
 
       // Only WORK accumulates: 3h + 5h = 8h (fits in capacity, no OT)
       expect(userResult.totals.vacationEntryHours).toBe(2);
-      expect(userResult.totals.regular).toBe(8);
+      expect(userResult.totals.regular).toBe(10); // 8h WORK + 2h PTO
       expect(userResult.totals.overtime).toBe(0);
       expect(userResult.totals.total).toBe(10); // 8h WORK + 2h PTO
     });
   });
 
   describe('Entry Analysis Metadata: PTO/BREAK entries', () => {
-    it('should have analysis metadata for BREAK entries with 0 regular and 0 overtime', () => {
+    it('should have analysis metadata for BREAK entries with regular=duration, overtime=0', () => {
       const entries = [
         {
           id: 'break_1',
@@ -446,14 +446,14 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
 
       calculateAnalysis(entries, mockStore, dateRange);
 
-      // BREAK entries should have analysis metadata with 0 regular and 0 overtime
+      // BREAK entries should have analysis metadata with regular=duration, overtime=0
       const breakEntry = entries.find(e => e.id === 'break_1');
       expect(breakEntry.analysis).toBeDefined();
-      expect(breakEntry.analysis.regular).toBe(0);
+      expect(breakEntry.analysis.regular).toBe(1);
       expect(breakEntry.analysis.overtime).toBe(0);
     });
 
-    it('should have analysis metadata for PTO entries with 0 regular and 0 overtime', () => {
+    it('should have analysis metadata for PTO entries with regular=duration, overtime=0', () => {
       const entries = [
         {
           id: 'pto_1',
@@ -472,10 +472,10 @@ describe('Calculation Module - PTO/BREAK/WORK Classification', () => {
 
       calculateAnalysis(entries, mockStore, dateRange);
 
-      // PTO entries should have analysis metadata with 0 regular and 0 overtime
+      // PTO entries should have analysis metadata with regular=duration, overtime=0
       const ptoEntry = entries.find(e => e.id === 'pto_1');
       expect(ptoEntry.analysis).toBeDefined();
-      expect(ptoEntry.analysis.regular).toBe(0);
+      expect(ptoEntry.analysis.regular).toBe(8);
       expect(ptoEntry.analysis.overtime).toBe(0);
     });
   });

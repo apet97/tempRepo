@@ -304,13 +304,16 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 // Handle BREAK entries
                 if (entryClass === 'break') {
                     user.totals.breaks += duration;
-                    // Do NOT add to dailyAccumulator or regular/overtime
+                    regular = duration;  // Count as worked hours
+                    overtime = 0;
+                    // Do NOT add to dailyAccumulator (doesn't trigger OT for other entries)
                 }
                 // Handle PTO entries (HOLIDAY/TIME_OFF) - regardless of billable flag
                 else if (entryClass === 'pto') {
                     user.totals.vacationEntryHours += duration;
-                    // PTO never accumulates, never triggers OT
-                    // regular = 0, overtime = 0 (already initialized)
+                    regular = duration;  // Count as worked hours
+                    overtime = 0;
+                    // Do NOT add to dailyAccumulator (doesn't trigger OT for other entries)
                 }
                 // Handle WORK entries
                 else {
@@ -328,7 +331,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 }
 
                 // Update User Totals - ALL entry types count toward totals
-                // (BREAK and PTO just have regular=0, overtime=0)
+                // (BREAK and PTO have regular=duration, overtime=0)
                 user.totals.regular += regular;
                 user.totals.overtime += overtime;
                 user.totals.total += duration;

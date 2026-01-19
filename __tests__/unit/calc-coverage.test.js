@@ -198,14 +198,14 @@ describe('calc.js - Edge Cases & Full Coverage', () => {
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user1');
 
-      // BREAK entries should be counted in breaks, not in regular/overtime
-      expect(userResult.totals.total).toBe(8); // Only work time, not break
+      // BREAK entries should be counted in breaks AND regular hours
+      expect(userResult.totals.total).toBe(9); // 1h break + 8h work
       expect(userResult.totals.breaks).toBe(1); // Break time
-      expect(userResult.totals.regular).toBe(8); // Work time
+      expect(userResult.totals.regular).toBe(9); // 1h BREAK + 8h WORK
       expect(userResult.totals.overtime).toBe(0);
     });
 
-    it('should not count break time in billable/non-billable breakdown', () => {
+    it('should count billable break time as regular billable hours', () => {
       const entries = [{
         id: 'entry1',
         userId: 'user1',
@@ -216,16 +216,16 @@ describe('calc.js - Edge Cases & Full Coverage', () => {
           end: '2025-01-15T13:00:00Z',
           duration: 'PT1H'
         },
-        billable: true // Even if marked billable, break shouldn't count
+        billable: true
       }];
 
       const results = calculateAnalysis(entries, mockStore, dateRange);
       const userResult = results.find(u => u.userId === 'user1');
 
-      // Break entries shouldn't contribute to worked hours
-      expect(userResult.totals.billableWorked).toBe(0);
+      // Break entries should count as regular hours (never overtime)
+      expect(userResult.totals.billableWorked).toBe(1);
       expect(userResult.totals.billableOT).toBe(0);
-      expect(userResult.totals.total).toBe(0);
+      expect(userResult.totals.total).toBe(1);
     });
   });
 
