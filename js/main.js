@@ -133,6 +133,17 @@ export async function loadInitialData() {
                     if (store.rawEntries) runCalculation();
                 });
             }
+        },
+        // Weekly override handler
+        onWeeklyOverrideChange: (userId, weekday, field, value) => {
+            store.setWeeklyOverride(userId, weekday, field, value);
+            if (store.rawEntries) runCalculation();
+        },
+        // Copy global to weekly button handler
+        onCopyGlobalToWeekly: (userId) => {
+            store.copyGlobalToWeekly(userId);
+            UI.renderOverridesTable();  // Re-render to show copied values
+            if (store.rawEntries) runCalculation();
         }
     });
 }

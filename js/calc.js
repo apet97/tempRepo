@@ -108,7 +108,7 @@ function getEffectiveCapacity(dateKey, userId, storeRef, dayEntries = []) {
     let holidayHours = 0;
     let timeOffHours = 0;
 
-    // 1. Determine Base Capacity: Per-Day Override > Global Override > Profile > Global Default
+    // 1. Determine Base Capacity: Per-Day Override > Weekly Override > Global Override > Profile > Global Default
     let capacity = calcParams.dailyThreshold;
 
     // Check per-day override first
@@ -118,7 +118,21 @@ function getEffectiveCapacity(dateKey, userId, storeRef, dayEntries = []) {
             capacity = parseFloat(dayOverride.capacity);
         }
     }
-    // Fall through to global override if no per-day override
+    // Check weekly override
+    else if (userOverride.mode === 'weekly' && userOverride.weeklyOverrides) {
+        const weekday = IsoUtils.getWeekdayKey(dateKey);
+        const weekdayOverride = userOverride.weeklyOverrides[weekday];
+        if (weekdayOverride?.capacity !== undefined && weekdayOverride.capacity !== '') {
+            capacity = parseFloat(weekdayOverride.capacity);
+        }
+        // Fall through to global if no weekly override for this day
+        else if (userOverride.capacity !== undefined && userOverride.capacity !== '') {
+            capacity = parseFloat(userOverride.capacity);
+        } else if (config.useProfileCapacity && profile?.workCapacityHours != null) {
+            capacity = profile.workCapacityHours;
+        }
+    }
+    // Fall through to global override if no per-day or weekly override
     else if (userOverride.capacity !== undefined && userOverride.capacity !== '') {
         capacity = parseFloat(userOverride.capacity);
     } else if (config.useProfileCapacity && profile?.workCapacityHours != null) {
@@ -306,7 +320,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             const dayData = user.days.get(dateKey) || { entries: [] };
             const { capacity, isNonWorking, isHoliday, holidayName, holidayProjectId, isTimeOff, holidayHours, timeOffHours } = getEffectiveCapacity(dateKey, user.userId, storeRef, dayData.entries);
 
-            // Extract multiplier with per-day override support
+            // Extract multiplier with per-day and weekly override support
             let userMultiplier = calcParams.overtimeMultiplier;
             const override = overrides[user.userId];
 
@@ -314,6 +328,18 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 // Check per-day multiplier first (need dateKey context)
                 if (override.mode === 'perDay' && override.perDayOverrides?.[dateKey]?.multiplier) {
                     userMultiplier = parseFloat(override.perDayOverrides[dateKey].multiplier);
+                }
+                // Check weekly multiplier
+                else if (override.mode === 'weekly' && override.weeklyOverrides) {
+                    const weekday = IsoUtils.getWeekdayKey(dateKey);
+                    const weekdayOverride = override.weeklyOverrides[weekday];
+                    if (weekdayOverride?.multiplier) {
+                        userMultiplier = parseFloat(weekdayOverride.multiplier);
+                    }
+                    // Fall through to global multiplier if no weekly override for this day
+                    else if (override.multiplier !== undefined && override.multiplier !== '') {
+                        userMultiplier = parseFloat(override.multiplier);
+                    }
                 }
                 // Fall through to global multiplier
                 else if (override.multiplier !== undefined && override.multiplier !== '') {

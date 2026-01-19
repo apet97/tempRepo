@@ -102,7 +102,10 @@ describe('State Module - Store Class', () => {
 
       store.setToken('mock_token', { workspaceId });
 
-      expect(store.overrides).toEqual(mockOverrides);
+      // Migration adds mode: 'global' to overrides without a mode
+      expect(store.overrides).toEqual({
+        user_1: { mode: 'global', capacity: 6, multiplier: 2 }
+      });
     });
 
     it('should initialize empty overrides when no localStorage data', () => {

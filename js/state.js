@@ -192,6 +192,13 @@ class Store {
         if (key) {
             const saved = localStorage.getItem(key);
             this.overrides = safeJSONParse(saved, {});
+
+            // Migrate old format: add mode if missing
+            Object.keys(this.overrides).forEach(userId => {
+                if (!this.overrides[userId].mode) {
+                    this.overrides[userId].mode = 'global';
+                }
+            });
         }
     }
 
@@ -248,13 +255,13 @@ class Store {
     }
 
     /**
-     * Sets the override mode for a user (global or perDay).
+     * Sets the override mode for a user (global, weekly, or perDay).
      * @param {string} userId - User ID.
-     * @param {'global'|'perDay'} mode - Override mode.
+     * @param {'global'|'weekly'|'perDay'} mode - Override mode.
      * @returns {boolean} True if successful, false if invalid mode.
      */
     setOverrideMode(userId, mode) {
-        if (!['global', 'perDay'].includes(mode)) {
+        if (!['global', 'weekly', 'perDay'].includes(mode)) {
             console.warn(`Invalid override mode: ${mode}`);
             return false;
         }
@@ -267,6 +274,10 @@ class Store {
         // Initialize perDayOverrides if switching to perDay mode
         if (mode === 'perDay' && !this.overrides[userId].perDayOverrides) {
             this.overrides[userId].perDayOverrides = {};
+        }
+        // Initialize weeklyOverrides if switching to weekly mode
+        if (mode === 'weekly' && !this.overrides[userId].weeklyOverrides) {
+            this.overrides[userId].weeklyOverrides = {};
         }
 
         this.saveOverrides();
@@ -357,6 +368,70 @@ class Store {
             }
             if (globalMultiplier !== undefined && globalMultiplier !== '') {
                 override.perDayOverrides[dateKey].multiplier = globalMultiplier;
+            }
+        });
+
+        this.saveOverrides();
+        return true;
+    }
+
+    /**
+     * Sets weekly override for specific weekday.
+     * @param {string} userId - User ID.
+     * @param {string} weekday - 'MONDAY', 'TUESDAY', etc.
+     * @param {string} field - 'capacity' or 'multiplier'.
+     * @param {string|number} value - The value to set.
+     * @returns {boolean} True if successful, false if invalid.
+     */
+    setWeeklyOverride(userId, weekday, field, value) {
+        // Initialize structure
+        if (!this.overrides[userId]) {
+            this.overrides[userId] = { mode: 'weekly', weeklyOverrides: {} };
+        }
+        if (!this.overrides[userId].weeklyOverrides) {
+            this.overrides[userId].weeklyOverrides = {};
+        }
+        if (!this.overrides[userId].weeklyOverrides[weekday]) {
+            this.overrides[userId].weeklyOverrides[weekday] = {};
+        }
+
+        // Validation (same as updateOverride)
+        if (value === null || value === '') {
+            delete this.overrides[userId].weeklyOverrides[weekday][field];
+            if (Object.keys(this.overrides[userId].weeklyOverrides[weekday]).length === 0) {
+                delete this.overrides[userId].weeklyOverrides[weekday];
+            }
+        } else {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) return false;
+            if (field === 'capacity' && numValue < 0) return false;
+            if (field === 'multiplier' && numValue < 1) return false;
+            this.overrides[userId].weeklyOverrides[weekday][field] = value;
+        }
+
+        this.saveOverrides();
+        return true;
+    }
+
+    /**
+     * Copies global values to all weekdays for a user in weekly mode.
+     * @param {string} userId - User ID.
+     * @returns {boolean} True if successful, false if not in weekly mode.
+     */
+    copyGlobalToWeekly(userId) {
+        const override = this.overrides[userId];
+        if (!override || override.mode !== 'weekly') return false;
+
+        const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+        weekdays.forEach(weekday => {
+            if (!override.weeklyOverrides[weekday]) {
+                override.weeklyOverrides[weekday] = {};
+            }
+            if (override.capacity !== undefined && override.capacity !== '') {
+                override.weeklyOverrides[weekday].capacity = override.capacity;
+            }
+            if (override.multiplier !== undefined && override.multiplier !== '') {
+                override.weeklyOverrides[weekday].multiplier = override.multiplier;
             }
         });
 

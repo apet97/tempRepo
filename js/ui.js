@@ -499,6 +499,12 @@ export function renderDetailedTable(users, activeFilter = null) {
       tags.push('<span class="badge badge-timeoff">TIME-OFF</span>');
     }
 
+    // BREAK badge
+    const entryClass = classifyEntryForOvertime(e);
+    if (entryClass === 'break') {
+      tags.push('<span class="badge badge-break">BREAK</span>');
+    }
+
     // Existing entry tags
     const systemTags = ['HOLIDAY', 'OFF-DAY', 'TIME-OFF'];
     (e.analysis?.tags || []).forEach(t => {
@@ -610,6 +616,66 @@ function renderPerDayInputs(userId, perDayOverrides, profileCapacity, defaultPla
 }
 
 /**
+ * Renders weekly inputs for a user (7 rows for each weekday).
+ * @param {string} userId - User ID.
+ * @param {Object} weeklyOverrides - Weekly overrides object.
+ * @param {number} profileCapacity - Profile capacity fallback.
+ * @param {string} defaultPlaceholder - Placeholder text for capacity.
+ * @returns {string} HTML string for weekly inputs.
+ */
+function renderWeeklyInputs(userId, weeklyOverrides, profileCapacity, defaultPlaceholder) {
+  const override = store.overrides[userId] || {};
+  const hasGlobalValues = override.capacity || override.multiplier;
+  const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+
+  let html = '<div class="weekly-inputs-container">';
+
+  // Copy from global button
+  if (hasGlobalValues) {
+    html += `<div class="weekly-actions">
+        <button class="copy-global-to-weekly-btn" data-userid="${userId}">
+            📋 Copy from global
+        </button>
+        <span class="muted">Global: ${override.capacity || 'default'}h, ${override.multiplier || 'default'}x</span>
+    </div>`;
+  }
+
+  html += '<table class="weekly-table">';
+  html += '<thead><tr><th>Weekday</th><th>Capacity (hrs)</th><th>Multiplier (x)</th></tr></thead>';
+  html += '<tbody>';
+
+  weekdays.forEach(weekday => {
+    const dayOverride = weeklyOverrides[weekday] || {};
+    const label = weekday.charAt(0) + weekday.slice(1).toLowerCase();
+
+    html += `<tr>
+        <td class="weekday-label">${label}</td>
+        <td>
+            <input type="number" class="weekly-input"
+                   data-userid="${userId}"
+                   data-weekday="${weekday}"
+                   data-field="capacity"
+                   value="${dayOverride.capacity || ''}"
+                   placeholder="${defaultPlaceholder}"
+                   step="0.5" min="0" max="24" />
+        </td>
+        <td>
+            <input type="number" class="weekly-input"
+                   data-userid="${userId}"
+                   data-weekday="${weekday}"
+                   data-field="multiplier"
+                   value="${dayOverride.multiplier || ''}"
+                   placeholder="${store.calcParams.overtimeMultiplier}"
+                   step="0.1" min="1" max="5" />
+        </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+/**
  * Renders the User Overrides table (configuration inputs per user).
  */
 export function renderOverridesTable() {
@@ -635,12 +701,13 @@ export function renderOverridesTable() {
         ${profileCapacity != null ? `<span style="font-size:9px; color:var(--text-muted); margin-left:4px;">(${profileCapacity}h profile)</span>` : ''}
       </td>
       <td>
-        <button class="mode-toggle-btn"
+        <select class="mode-select"
                 data-userid="${user.id}"
-                data-currentmode="${mode}"
-                aria-label="Toggle override mode for ${escapeHtml(user.name)}">
-          ${mode === 'global' ? 'Global' : 'Per Day'}
-        </button>
+                aria-label="Override mode for ${escapeHtml(user.name)}">
+          <option value="global" ${mode === 'global' ? 'selected' : ''}>Global</option>
+          <option value="weekly" ${mode === 'weekly' ? 'selected' : ''}>Weekly</option>
+          <option value="perDay" ${mode === 'perDay' ? 'selected' : ''}>Per Day</option>
+        </select>
       </td>
       <td>
         <input type="number"
@@ -676,6 +743,21 @@ export function renderOverridesTable() {
 
       // Render per-day inputs
       expandedCell.innerHTML = renderPerDayInputs(user.id, override.perDayOverrides || {}, profileCapacity, placeholder);
+
+      expandedRow.appendChild(expandedCell);
+      fragment.appendChild(expandedRow);
+    }
+    // Add weekly editor row if mode is weekly
+    else if (mode === 'weekly') {
+      const expandedRow = document.createElement('tr');
+      expandedRow.className = 'weekly-editor-row';
+      expandedRow.dataset.userid = user.id;
+
+      const expandedCell = document.createElement('td');
+      expandedCell.colSpan = 4;
+
+      // Render weekly inputs
+      expandedCell.innerHTML = renderWeeklyInputs(user.id, override.weeklyOverrides || {}, profileCapacity, placeholder);
 
       expandedRow.appendChild(expandedCell);
       fragment.appendChild(expandedRow);
@@ -779,20 +861,31 @@ export function bindEvents(callbacks) {
       const { userid, datekey, field } = e.target.dataset;
       callbacks.onPerDayOverrideChange(userid, datekey, field, e.target.value);
     }
+
+    // Weekly input handler
+    if (e.target.matches('input.weekly-input')) {
+      const { userid, weekday, field } = e.target.dataset;
+      callbacks.onWeeklyOverrideChange(userid, weekday, field, e.target.value);
+    }
+
+    // Mode select dropdown handler
+    if (e.target.matches('select.mode-select')) {
+      const { userid } = e.target.dataset;
+      callbacks.onOverrideModeChange(userid, e.target.value);
+    }
   });
 
   Elements.userOverridesBody.addEventListener('click', (e) => {
-    // NEW: Mode toggle handler
-    if (e.target.matches('button.mode-toggle-btn')) {
-      const { userid, currentmode } = e.target.dataset;
-      const newMode = currentmode === 'global' ? 'perDay' : 'global';
-      callbacks.onOverrideModeChange(userid, newMode);
-    }
-
-    // NEW: Copy from global button
+    // Copy from global button (per-day mode)
     if (e.target.matches('button.copy-from-global-btn')) {
       const { userid } = e.target.dataset;
       callbacks.onCopyFromGlobal(userid);
+    }
+
+    // Copy global to weekly button (weekly mode)
+    if (e.target.matches('button.copy-global-to-weekly-btn')) {
+      const { userid } = e.target.dataset;
+      callbacks.onCopyGlobalToWeekly(userid);
     }
   });
 

@@ -268,6 +268,12 @@ body {
   border: 1px solid #bae6fd;
 }
 
+.badge-break {
+  background: #d1fae5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
 .badge-billable {
   color: var(--color-success);
   font-weight: bold;
@@ -430,6 +436,12 @@ body {
   border-color: #0369a1;
 }
 
+.cl-theme-dark .badge-break {
+  background: #064e3b;
+  color: #6ee7b7;
+  border-color: #065f46;
+}
+
 .cl-theme-dark .api-status-banner {
   background: #422006;
   border-color: #854d0e;
@@ -454,6 +466,22 @@ body {
 
 .cl-theme-dark .summary-item.highlight .summary-value {
   background: rgba(52, 211, 153, 0.2);
+}
+
+.cl-theme-dark .mode-select {
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.cl-theme-dark .copy-global-to-weekly-btn {
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.cl-theme-dark .copy-global-to-weekly-btn:hover {
+  background: var(--bg-hover);
 }
 
 body.density-compact {
@@ -1088,6 +1116,88 @@ body.density-spacious {
 }
 
 .per-day-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* Weekly Overrides */
+.weekly-editor-row {
+  background: var(--bg-tertiary);
+}
+
+.weekly-inputs-container {
+  padding: 1rem;
+}
+
+.weekly-actions {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy-global-to-weekly-btn {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.copy-global-to-weekly-btn:hover {
+  background: var(--bg-secondary);
+}
+
+.weekly-table {
+  width: 100%;
+  font-size: 0.9rem;
+  border-collapse: collapse;
+}
+
+.weekly-table th {
+  background: var(--bg-secondary);
+  padding: 0.5rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.weekly-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.weekday-label {
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.weekly-input {
+  width: 80px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+}
+
+.weekly-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.mode-select {
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  min-width: 100px;
+  font-size: 0.9rem;
+  background: white;
+  cursor: pointer;
+}
+
+.mode-select:focus {
   outline: none;
   border-color: var(--primary-color);
 }

@@ -276,6 +276,8 @@ export const Api = {
                 billable: e.billable,
                 projectId: e.projectId,
                 projectName: e.projectName,
+                clientId: e.clientId || null,
+                clientName: e.clientName || null,
                 taskId: e.taskId,
                 taskName: e.taskName,
                 type: e.type || 'REGULAR',
