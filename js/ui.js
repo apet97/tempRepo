@@ -49,6 +49,14 @@ function formatHoursDisplay(hours) {
   return store.config.showDecimalTime ? formatHoursDecimal(hours) : formatHours(hours);
 }
 
+function getAmountLabels() {
+  const amountDisplay = String(store.config.amountDisplay || 'earned').toLowerCase();
+  if (amountDisplay === 'cost') {
+    return { column: 'Cost', total: 'Total Cost (with OT)', base: 'Cost (no OT)' };
+  }
+  return { column: 'Amount', total: 'Total (with OT)', base: 'Amount (no OT)' };
+}
+
 // --- Renderers ---
 
 /**
@@ -115,6 +123,7 @@ export function renderSummaryStrip(users) {
     acc.nonBillableOT += u.totals.nonBillableOT;
     acc.amount += u.totals.amount;
     acc.amountBase += (u.totals.amountBase || 0);
+    acc.profit += (u.totals.profit || 0);
     acc.otPremium += u.totals.otPremium;
     acc.otPremiumTier2 += (u.totals.otPremiumTier2 || 0);
     acc.holidayCount += u.totals.holidayCount;
@@ -122,9 +131,10 @@ export function renderSummaryStrip(users) {
     acc.holidayHours += (u.totals.holidayHours || 0);
     acc.timeOffHours += (u.totals.timeOffHours || 0);
     return acc;
-  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, otPremiumTier2: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
+  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, profit: 0, otPremium: 0, otPremiumTier2: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
 
   const showBillable = store.config.showBillableBreakdown;
+  const amountLabels = getAmountLabels();
 
   // Time metrics (always on top row)
   const timeMetrics = `
@@ -146,10 +156,11 @@ export function renderSummaryStrip(users) {
 
   // Money metrics (on bottom row when billable breakdown is ON)
   const moneyMetrics = `
-    <div class="summary-item highlight"><span class="summary-label">Total (with OT)</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
+    <div class="summary-item highlight"><span class="summary-label">${amountLabels.total}</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
+    <div class="summary-item"><span class="summary-label">Profit (with OT)</span><span class="summary-value">${formatCurrency(totals.profit)}</span></div>
     <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
     ${showBillable ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>` : ''}
-    <div class="summary-item"><span class="summary-label">Amount (no OT)</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
+    <div class="summary-item"><span class="summary-label">${amountLabels.base}</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
   `;
 
   // Two-row layout when billable breakdown is ON
@@ -251,6 +262,7 @@ function computeSummaryRows(analysisUsers, groupBy) {
             nonBillableOT: 0,
             vacationEntryHours: 0,
             amount: 0,
+            profit: 0,
             otPremium: 0
           });
         }
@@ -282,11 +294,13 @@ function computeSummaryRows(analysisUsers, groupBy) {
 
         // Cost
         group.amount += entry.analysis?.cost || 0;
+        group.profit += entry.analysis?.profit || 0;
 
         // Calculate OT premium
-        const regularCost = (entry.analysis?.regular || 0) * ((entry.hourlyRate?.amount || 0) / 100);
+        const baseRate = entry.analysis?.hourlyRate || 0;
+        const regularCost = (entry.analysis?.regular || 0) * baseRate;
         const otCost = (entry.analysis?.cost || 0) - regularCost;
-        const otPremiumOnly = otCost - ((entry.analysis?.overtime || 0) * ((entry.hourlyRate?.amount || 0) / 100));
+        const otPremiumOnly = otCost - ((entry.analysis?.overtime || 0) * baseRate);
         group.otPremium += otPremiumOnly;
       }
     }
@@ -306,6 +320,7 @@ function computeSummaryRows(analysisUsers, groupBy) {
         nonBillableOT: 0,
         vacationEntryHours: 0,
         amount: 0,
+        profit: 0,
         otPremium: 0
       });
     }
@@ -331,6 +346,7 @@ function renderSummaryHeaders(groupBy, expanded, showBillable) {
     date: 'Date',
     week: 'Week'
   }[groupBy] || 'User';
+  const amountLabel = getAmountLabels().column;
 
   let headers = `<th>${groupLabel}</th>`;
 
@@ -357,7 +373,8 @@ function renderSummaryHeaders(groupBy, expanded, showBillable) {
   headers += `
     <th class="text-right">Total</th>
     <th class="text-right">Vacation</th>
-    <th class="text-right">Amount</th>
+    <th class="text-right">${amountLabel}</th>
+    <th class="text-right">Profit</th>
   `;
 
   return headers;
@@ -436,6 +453,7 @@ function renderSummaryRow(row, groupBy, expanded, showBillable) {
     <td class="text-right font-bold">${formatHoursDisplay(row.total)}</td>
     <td class="text-right" title="Vacation Entry Hours">${formatHoursDisplay(row.vacationEntryHours)}</td>
     <td class="text-right font-bold">${formatCurrency(row.amount)}</td>
+    <td class="text-right font-bold">${formatCurrency(row.profit)}</td>
   `;
 
   return html;
@@ -575,6 +593,7 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">OT $</th>
           <th class="text-right">T2 $</th>
           <th class="text-right">Total $</th>
+          <th class="text-right">Profit $</th>
           <th class="text-right">Status</th>
         </tr>
       </thead>
@@ -670,6 +689,7 @@ export function renderDetailedTable(users, activeFilter = null) {
         <td class="text-right">${formatCurrency((e.analysis?.overtimeAmountBase || 0) + (e.analysis?.tier1Premium || 0))}</td>
         <td class="text-right">${formatCurrency(e.analysis?.tier2Premium || 0)}</td>
         <td class="text-right highlight">${formatCurrency(e.analysis?.totalAmountWithOT || 0)}</td>
+        <td class="text-right">${formatCurrency(e.analysis?.profit || 0)}</td>
         <td class="text-right"><div class="tags-cell">${tags.join(' ') || '—'}</div></td>
     </tr>`;
   });

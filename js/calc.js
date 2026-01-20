@@ -43,6 +43,101 @@ function calculateDuration(entry) {
     return 0;
 }
 
+const AMOUNT_RATE_TYPES = {
+    earned: 'EARNED',
+    cost: 'COST'
+};
+
+function normalizeAmountDisplay(value) {
+    const display = String(value || '').toLowerCase();
+    return AMOUNT_RATE_TYPES[display] ? display : 'earned';
+}
+
+function getAmountValue(amounts, type) {
+    if (!Array.isArray(amounts)) return null;
+    const normalizedType = String(type || '').toUpperCase();
+    const match = amounts.find(amount =>
+        String(amount?.type || amount?.amountType || '').toUpperCase() === normalizedType
+    );
+    if (!match) return null;
+    const rawValue = match.value ?? match.amount;
+    const numericValue = Number(rawValue);
+    return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function getAmountRate(amounts, durationHours, type) {
+    if (!durationHours || durationHours <= 0) return null;
+    const value = getAmountValue(amounts, type);
+    if (!Number.isFinite(value)) return null;
+    return value / durationHours;
+}
+
+function getRateFromCents(rawValue) {
+    const parsed = Number(rawValue);
+    return Number.isFinite(parsed) ? parsed / 100 : 0;
+}
+
+function getEarnedRate(entry, durationHours) {
+    const rawHourlyRate = entry.hourlyRate?.amount;
+    const parsedHourlyRate = Number(rawHourlyRate);
+    if (Number.isFinite(parsedHourlyRate)) {
+        return parsedHourlyRate / 100;
+    }
+    const amountRate = getAmountRate(entry.amounts, durationHours, AMOUNT_RATE_TYPES.earned);
+    return Number.isFinite(amountRate) ? amountRate : 0;
+}
+
+function getCostRate(entry, durationHours) {
+    const rawCostRate = entry.costRate?.amount ?? entry.costRate;
+    const parsedCostRate = Number(rawCostRate);
+    if (Number.isFinite(parsedCostRate)) {
+        return parsedCostRate / 100;
+    }
+    const amountRate = getAmountRate(entry.amounts, durationHours, AMOUNT_RATE_TYPES.cost);
+    if (Number.isFinite(amountRate)) return amountRate;
+    return getRateFromCents(entry.hourlyRate?.amount);
+}
+
+function buildAmountBreakdown(rate, regular, overtime, multiplier, tier2EligibleHours, tier2Multiplier) {
+    const safeMultiplier = multiplier > 0 ? multiplier : 1;
+    const safeTier2Multiplier = tier2Multiplier > safeMultiplier ? tier2Multiplier : safeMultiplier;
+    const regularAmount = regular * rate;
+    const overtimeAmountBase = overtime * rate;
+    const baseAmount = regularAmount + overtimeAmountBase;
+
+    let tier1Premium = 0;
+    let tier2Premium = 0;
+    let overtimeRate = rate;
+
+    if (overtime > 0) {
+        tier1Premium = overtime * rate * (safeMultiplier - 1);
+        if (tier2EligibleHours > 0 && safeTier2Multiplier > safeMultiplier) {
+            tier2Premium = tier2EligibleHours * rate * (safeTier2Multiplier - safeMultiplier);
+        }
+
+        const tier1Hours = overtime - tier2EligibleHours;
+        const tier1Rate = rate * safeMultiplier;
+        if (tier2EligibleHours > 0 && safeTier2Multiplier > safeMultiplier) {
+            const tier2Rate = rate * safeTier2Multiplier;
+            overtimeRate = (tier1Hours * tier1Rate + tier2EligibleHours * tier2Rate) / overtime;
+        } else {
+            overtimeRate = tier1Rate;
+        }
+    }
+
+    return {
+        rate,
+        regularAmount,
+        overtimeAmountBase,
+        baseAmount,
+        tier1Premium,
+        tier2Premium,
+        totalAmountWithOT: baseAmount + tier1Premium + tier2Premium,
+        totalAmountNoOT: baseAmount,
+        overtimeRate
+    };
+}
+
 /**
  * Detect holiday/time-off context from entry types in the day's entries.
  * Fallback mechanism for when API fetch fails or is disabled.
@@ -248,6 +343,7 @@ function getEffectiveCapacity(dateKey, userId, storeRef, dayEntries = []) {
  */
 export function calculateAnalysis(entries, storeRef, dateRange) {
     const { overrides, calcParams, users } = storeRef;
+    const amountDisplay = normalizeAmountDisplay(storeRef.config?.amountDisplay);
     const usersMap = new Map();
 
     // Initialize users from the store's user list (not just entries)
@@ -268,6 +364,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 nonBillableOT: 0,
                 amount: 0,
                 amountBase: 0,  // Base cost with all hours at base rate (Clockify "Amount total" without OT premium)
+                profit: 0,
                 otPremium: 0,
                 otPremiumTier2: 0,  // Additional Tier 2 premium
                 expectedCapacity: 0,
@@ -297,7 +394,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 userId: entry.userId,
                 userName: entry.userName || 'Unknown',
                 days: new Map(),
-                totals: { regular: 0, overtime: 0, total: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, otPremiumTier2: 0, expectedCapacity: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0, vacationEntryHours: 0 }
+                totals: { regular: 0, overtime: 0, total: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, profit: 0, otPremium: 0, otPremiumTier2: 0, expectedCapacity: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0, vacationEntryHours: 0 }
             };
             usersMap.set(entry.userId, user);
         }
@@ -443,8 +540,9 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
             dayData.entries.forEach(entry => {
                 const duration = round(calculateDuration(entry));
-                const hourlyRate = (entry.hourlyRate?.amount || 0) / 100;
-                const isBillable = entry.billable;
+                const isBillable = entry.billable === true;
+                const earnedRate = getEarnedRate(entry, duration);
+                const costRate = getCostRate(entry, duration);
 
                 // Classify entry using new helper
                 const entryClass = classifyEntryForOvertime(entry);
@@ -496,49 +594,53 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                     user.totals.nonBillableOT += overtime;
                 }
 
-                // Cost Calculation (billable entries contribute to amount)
-                const effectiveRate = isBillable ? hourlyRate : 0;
-                const baseAmount = duration * effectiveRate;
-
-                let tier1Premium = 0;
-                let tier2Premium = 0;
+                // Amount Calculation (earned + cost; profit always computed)
+                const multiplier = userMultiplier > 0 ? userMultiplier : 1;
                 let tier2EligibleHours = 0;  // Track for per-entry analysis
 
                 if (overtime > 0) {
-                    // Tier 1 premium (existing logic)
-                    const multiplier = userMultiplier > 0 ? userMultiplier : 1;
-                    tier1Premium = overtime * effectiveRate * (multiplier - 1);
-
-                    // Tier 2 premium calculation
                     if (userTier2Threshold >= 0 && userTier2Multiplier > multiplier) {
                         const cumulativeBefore = userCumulativeOT.get(user.userId) || 0;
                         const cumulativeAfter = cumulativeBefore + overtime;
 
-                        // Calculate how many hours exceed the threshold
                         if (cumulativeAfter > userTier2Threshold) {
                             if (cumulativeBefore >= userTier2Threshold) {
-                                // All OT hours in this entry are tier 2
                                 tier2EligibleHours = overtime;
                             } else {
-                                // Only portion beyond threshold is tier 2
                                 tier2EligibleHours = cumulativeAfter - userTier2Threshold;
                             }
                         }
-
-                        // Tier 2 premium = additional premium beyond tier 1
-                        tier2Premium = tier2EligibleHours * effectiveRate * (userTier2Multiplier - multiplier);
                     }
 
-                    // Update cumulative OT
                     userCumulativeOT.set(user.userId, (userCumulativeOT.get(user.userId) || 0) + overtime);
                 }
 
-                const entryPremium = tier1Premium + tier2Premium;
+                const earnedEffectiveRate = isBillable ? earnedRate : 0;
+                const costEffectiveRate = costRate;
+                const earnedAmounts = buildAmountBreakdown(
+                    earnedEffectiveRate,
+                    regular,
+                    overtime,
+                    multiplier,
+                    tier2EligibleHours,
+                    userTier2Multiplier
+                );
+                const costAmounts = buildAmountBreakdown(
+                    costEffectiveRate,
+                    regular,
+                    overtime,
+                    multiplier,
+                    tier2EligibleHours,
+                    userTier2Multiplier
+                );
+                const profitTotal = earnedAmounts.totalAmountWithOT - costAmounts.totalAmountWithOT;
+                const displayAmounts = amountDisplay === 'cost' ? costAmounts : earnedAmounts;
 
-                user.totals.amount += baseAmount + entryPremium;
-                user.totals.amountBase += baseAmount;  // Base amount includes OT hours at base rate (no premium)
-                user.totals.otPremium += tier1Premium;          // Keep as Tier 1 only
-                user.totals.otPremiumTier2 += tier2Premium;     // Track Tier 2 separately
+                user.totals.amount += displayAmounts.totalAmountWithOT;
+                user.totals.amountBase += displayAmounts.totalAmountNoOT;
+                user.totals.profit += profitTotal;
+                user.totals.otPremium += displayAmounts.tier1Premium;
+                user.totals.otPremiumTier2 += displayAmounts.tier2Premium;
 
                 // Attach analysis to ALL entries
                 const tags = [];
@@ -546,45 +648,24 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 if (isNonWorking) tags.push('OFF-DAY');
                 if (isTimeOff) tags.push('TIME-OFF');
 
-                // Calculate per-entry money components
-                const regularAmount = regular * effectiveRate;
-                const overtimeAmountBase = overtime * effectiveRate;
-
-                // Calculate effective overtime rate (only meaningful when overtime > 0)
-                const multiplier = userMultiplier > 0 ? userMultiplier : 1;
-                let effectiveOvertimeRate = effectiveRate;
-                if (overtime > 0) {
-                    // Weighted average rate including tier2 if applicable
-                    const tier1Hours = overtime - tier2EligibleHours;
-                    const tier1Rate = effectiveRate * multiplier;
-
-                    if (tier2EligibleHours > 0) {
-                        // Has tier2 component - calculate weighted average
-                        const tier2Rate = effectiveRate * userTier2Multiplier;
-                        effectiveOvertimeRate = (tier1Hours * tier1Rate + tier2EligibleHours * tier2Rate) / overtime;
-                    } else {
-                        // Only tier1 - use tier1 rate
-                        effectiveOvertimeRate = tier1Rate;
-                    }
-                }
-
                 entry.analysis = {
                     regular,
                     overtime,
                     isBillable,
-                    cost: baseAmount + entryPremium,  // Keep for compatibility
+                    cost: displayAmounts.totalAmountWithOT,  // Selected amount total (compatibility)
+                    profit: profitTotal,
                     tags,
 
                     // NEW per-entry money fields
-                    hourlyRate: effectiveRate,
-                    regularRate: effectiveRate,
-                    overtimeRate: effectiveOvertimeRate,
-                    regularAmount,
-                    overtimeAmountBase,
-                    tier1Premium,
-                    tier2Premium,
-                    totalAmountWithOT: regularAmount + overtimeAmountBase + tier1Premium + tier2Premium,
-                    totalAmountNoOT: regularAmount + overtimeAmountBase
+                    hourlyRate: displayAmounts.rate,
+                    regularRate: displayAmounts.rate,
+                    overtimeRate: displayAmounts.overtimeRate,
+                    regularAmount: displayAmounts.regularAmount,
+                    overtimeAmountBase: displayAmounts.overtimeAmountBase,
+                    tier1Premium: displayAmounts.tier1Premium,
+                    tier2Premium: displayAmounts.tier2Premium,
+                    totalAmountWithOT: displayAmounts.totalAmountWithOT,
+                    totalAmountNoOT: displayAmounts.totalAmountNoOT
                 };
             });
         });

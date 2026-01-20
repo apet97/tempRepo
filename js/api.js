@@ -237,6 +237,8 @@ export const Api = {
         let page = 1;
         const pageSize = 200; // Max allowed
         let hasMore = true;
+        const amountDisplay = String(store.config.amountDisplay || 'earned').toLowerCase();
+        const amountShown = amountDisplay === 'cost' ? 'COST' : 'EARNED';
 
         console.log(`Fetching detailed report for ${startIso} to ${endIso}...`);
 
@@ -245,6 +247,8 @@ export const Api = {
             const requestBody = {
                 dateRangeStart: startIso,
                 dateRangeEnd: endIso,
+                amountShown,
+                amounts: ['EARNED', 'COST', 'PROFIT'],
                 detailedFilter: {
                     page: page,
                     pageSize: pageSize
@@ -289,6 +293,8 @@ export const Api = {
                 },
                 // Rate from Reports API is direct field in cents (e.g., 15300 = $153.00)
                 hourlyRate: { amount: e.rate || 0, currency: 'USD' },
+                costRate: e.costRate,
+                amounts: Array.isArray(e.amounts) ? e.amounts : [],
                 tags: e.tags || []
             }));
 

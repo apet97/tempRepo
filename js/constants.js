@@ -54,7 +54,8 @@ export const SUMMARY_COLUMNS = [
     { key: 'billableOT', label: 'Billable OT', defaultVisible: true },
     { key: 'nonBillableOT', label: 'Non-Billable OT', defaultVisible: true },
     { key: 'timeOff', label: 'Time off', defaultVisible: true },
-    { key: 'amount', label: 'Amount', defaultVisible: true }
+    { key: 'amount', label: 'Amount', defaultVisible: true },
+    { key: 'profit', label: 'Profit', defaultVisible: true }
 ];
 
 /**
@@ -153,7 +154,8 @@ export const WEEKDAYS = (() => {
  * @property {number} overtime - Overtime hours
  * @property {boolean} isBillable - Whether entry is billable
  * @property {boolean} isBreak - Whether entry is a break
- * @property {number} totalCost - Total cost in currency
+ * @property {number} cost - Displayed total amount in currency
+ * @property {number} profit - Total profit in currency
  * @property {Array<string>} tags - Array of tags like ['HOLIDAY', 'OFF-DAY']
  */
 
@@ -181,6 +183,7 @@ export const WEEKDAYS = (() => {
  * @property {number} billableOT - Total billable overtime hours
  * @property {number} nonBillableOT - Total non-billable overtime hours
  * @property {number} amount - Total amount in currency
+ * @property {number} profit - Total profit in currency
  * @property {number} otPremium - Overtime premium amount
  * @property {number} expectedCapacity - Expected capacity across date range
  * @property {number} holidayCount - Number of holidays
@@ -204,6 +207,7 @@ export const WEEKDAYS = (() => {
  * @property {boolean} applyHolidays - Apply holidays to capacity calculation
  * @property {boolean} applyTimeOff - Apply time off to capacity calculation
  * @property {boolean} showBillableBreakdown - Show billable breakdown in UI
+ * @property {'earned'|'cost'} amountDisplay - Amount display mode
  * @property {string} overtimeBasis - 'daily' or 'weekly'
  */
 

@@ -220,6 +220,19 @@ export function bindConfigEvents() {
         }
     });
 
+    const amountDisplayEl = document.getElementById('amountDisplay');
+    if (amountDisplayEl) {
+        const validDisplays = new Set(['earned', 'cost']);
+        const currentDisplay = String(store.config.amountDisplay || '').toLowerCase();
+        amountDisplayEl.value = validDisplays.has(currentDisplay) ? currentDisplay : 'earned';
+        amountDisplayEl.addEventListener('change', (e) => {
+            const nextValue = String(e.target.value || '').toLowerCase();
+            store.config.amountDisplay = validDisplays.has(nextValue) ? nextValue : 'earned';
+            store.saveConfig();
+            if (store.rawEntries) runCalculation();
+        });
+    }
+
     const dailyEl = document.getElementById('configDaily');
     if (dailyEl) {
         dailyEl.value = store.calcParams.dailyThreshold;

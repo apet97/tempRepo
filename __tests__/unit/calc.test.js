@@ -511,7 +511,7 @@ describe('Calculation Module - calculateAnalysis', () => {
   });
 
   describe('Cost Calculation', () => {
-    it('should calculate base cost and overtime premium', () => {
+    it('should calculate base amount and overtime premium', () => {
       const entries = [{
         id: 'entry_1',
         userId: 'user0',
@@ -522,6 +522,7 @@ describe('Calculation Module - calculateAnalysis', () => {
           duration: 'PT10H'
         },
         hourlyRate: { amount: 5000 }, // $50/hour
+        costRate: { amount: 3000 }, // $30/hour cost
         billable: true
       }];
 
@@ -533,6 +534,53 @@ describe('Calculation Module - calculateAnalysis', () => {
       // Total: $550
       expect(userResult.totals.amount).toBe(550);
       expect(userResult.totals.otPremium).toBe(50);
+    });
+
+    it('should use cost rate when amount display is cost', () => {
+      mockStore.config.amountDisplay = 'cost';
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T17:00:00Z',
+          duration: 'PT8H'
+        },
+        hourlyRate: { amount: 4000 }, // $40/hour billable
+        costRate: { amount: 2500 }, // $25/hour cost
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      const userResult = results.find(u => u.userId === 'user0');
+      expect(userResult.totals.amount).toBe(200);
+      expect(userResult.totals.otPremium).toBe(0);
+    });
+
+    it('should calculate profit from earned minus cost', () => {
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T19:00:00Z',
+          duration: 'PT10H'
+        },
+        hourlyRate: { amount: 5000 }, // $50/hour earned
+        costRate: { amount: 3000 }, // $30/hour cost
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      const userResult = results.find(u => u.userId === 'user0');
+      expect(userResult.totals.profit).toBe(220);
+      const day = userResult.days.get('2025-01-15');
+      expect(day.entries[0].analysis.profit).toBe(220);
     });
 
     it('should use user override multiplier', () => {

@@ -40,6 +40,7 @@ class Store {
             applyTimeOff: true,
             showBillableBreakdown: true,
             showDecimalTime: false,
+            amountDisplay: 'earned',
             overtimeBasis: 'daily'
         };
 
@@ -130,6 +131,11 @@ class Store {
                 if (parsed.config && typeof parsed.config === 'object') {
                     this.config = { ...this.config, ...parsed.config };
                 }
+                const amountDisplay = String(this.config.amountDisplay || '').toLowerCase();
+                const validAmountDisplays = new Set(['earned', 'cost']);
+                this.config.amountDisplay = validAmountDisplays.has(amountDisplay)
+                    ? amountDisplay
+                    : 'earned';
                 // Merge calcParams with validation
                 if (parsed.calcParams && typeof parsed.calcParams === 'object') {
                     const cp = parsed.calcParams;

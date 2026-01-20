@@ -70,7 +70,8 @@ describe('Constants Module', () => {
         'billableOT',
         'nonBillableOT',
         'timeOff',
-        'amount'
+        'amount',
+        'profit'
       ];
 
       const actualKeys = SUMMARY_COLUMNS.map(col => col.key);
