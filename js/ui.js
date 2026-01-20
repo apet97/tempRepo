@@ -590,19 +590,38 @@ export function renderDetailedTable(users, activeFilter = null) {
       tags.push(html);
     };
 
-    const normalizedDescription = (e.description || '').trim().toUpperCase();
+    const normalizeTag = (tag) => String(tag || '')
+      .toUpperCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const entryTags = Array.isArray(e.tags) ? e.tags : [];
+    const normalizedEntryTags = new Set(entryTags.map(normalizeTag));
+    const normalizedType = String(e.type || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, '_');
+    const normalizedDescription = normalizeTag(e.description || '');
     const entryClass = classifyEntryForOvertime(e);
-    const isHolidayEntry = e.type === 'HOLIDAY' || normalizedDescription === 'HOLIDAY TIME ENTRY';
-    const isTimeOffEntry = e.type === 'TIME_OFF' || normalizedDescription === 'TIME OFF TIME ENTRY';
-    const isRegularWorkEntry = entryClass !== 'break' && !isHolidayEntry && !isTimeOffEntry;
+    const isHolidayEntry =
+      normalizedType.includes('HOLIDAY') ||
+      normalizedDescription.includes('HOLIDAY TIME ENTRY') ||
+      normalizedEntryTags.has('HOLIDAY TIME ENTRY');
+    const isTimeOffEntry =
+      normalizedType.includes('TIME_OFF') ||
+      normalizedType.includes('TIMEOFF') ||
+      normalizedDescription.includes('TIME OFF TIME ENTRY') ||
+      normalizedEntryTags.has('TIME OFF TIME ENTRY');
+    const isPtoEntry = isHolidayEntry || isTimeOffEntry;
 
     if (isHolidayEntry) {
       addTag('HOLIDAY-TIME-ENTRY', '<span class="badge badge-holiday">HOLIDAY TIME ENTRY</span>');
-    } else if (isTimeOffEntry) {
+    }
+    if (isTimeOffEntry) {
       addTag('TIME-OFF-TIME-ENTRY', '<span class="badge badge-timeoff">TIME OFF TIME ENTRY</span>');
     }
 
-    if (isRegularWorkEntry) {
+    if (!isPtoEntry) {
       if (e.dayMeta.isHoliday) {
         addTag('HOLIDAY', `<span class="badge badge-holiday" title="${escapeHtml(e.dayMeta.holidayName || 'Holiday')}">HOLIDAY</span>`);
       }
@@ -612,33 +631,32 @@ export function renderDetailedTable(users, activeFilter = null) {
       if (e.dayMeta.isNonWorking) {
         addTag('OFF-DAY', '<span class="badge badge-offday">OFF-DAY</span>');
       }
-    }
-
-    if (entryClass === 'break') {
-      addTag('BREAK', '<span class="badge badge-break">BREAK</span>');
+      if (entryClass === 'break') {
+        addTag('BREAK', '<span class="badge badge-break">BREAK</span>');
+      }
     }
 
     // Existing entry tags
-    const systemTags = new Set([
-      'HOLIDAY',
-      'OFF-DAY',
-      'TIME-OFF',
-      'BREAK',
-      'HOLIDAY TIME ENTRY',
-      'TIME OFF TIME ENTRY',
-      'HOLIDAY-TIME-ENTRY',
-      'TIME-OFF-TIME-ENTRY'
-    ]);
-    (e.analysis?.tags || []).forEach(t => {
-      if (!systemTags.has(t)) {
-        addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
-      }
-    });
-    (Array.isArray(e.tags) ? e.tags : []).forEach(t => {
-      if (!systemTags.has(t)) {
-        addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
-      }
-    });
+    if (!isPtoEntry) {
+      const systemTags = new Set([
+        'HOLIDAY',
+        'OFF DAY',
+        'TIME OFF',
+        'BREAK',
+        'HOLIDAY TIME ENTRY',
+        'TIME OFF TIME ENTRY'
+      ]);
+      (e.analysis?.tags || []).forEach(t => {
+        if (!systemTags.has(normalizeTag(t))) {
+          addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
+        }
+      });
+      entryTags.forEach(t => {
+        if (!systemTags.has(normalizeTag(t))) {
+          addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
+        }
+      });
+    }
 
     const billable = e.analysis?.isBillable
       ? '<span class="badge badge-billable">✓</span>'
