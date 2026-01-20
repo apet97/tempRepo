@@ -804,11 +804,15 @@ body.density-spacious {
 #detailedCard .report-table th:nth-child(10), /* OT $ */
 #detailedCard .report-table td:nth-child(10),
 #detailedCard .report-table th:nth-child(11), /* T2 $ */
-#detailedCard .report-table td:nth-child(11),
+#detailedCard .report-table td:nth-child(11) {
+  width: 6%;
+  min-width: 60px;
+}
+
 #detailedCard .report-table th:nth-child(12), /* Total $ */
 #detailedCard .report-table td:nth-child(12) {
-  width: 7%;
-  min-width: 60px;
+  width: 9%;
+  min-width: 90px;
 }
 
 #detailedCard .report-table th:nth-child(13), /* Status */
