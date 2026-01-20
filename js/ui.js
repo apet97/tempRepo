@@ -590,32 +590,45 @@ export function renderDetailedTable(users, activeFilter = null) {
       tags.push(html);
     };
 
-    if (e.dayMeta.isHoliday) {
-      addTag('HOLIDAY', `<span class="badge badge-holiday" title="${escapeHtml(e.dayMeta.holidayName || 'Holiday')}">HOLIDAY</span>`);
-    }
-    if (e.dayMeta.isNonWorking) {
-      addTag('OFF-DAY', '<span class="badge badge-offday">OFF-DAY</span>');
-    }
-    if (e.dayMeta.isTimeOff) {
-      addTag('TIME-OFF', '<span class="badge badge-timeoff">TIME-OFF</span>');
+    const normalizedDescription = (e.description || '').trim().toUpperCase();
+    const entryClass = classifyEntryForOvertime(e);
+    const isHolidayEntry = e.type === 'HOLIDAY' || normalizedDescription === 'HOLIDAY TIME ENTRY';
+    const isTimeOffEntry = e.type === 'TIME_OFF' || normalizedDescription === 'TIME OFF TIME ENTRY';
+    const isRegularWorkEntry = entryClass !== 'break' && !isHolidayEntry && !isTimeOffEntry;
+
+    if (isHolidayEntry) {
+      addTag('HOLIDAY-TIME-ENTRY', '<span class="badge badge-holiday">HOLIDAY TIME ENTRY</span>');
+    } else if (isTimeOffEntry) {
+      addTag('TIME-OFF-TIME-ENTRY', '<span class="badge badge-timeoff">TIME OFF TIME ENTRY</span>');
     }
 
-    // BREAK badge
-    const entryClass = classifyEntryForOvertime(e);
+    if (isRegularWorkEntry) {
+      if (e.dayMeta.isHoliday) {
+        addTag('HOLIDAY', `<span class="badge badge-holiday" title="${escapeHtml(e.dayMeta.holidayName || 'Holiday')}">HOLIDAY</span>`);
+      }
+      if (e.dayMeta.isTimeOff) {
+        addTag('TIME-OFF', '<span class="badge badge-timeoff">TIME-OFF</span>');
+      }
+      if (e.dayMeta.isNonWorking) {
+        addTag('OFF-DAY', '<span class="badge badge-offday">OFF-DAY</span>');
+      }
+    }
+
     if (entryClass === 'break') {
       addTag('BREAK', '<span class="badge badge-break">BREAK</span>');
     }
 
-    const normalizedDescription = (e.description || '').trim().toUpperCase();
-    if (e.type === 'HOLIDAY' || normalizedDescription === 'HOLIDAY TIME ENTRY') {
-      addTag('HOLIDAY-TIME-ENTRY', '<span class="badge badge-holiday">HOLIDAY TIME ENTRY</span>');
-    }
-    if (e.type === 'TIME_OFF' || normalizedDescription === 'TIME OFF TIME ENTRY') {
-      addTag('TIME-OFF-TIME-ENTRY', '<span class="badge badge-timeoff">TIME OFF TIME ENTRY</span>');
-    }
-
     // Existing entry tags
-    const systemTags = new Set(['HOLIDAY', 'OFF-DAY', 'TIME-OFF', 'BREAK']);
+    const systemTags = new Set([
+      'HOLIDAY',
+      'OFF-DAY',
+      'TIME-OFF',
+      'BREAK',
+      'HOLIDAY TIME ENTRY',
+      'TIME OFF TIME ENTRY',
+      'HOLIDAY-TIME-ENTRY',
+      'TIME-OFF-TIME-ENTRY'
+    ]);
     (e.analysis?.tags || []).forEach(t => {
       if (!systemTags.has(t)) {
         addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
