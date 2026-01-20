@@ -19,6 +19,7 @@ describe('Main Logic Fixes - Holiday Expansion', () => {
         
         // Mock API
         const mockApiMethods = {
+            fetchDetailedReport: jest.fn(),
             fetchEntries: jest.fn(),
             fetchAllProfiles: jest.fn(),
             fetchAllHolidays: jest.fn(),
@@ -113,10 +114,11 @@ describe('Main Logic Fixes - Holiday Expansion', () => {
         store.profiles = new Map();
         store.holidays = new Map();
         store.timeOff = new Map();
+
+        Api.fetchDetailedReport.mockResolvedValue([]);
     });
 
     it('should correctly expand multi-day holidays into store.holidays', async () => {
-        Api.fetchEntries.mockResolvedValue([]);
         Api.fetchAllProfiles.mockResolvedValue(new Map());
         Api.fetchAllTimeOff.mockResolvedValue(new Map());
         
@@ -142,7 +144,6 @@ describe('Main Logic Fixes - Holiday Expansion', () => {
     });
 
     it('should handle single-day holidays correctly', async () => {
-         Api.fetchEntries.mockResolvedValue([]);
          Api.fetchAllProfiles.mockResolvedValue(new Map());
          Api.fetchAllTimeOff.mockResolvedValue(new Map());
          
