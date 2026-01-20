@@ -811,13 +811,13 @@ body.density-spacious {
 
 #detailedCard .report-table th:nth-child(12), /* Total $ */
 #detailedCard .report-table td:nth-child(12) {
-  width: 9%;
-  min-width: 90px;
+  width: 11%;
+  min-width: 100px;
 }
 
 #detailedCard .report-table th:nth-child(13), /* Status */
 #detailedCard .report-table td:nth-child(13) {
-  width: 17%;
+  width: 15%;
   min-width: 120px;
 }
 
