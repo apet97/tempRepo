@@ -31,7 +31,9 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 
 ### 3.3 Enhanced UX/UI
 - **Persisted Configuration:** User preferences (toggles, thresholds) are automatically saved to `localStorage`, eliminating repetitive configuration.
+- **Decimal Time Toggle:** UI can render time values in decimal hours (e.g., `8.50`) or `xh ym` without changing calculations.
 - **Detailed Log Pagination:** High-performance rendering of granular entry logs using client-side pagination (50 entries per page).
+- **Detailed Columns Fit:** Detailed view prioritizes time, rate, and money columns; status badges replace the Description column to prevent clipping.
 - **Quick Selectors:** One-click presets for "Last Month" and "This Month" date ranges.
 - **Accessibility:** Full ARIA support (`aria-live`, `aria-busy`) for dynamic updates and screen reader compatibility.
 - **Theme Support:** Automatic application of Dark Mode if the user's Clockify profile preference is set to DARK.
@@ -56,6 +58,7 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 ### 4.3 Secure Data Export
 - **CSV Sanitization:** Implements "Smart Escaping" to double-quote fields only when necessary.
 - **Formula Injection Protection:** Prevents CSV injection attacks by prepending a single quote (`'`) to any field starting with `=`, `+`, `-`, or `@`.
+- **Decimal Hours Column:** Adds `TotalHoursDecimal` to CSV output while preserving existing columns.
 
 ---
 
@@ -63,6 +66,7 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 - **Density Settings:** Supports `compact` and `spacious` layout modes via body classes.
 - **Feedback Loops:** Real-time API status banner alerts users to partial failures (e.g., specific profiles failing to load) while allowing the report to finish using fallback values.
 - **Interactive Reports:** Tabbed navigation between Summary (aggregated) and Detailed (granular) views with active filter chips.
+- **Detailed Headers:** Columns include Rate (`Rate $/h`) and money breakdown (`Regular $`, `OT $`, `T2 $`, `Total $`) plus Status tags.
 
 ---
 

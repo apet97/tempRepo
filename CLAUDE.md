@@ -25,6 +25,12 @@ Maintain and improve OTPLUS: a read-only Clockify addon that generates accurate 
 - `js/constants.js` — shared constants/flags/defaults
 - `index.html`, `css/styles.css`, `manifest.json`
 
+## UI conventions (current)
+- Detailed table columns: `Date`, `Start`, `End`, `User`, `Regular`, `Overtime`, `Billable`, `Rate $/h`, `Regular $`, `OT $`, `T2 $`, `Total $`, `Status`.
+- Status replaces Tags and shows system badges (HOLIDAY/OFF-DAY/TIME-OFF/BREAK) plus entry tags.
+- Description column is intentionally omitted to keep the table readable.
+- `config.showDecimalTime` switches display formatting only (no calculation changes).
+
 ## Commands
 - Run all tests: `npm test`
 - Run single test file: `npm test -- __tests__/unit/calc.test.js`
@@ -232,6 +238,7 @@ entry.analysis.cost = regularCost + overtimeCost;
 - Prefix a single quote `'` for cells that begin with any risky prefix, including:
   - `=`, `+`, `-`, `@`, tab `\t`, carriage return `\r`
 - Apply the rule even when the value is quoted (e.g. starts with `"=...`).
+- Export includes `TotalHoursDecimal` alongside `TotalHours` (decimal hours only).
 
 ## Work style for Claude
 - Before edits: write a 5–10 step plan and identify touched files.

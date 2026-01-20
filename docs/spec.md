@@ -70,6 +70,11 @@ class Store {
 }
 ```
 
+### 2.1 UI Rendering Notes
+- **Decimal Time Toggle:** `config.showDecimalTime` switches display formatting between `xh ym` and decimal hours without changing calculations.
+- **Detailed Columns:** `Date`, `Start`, `End`, `User`, `Regular`, `Overtime`, `Billable`, `Rate $/h`, `Regular $`, `OT $`, `T2 $`, `Total $`, `Status`.
+- **Status Tags:** Status combines system tags (HOLIDAY, OFF-DAY, TIME-OFF, BREAK) plus entry tags.
+
 ---
 
 ## 3. High-Performance Data Orchestration
@@ -129,6 +134,7 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 | **Smart Quoting** | Only adds double quotes if field contains `,`, `"`, `\n`, or `\r`. |
 | **Quote Escaping** | Replaces `"` with `""`.
 | **Injection Mitigation** | Prepends `'` to fields starting with dangerous formula characters (`=`, `+`, `-`, `@`). |
+| **Decimal Hours Column** | Adds `TotalHoursDecimal` alongside `TotalHours` for decimal-friendly exports. |
 
 --- 
 
@@ -149,6 +155,8 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 |-----|-------|
 | `otplus_config` | JSON object containing toggles and daily/multiplier thresholds. |
 | `overtime_overrides_{workspaceId}` | Map of userId -> manual overrides. |
+
+`otplus_config.config` includes `showDecimalTime` (boolean) to persist the UI formatting toggle.
 
 --- 
 
