@@ -753,7 +753,7 @@ body.density-spacious {
 /* Detailed table column widths - fixed layout */
 #detailedCard .report-table th:nth-child(1),  /* Date */
 #detailedCard .report-table td:nth-child(1) {
-  width: 7%;
+  width: 6%;
   min-width: 60px;
 }
 
@@ -767,7 +767,7 @@ body.density-spacious {
 
 #detailedCard .report-table th:nth-child(4),  /* User */
 #detailedCard .report-table td:nth-child(4) {
-  width: 12%;
+  width: 11%;
   min-width: 90px;
 }
 
@@ -783,10 +783,10 @@ body.density-spacious {
   min-width: 70px;
 }
 
-#detailedCard .report-table th:nth-child(7),  /* Bill */
+#detailedCard .report-table th:nth-child(7),  /* Billable */
 #detailedCard .report-table td:nth-child(7) {
-  width: 4%;
-  min-width: 40px;
+  width: 6%;
+  min-width: 70px;
 }
 
 #detailedCard .report-table th:nth-child(8),  /* Rate $/h */
@@ -795,8 +795,12 @@ body.density-spacious {
   min-width: 80px;
 }
 
-#detailedCard .report-table th:nth-child(9),  /* Reg $ */
-#detailedCard .report-table td:nth-child(9),
+#detailedCard .report-table th:nth-child(9),  /* Regular $ */
+#detailedCard .report-table td:nth-child(9) {
+  width: 8%;
+  min-width: 80px;
+}
+
 #detailedCard .report-table th:nth-child(10), /* OT $ */
 #detailedCard .report-table td:nth-child(10),
 #detailedCard .report-table th:nth-child(11), /* T2 $ */
@@ -809,7 +813,7 @@ body.density-spacious {
 
 #detailedCard .report-table th:nth-child(13), /* Status */
 #detailedCard .report-table td:nth-child(13) {
-  width: 18%;
+  width: 17%;
   min-width: 120px;
 }
 
