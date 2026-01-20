@@ -596,22 +596,16 @@ export function renderDetailedTable(users, activeFilter = null) {
       .replace(/\s+/g, ' ')
       .trim();
     const entryTags = Array.isArray(e.tags) ? e.tags : [];
-    const normalizedEntryTags = new Set(entryTags.map(normalizeTag));
     const normalizedType = String(e.type || '')
       .trim()
       .toUpperCase()
       .replace(/[\s-]+/g, '_');
-    const normalizedDescription = normalizeTag(e.description || '');
     const entryClass = classifyEntryForOvertime(e);
-    const isHolidayEntry =
-      normalizedType.includes('HOLIDAY') ||
-      normalizedDescription.includes('HOLIDAY TIME ENTRY') ||
-      normalizedEntryTags.has('HOLIDAY TIME ENTRY');
+    const isHolidayEntry = normalizedType === 'HOLIDAY' || normalizedType === 'HOLIDAY_TIME_ENTRY';
     const isTimeOffEntry =
-      normalizedType.includes('TIME_OFF') ||
-      normalizedType.includes('TIMEOFF') ||
-      normalizedDescription.includes('TIME OFF TIME ENTRY') ||
-      normalizedEntryTags.has('TIME OFF TIME ENTRY');
+      normalizedType === 'TIME_OFF' ||
+      normalizedType === 'TIMEOFF' ||
+      normalizedType === 'TIME_OFF_TIME_ENTRY';
     const isPtoEntry = isHolidayEntry || isTimeOffEntry;
 
     if (isHolidayEntry) {
