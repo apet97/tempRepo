@@ -627,9 +627,15 @@ describe('Calculation Module - calculateAnalysis', () => {
 
       const userResult = results.find(u => u.userId === 'user0');
       expect(userResult.totals.amount).toBe(160);
+      expect(userResult.totals.amountEarned).toBe(400);
+      expect(userResult.totals.amountCost).toBe(240);
+      expect(userResult.totals.amountProfit).toBe(160);
       const day = userResult.days.get('2025-01-15');
       expect(day.entries[0].analysis.hourlyRate).toBe(20);
       expect(day.entries[0].analysis.totalAmountWithOT).toBe(160);
+      expect(day.entries[0].analysis.amounts.earned.totalAmountWithOT).toBe(400);
+      expect(day.entries[0].analysis.amounts.cost.totalAmountWithOT).toBe(240);
+      expect(day.entries[0].analysis.amounts.profit.totalAmountWithOT).toBe(160);
     });
 
     it('should use earnedRate and costRate (cents) when provided', () => {

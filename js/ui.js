@@ -49,13 +49,39 @@ function formatHoursDisplay(hours) {
   return store.config.showDecimalTime ? formatHoursDecimal(hours) : formatHours(hours);
 }
 
+const AMOUNT_STACK_ITEMS = [
+  { key: 'earned', label: 'Amt' },
+  { key: 'cost', label: 'Cost' },
+  { key: 'profit', label: 'Profit' }
+];
+
+function getAmountDisplayMode() {
+  return String(store.config.amountDisplay || 'earned').toLowerCase();
+}
+
+function renderAmountStack(lines, align = 'right') {
+  const alignmentClass = align === 'left' ? 'amount-stack-left' : 'amount-stack-right';
+  const safeLines = Array.isArray(lines) ? lines : [];
+  return `<span class="amount-stack ${alignmentClass}">${safeLines.map(({ label, value }) => `
+    <span class="amount-line"><span class="amount-tag">${label}</span><span class="amount-value">${formatCurrency(value)}</span></span>
+  `).join('')}</span>`;
+}
+
+function buildProfitStacks(amountsByType, accessor, align = 'right') {
+  const lines = AMOUNT_STACK_ITEMS.map(({ key, label }) => ({
+    label,
+    value: accessor(amountsByType?.[key] || {})
+  }));
+  return renderAmountStack(lines, align);
+}
+
 function getAmountLabels() {
-  const amountDisplay = String(store.config.amountDisplay || 'earned').toLowerCase();
+  const amountDisplay = getAmountDisplayMode();
   if (amountDisplay === 'cost') {
     return { column: 'Cost', total: 'Total Cost (with OT)', base: 'Cost (no OT)', rate: 'Cost rate $/h' };
   }
   if (amountDisplay === 'profit') {
-    return { column: 'Profit', total: 'Total Profit (with OT)', base: 'Profit (no OT)', rate: 'Profit rate $/h' };
+    return { column: 'Profit', total: 'Totals (with OT)', base: 'Base (no OT)', rate: 'Rate $/h', isProfit: true };
   }
   return { column: 'Amount', total: 'Total (with OT)', base: 'Amount (no OT)', rate: 'Rate $/h' };
 }
@@ -126,17 +152,62 @@ export function renderSummaryStrip(users) {
     acc.nonBillableOT += u.totals.nonBillableOT;
     acc.amount += u.totals.amount;
     acc.amountBase += (u.totals.amountBase || 0);
+    acc.amountEarned += (u.totals.amountEarned || 0);
+    acc.amountCost += (u.totals.amountCost || 0);
+    acc.amountProfit += (u.totals.amountProfit || 0);
+    acc.amountEarnedBase += (u.totals.amountEarnedBase || 0);
+    acc.amountCostBase += (u.totals.amountCostBase || 0);
+    acc.amountProfitBase += (u.totals.amountProfitBase || 0);
     acc.otPremium += u.totals.otPremium;
     acc.otPremiumTier2 += (u.totals.otPremiumTier2 || 0);
+    acc.otPremiumEarned += (u.totals.otPremiumEarned || 0);
+    acc.otPremiumCost += (u.totals.otPremiumCost || 0);
+    acc.otPremiumProfit += (u.totals.otPremiumProfit || 0);
+    acc.otPremiumTier2Earned += (u.totals.otPremiumTier2Earned || 0);
+    acc.otPremiumTier2Cost += (u.totals.otPremiumTier2Cost || 0);
+    acc.otPremiumTier2Profit += (u.totals.otPremiumTier2Profit || 0);
     acc.holidayCount += u.totals.holidayCount;
     acc.timeOffCount += u.totals.timeOffCount;
     acc.holidayHours += (u.totals.holidayHours || 0);
     acc.timeOffHours += (u.totals.timeOffHours || 0);
     return acc;
-  }, { users: 0, capacity: 0, worked: 0, regular: 0, overtime: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, otPremium: 0, otPremiumTier2: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0 });
+  }, {
+    users: 0,
+    capacity: 0,
+    worked: 0,
+    regular: 0,
+    overtime: 0,
+    breaks: 0,
+    billableWorked: 0,
+    nonBillableWorked: 0,
+    billableOT: 0,
+    nonBillableOT: 0,
+    amount: 0,
+    amountBase: 0,
+    amountEarned: 0,
+    amountCost: 0,
+    amountProfit: 0,
+    amountEarnedBase: 0,
+    amountCostBase: 0,
+    amountProfitBase: 0,
+    otPremium: 0,
+    otPremiumTier2: 0,
+    otPremiumEarned: 0,
+    otPremiumCost: 0,
+    otPremiumProfit: 0,
+    otPremiumTier2Earned: 0,
+    otPremiumTier2Cost: 0,
+    otPremiumTier2Profit: 0,
+    holidayCount: 0,
+    timeOffCount: 0,
+    holidayHours: 0,
+    timeOffHours: 0
+  });
 
   const showBillable = store.config.showBillableBreakdown;
   const amountLabels = getAmountLabels();
+  const amountDisplay = getAmountDisplayMode();
+  const isProfitMode = amountDisplay === 'profit';
 
   // Time metrics (always on top row)
   const timeMetrics = `
@@ -157,12 +228,35 @@ export function renderSummaryStrip(users) {
   `;
 
   // Money metrics (on bottom row when billable breakdown is ON)
-  const moneyMetrics = `
-    <div class="summary-item highlight"><span class="summary-label">${amountLabels.total}</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
-    <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
-    ${showBillable ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>` : ''}
-    <div class="summary-item"><span class="summary-label">${amountLabels.base}</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
-  `;
+  const moneyMetrics = isProfitMode
+    ? `
+      <div class="summary-item highlight"><span class="summary-label">${amountLabels.total}</span><span class="summary-value">${renderAmountStack([
+        { label: 'Amt', value: totals.amountEarned },
+        { label: 'Cost', value: totals.amountCost },
+        { label: 'Profit', value: totals.amountProfit }
+      ], 'left')}</span></div>
+      <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${renderAmountStack([
+        { label: 'Amt', value: totals.otPremiumEarned },
+        { label: 'Cost', value: totals.otPremiumCost },
+        { label: 'Profit', value: totals.otPremiumProfit }
+      ], 'left')}</span></div>
+      ${showBillable ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${renderAmountStack([
+        { label: 'Amt', value: totals.otPremiumTier2Earned },
+        { label: 'Cost', value: totals.otPremiumTier2Cost },
+        { label: 'Profit', value: totals.otPremiumTier2Profit }
+      ], 'left')}</span></div>` : ''}
+      <div class="summary-item"><span class="summary-label">${amountLabels.base}</span><span class="summary-value">${renderAmountStack([
+        { label: 'Amt', value: totals.amountEarnedBase },
+        { label: 'Cost', value: totals.amountCostBase },
+        { label: 'Profit', value: totals.amountProfitBase }
+      ], 'left')}</span></div>
+    `
+    : `
+      <div class="summary-item highlight"><span class="summary-label">${amountLabels.total}</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
+      <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
+      ${showBillable ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>` : ''}
+      <div class="summary-item"><span class="summary-label">${amountLabels.base}</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
+    `;
 
   // Two-row layout when billable breakdown is ON
   if (showBillable) {
@@ -263,6 +357,9 @@ function computeSummaryRows(analysisUsers, groupBy) {
             nonBillableOT: 0,
             vacationEntryHours: 0,
             amount: 0,
+            amountEarned: 0,
+            amountCost: 0,
+            amountProfit: 0,
             otPremium: 0
           });
         }
@@ -294,6 +391,12 @@ function computeSummaryRows(analysisUsers, groupBy) {
 
         // Cost
         group.amount += entry.analysis?.cost || 0;
+        const amountsByType = entry.analysis?.amounts;
+        if (amountsByType) {
+          group.amountEarned += amountsByType.earned?.totalAmountWithOT || 0;
+          group.amountCost += amountsByType.cost?.totalAmountWithOT || 0;
+          group.amountProfit += amountsByType.profit?.totalAmountWithOT || 0;
+        }
 
         // Calculate OT premium
         const baseRate = entry.analysis?.hourlyRate || 0;
@@ -319,6 +422,9 @@ function computeSummaryRows(analysisUsers, groupBy) {
         nonBillableOT: 0,
         vacationEntryHours: 0,
         amount: 0,
+        amountEarned: 0,
+        amountCost: 0,
+        amountProfit: 0,
         otPremium: 0
       });
     }
@@ -345,6 +451,8 @@ function renderSummaryHeaders(groupBy, expanded, showBillable) {
     week: 'Week'
   }[groupBy] || 'User';
   const amountLabel = getAmountLabels().column;
+  const amountDisplay = getAmountDisplayMode();
+  const isProfitMode = amountDisplay === 'profit';
 
   let headers = `<th>${groupLabel}</th>`;
 
@@ -371,8 +479,16 @@ function renderSummaryHeaders(groupBy, expanded, showBillable) {
   headers += `
     <th class="text-right">Total</th>
     <th class="text-right">Vacation</th>
-    <th class="text-right">${amountLabel}</th>
   `;
+  if (isProfitMode) {
+    headers += `
+      <th class="text-right">Amount</th>
+      <th class="text-right">Cost</th>
+      <th class="text-right">Profit</th>
+    `;
+  } else {
+    headers += `<th class="text-right">${amountLabel}</th>`;
+  }
 
   return headers;
 }
@@ -407,6 +523,8 @@ function getSwatchColor(key) {
 }
 
 function renderSummaryRow(row, groupBy, expanded, showBillable) {
+  const amountDisplay = getAmountDisplayMode();
+  const isProfitMode = amountDisplay === 'profit';
 
   // For user grouping, show avatar
   let nameCell;
@@ -449,8 +567,16 @@ function renderSummaryRow(row, groupBy, expanded, showBillable) {
   html += `
     <td class="text-right font-bold">${formatHoursDisplay(row.total)}</td>
     <td class="text-right" title="Vacation Entry Hours">${formatHoursDisplay(row.vacationEntryHours)}</td>
-    <td class="text-right font-bold">${formatCurrency(row.amount)}</td>
   `;
+  if (isProfitMode) {
+    html += `
+      <td class="text-right font-bold">${formatCurrency(row.amountEarned)}</td>
+      <td class="text-right font-bold">${formatCurrency(row.amountCost)}</td>
+      <td class="text-right font-bold">${formatCurrency(row.amountProfit)}</td>
+    `;
+  } else {
+    html += `<td class="text-right font-bold">${formatCurrency(row.amount)}</td>`;
+  }
 
   return html;
 }
@@ -503,8 +629,11 @@ export function renderDetailedTable(users, activeFilter = null) {
   const detailedCard = document.getElementById('detailedCard');
   const showBillable = store.config.showBillableBreakdown;
   const amountLabels = getAmountLabels();
+  const amountDisplay = getAmountDisplayMode();
+  const isProfitMode = amountDisplay === 'profit';
   if (detailedCard) {
     detailedCard.classList.toggle('billable-off', !showBillable);
+    detailedCard.classList.toggle('amount-profit', isProfitMode);
   }
 
   // Use stored filter if not provided, otherwise update store
@@ -573,6 +702,7 @@ export function renderDetailedTable(users, activeFilter = null) {
     }
   };
 
+  const amountHeaderNote = isProfitMode ? '<div class="amount-header-sub">Amt / Cost / Profit</div>' : '';
   let html = `
   <div class="table-scroll" style="margin-top: 10px;">
     <table class="report-table">
@@ -585,11 +715,11 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">Regular</th>
           <th class="text-right">Overtime</th>
           <th class="text-right">Billable</th>
-          <th class="text-right">${amountLabels.rate}</th>
-          <th class="text-right">Regular $</th>
-          <th class="text-right">OT $</th>
-          <th class="text-right">T2 $</th>
-          <th class="text-right">Total $</th>
+          <th class="text-right amount-cell">${amountLabels.rate}${amountHeaderNote}</th>
+          <th class="text-right amount-cell">Regular $</th>
+          <th class="text-right amount-cell">OT $</th>
+          <th class="text-right amount-cell">T2 $</th>
+          <th class="text-right amount-cell">Total $</th>
           <th class="text-right">Status</th>
         </tr>
       </thead>
@@ -671,6 +801,26 @@ export function renderDetailedTable(users, activeFilter = null) {
       ? '<span class="badge badge-billable">✓</span>'
       : '<span style="color:var(--text-muted)">—</span>';
 
+    const rateCell = isProfitMode
+      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.rate, 'right')
+      : formatCurrency(e.analysis?.hourlyRate || 0);
+    const regularCell = isProfitMode
+      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.regularAmount, 'right')
+      : formatCurrency(e.analysis?.regularAmount || 0);
+    const otCell = isProfitMode
+      ? buildProfitStacks(
+        e.analysis?.amounts,
+        (amount) => (amount.overtimeAmountBase || 0) + (amount.tier1Premium || 0),
+        'right'
+      )
+      : formatCurrency((e.analysis?.overtimeAmountBase || 0) + (e.analysis?.tier1Premium || 0));
+    const t2Cell = isProfitMode
+      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.tier2Premium, 'right')
+      : formatCurrency(e.analysis?.tier2Premium || 0);
+    const totalCell = isProfitMode
+      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.totalAmountWithOT, 'right')
+      : formatCurrency(e.analysis?.totalAmountWithOT || 0);
+
     html += `
     <tr>
         <td>${escapeHtml(date)}</td>
@@ -680,11 +830,11 @@ export function renderDetailedTable(users, activeFilter = null) {
         <td class="text-right">${formatHoursDisplay(e.analysis?.regular || 0)}</td>
         <td class="text-right ${(e.analysis?.overtime || 0) > 0 ? 'text-danger' : ''}">${formatHoursDisplay(e.analysis?.overtime || 0)}</td>
         <td class="text-right">${billable}</td>
-        <td class="text-right">${formatCurrency(e.analysis?.hourlyRate || 0)}</td>
-        <td class="text-right">${formatCurrency(e.analysis?.regularAmount || 0)}</td>
-        <td class="text-right">${formatCurrency((e.analysis?.overtimeAmountBase || 0) + (e.analysis?.tier1Premium || 0))}</td>
-        <td class="text-right">${formatCurrency(e.analysis?.tier2Premium || 0)}</td>
-        <td class="text-right highlight">${formatCurrency(e.analysis?.totalAmountWithOT || 0)}</td>
+        <td class="text-right amount-cell">${rateCell}</td>
+        <td class="text-right amount-cell">${regularCell}</td>
+        <td class="text-right amount-cell">${otCell}</td>
+        <td class="text-right amount-cell">${t2Cell}</td>
+        <td class="text-right highlight amount-cell">${totalCell}</td>
         <td class="text-right"><div class="tags-cell">${tags.join(' ') || '—'}</div></td>
     </tr>`;
   });

@@ -362,9 +362,21 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 nonBillableOT: 0,
                 amount: 0,
                 amountBase: 0,  // Base cost with all hours at base rate (Clockify "Amount total" without OT premium)
+                amountEarned: 0,
+                amountCost: 0,
+                amountProfit: 0,
+                amountEarnedBase: 0,
+                amountCostBase: 0,
+                amountProfitBase: 0,
                 profit: 0,
                 otPremium: 0,
                 otPremiumTier2: 0,  // Additional Tier 2 premium
+                otPremiumEarned: 0,
+                otPremiumCost: 0,
+                otPremiumProfit: 0,
+                otPremiumTier2Earned: 0,
+                otPremiumTier2Cost: 0,
+                otPremiumTier2Profit: 0,
                 expectedCapacity: 0,
                 holidayCount: 0,
                 timeOffCount: 0,
@@ -392,7 +404,39 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 userId: entry.userId,
                 userName: entry.userName || 'Unknown',
                 days: new Map(),
-                totals: { regular: 0, overtime: 0, total: 0, breaks: 0, billableWorked: 0, nonBillableWorked: 0, billableOT: 0, nonBillableOT: 0, amount: 0, amountBase: 0, profit: 0, otPremium: 0, otPremiumTier2: 0, expectedCapacity: 0, holidayCount: 0, timeOffCount: 0, holidayHours: 0, timeOffHours: 0, vacationEntryHours: 0 }
+                totals: {
+                    regular: 0,
+                    overtime: 0,
+                    total: 0,
+                    breaks: 0,
+                    billableWorked: 0,
+                    nonBillableWorked: 0,
+                    billableOT: 0,
+                    nonBillableOT: 0,
+                    amount: 0,
+                    amountBase: 0,
+                    amountEarned: 0,
+                    amountCost: 0,
+                    amountProfit: 0,
+                    amountEarnedBase: 0,
+                    amountCostBase: 0,
+                    amountProfitBase: 0,
+                    profit: 0,
+                    otPremium: 0,
+                    otPremiumTier2: 0,
+                    otPremiumEarned: 0,
+                    otPremiumCost: 0,
+                    otPremiumProfit: 0,
+                    otPremiumTier2Earned: 0,
+                    otPremiumTier2Cost: 0,
+                    otPremiumTier2Profit: 0,
+                    expectedCapacity: 0,
+                    holidayCount: 0,
+                    timeOffCount: 0,
+                    holidayHours: 0,
+                    timeOffHours: 0,
+                    vacationEntryHours: 0
+                }
             };
             usersMap.set(entry.userId, user);
         }
@@ -647,6 +691,18 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                         ? profitAmounts
                         : earnedAmounts;
 
+                user.totals.amountEarned += earnedAmounts.totalAmountWithOT;
+                user.totals.amountCost += costAmounts.totalAmountWithOT;
+                user.totals.amountProfit += profitAmounts.totalAmountWithOT;
+                user.totals.amountEarnedBase += earnedAmounts.totalAmountNoOT;
+                user.totals.amountCostBase += costAmounts.totalAmountNoOT;
+                user.totals.amountProfitBase += profitAmounts.totalAmountNoOT;
+                user.totals.otPremiumEarned += earnedAmounts.tier1Premium;
+                user.totals.otPremiumCost += costAmounts.tier1Premium;
+                user.totals.otPremiumProfit += profitAmounts.tier1Premium;
+                user.totals.otPremiumTier2Earned += earnedAmounts.tier2Premium;
+                user.totals.otPremiumTier2Cost += costAmounts.tier2Premium;
+                user.totals.otPremiumTier2Profit += profitAmounts.tier2Premium;
                 user.totals.amount += displayAmounts.totalAmountWithOT;
                 user.totals.amountBase += displayAmounts.totalAmountNoOT;
                 user.totals.profit += profitTotal;
@@ -676,7 +732,12 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                     tier1Premium: displayAmounts.tier1Premium,
                     tier2Premium: displayAmounts.tier2Premium,
                     totalAmountWithOT: displayAmounts.totalAmountWithOT,
-                    totalAmountNoOT: displayAmounts.totalAmountNoOT
+                    totalAmountNoOT: displayAmounts.totalAmountNoOT,
+                    amounts: {
+                        earned: earnedAmounts,
+                        cost: costAmounts,
+                        profit: profitAmounts
+                    }
                 };
             });
         });
