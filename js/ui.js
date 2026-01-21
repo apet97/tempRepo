@@ -704,6 +704,7 @@ export function renderDetailedTable(users, activeFilter = null) {
 
   const amountHeaderNote = isProfitMode ? '<div class="amount-header-sub">Amt / Cost / Profit</div>' : '';
   const detailedRateLabel = amountDisplay === 'cost' ? 'Rate (Cost)' : 'Rate';
+  // In profit mode every money column stacks billable/cost/profit to match native Clockify Detailed report
   let html = `
   <div class="table-scroll" style="margin-top: 10px;">
     <table class="report-table">

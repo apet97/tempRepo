@@ -875,6 +875,7 @@ body.density-spacious {
 }
 
 #summaryCard .report-table th {
+  /* Allow multi-word headers like "Bill. Worked" to wrap instead of clipping */
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
@@ -903,6 +904,7 @@ body.density-spacious {
 }
 
 #detailedCard .report-table td.amount-cell {
+  /* Avoid ellipsis in stacked amount cells */
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
@@ -1053,6 +1055,7 @@ body.density-spacious {
 }
 
 #amountDisplay {
+  /* Ensure dropdown text (Amount/Cost/Profit) is fully visible */
   width: 112px;
   min-width: 112px;
 }

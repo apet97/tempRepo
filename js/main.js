@@ -178,6 +178,7 @@ function hasCostRates(entries) {
     return entries.some(entry => {
         const rawCostRate = entry?.costRate?.amount ?? entry?.costRate;
         const costRate = Number(rawCostRate);
+        // Only treat as available when a non-zero cost rate exists; zero means "not configured" in Clockify
         if (Number.isFinite(costRate) && costRate !== 0) return true;
         const amounts = Array.isArray(entry?.amounts) ? entry.amounts : [];
         return amounts.some(amount => {
@@ -378,6 +379,7 @@ export function bindConfigEvents() {
     };
     const startInput = document.getElementById('startDate');
     const endInput = document.getElementById('endDate');
+    // Mirror native report UX: whenever dates change (manual or preset), queue a generate as soon as both dates are valid
     const queueAutoGenerate = debounce(() => {
         const startValue = startInput?.value;
         const endValue = endInput?.value;
