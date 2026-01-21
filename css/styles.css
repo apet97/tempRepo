@@ -43,6 +43,7 @@
   --title-size: 24px;
 }
 
+/* Base body styles keep padding consistent with Clockify UI design */
 body {
   font-family: var(--font-sans);
   margin: 0;
@@ -66,6 +67,8 @@ body {
   gap: 24px;
 }
 
+/* The main container keeps cards vertically stacked with consistent gutters */
+
 /* Cards */
 .card {
   background: var(--bg-surface);
@@ -79,6 +82,8 @@ body {
 .card:hover {
   box-shadow: var(--shadow-md);
 }
+
+/* Cards mimic Clockify's surface treatment with subtle shadows and rounded corners */
 
 .card-title {
   font-size: 16px;
@@ -156,7 +161,9 @@ body {
   border-bottom-color: var(--color-accent);
 }
 
-/* Summary Strip - Visual Polish */
+/* Tabs use underline highlight to indicate active view without adding extra chrome */
+
+/* Summary strip uses CSS grid to wrap KPI cards responsively while maintaining consistent spacing */
 .summary-inline {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -198,6 +205,14 @@ body {
   color: var(--color-danger);
 }
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
 /* Tables */
 .table-scroll {
   width: 100%;
@@ -213,6 +228,8 @@ body {
   font-size: 14px;
   min-width: 600px; /* Ensure table doesn't collapse too much on mobile */
 }
+
+/* Tables have a minimum width to prevent them shrinking too far on narrow screens */
 
 .report-table th {
   padding: 12px 16px;
@@ -285,6 +302,8 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+
+/* Filter row layout mimics Clockify's header controls with flexible wrapping */
 
 .filter-row {
   display: flex;
@@ -977,6 +996,7 @@ body.density-spacious {
   font-size: 12px;
 }
 
+/* Overrides table stays compact while accommodating editors for capacity/multiplier values */
 .overrides-table th,
 .overrides-table td {
   padding: 7px 10px;
@@ -1136,6 +1156,8 @@ body.density-spacious {
   box-shadow: 0 2px 4px rgba(3, 169, 244, 0.3);
 }
 
+/* Filter chips behave like toggle pills referencing the entry filters */
+
 /* Tooltips (Native Title) */
 [title] {
   cursor: help;
@@ -1146,6 +1168,7 @@ body.density-spacious {
 }
 
 /* HIGH FIX #13: Mobile Responsive CSS */
+/* Responsive adjustments keep the layout usable on tablets and narrow desktops */
 @media (max-width: 768px) {
   body {
     padding: 12px;
@@ -1233,6 +1256,7 @@ body.density-spacious {
 }
 
 @media (max-width: 480px) {
+/* Tighten spacing further for small phones and very narrow viewports */
   .report-table {
     min-width: 400px;
   }

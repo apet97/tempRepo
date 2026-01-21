@@ -91,6 +91,7 @@ export async function loadInitialData() {
             return;
         }
 
+        // Populate overrides controls only after we have an up-to-date user list
         UI.renderOverridesTable();
     } catch (error) {
         UI.renderLoading(false);
@@ -174,6 +175,7 @@ function updateDailyThresholdState() {
 }
 
 function hasCostRates(entries) {
+    // Determine whether any entry provides explicit cost/profit information so we can display those modes
     if (!Array.isArray(entries) || entries.length === 0) return true;
     return entries.some(entry => {
         const rawCostRate = entry?.costRate?.amount ?? entry?.costRate;
@@ -191,12 +193,15 @@ function hasCostRates(entries) {
 }
 
 function syncAmountDisplayAvailability(entries) {
+    // Toggle extra amount display modes only when cost/profit data is present
     const costRatesAvailable = hasCostRates(entries);
     store.ui.hasCostRates = costRatesAvailable;
 
+    // The drop-down that lets users switch between earned/cost/profit views.
     const amountDisplayEl = document.getElementById('amountDisplay');
     if (!amountDisplayEl) return;
 
+    // Hide cost/profit options when data doesn't provide cost references
     const costOption = amountDisplayEl.querySelector('option[value="cost"]');
     const profitOption = amountDisplayEl.querySelector('option[value="profit"]');
     if (costOption) {
@@ -228,6 +233,7 @@ function syncAmountDisplayAvailability(entries) {
  * Handles persistence to localStorage and auto-recalculation.
  */
 export function bindConfigEvents() {
+    // Toggle mapping describing which DOM checkbox updates which config flag
     const configToggles = [
         { id: 'useProfileCapacity', key: 'useProfileCapacity' },
         { id: 'useProfileWorkingDays', key: 'useProfileWorkingDays' },
@@ -382,6 +388,7 @@ export function bindConfigEvents() {
     const endInput = document.getElementById('endDate');
     // Mirror native report UX: whenever dates change (manual or preset), queue a generate as soon as both dates are valid
     // Debounce keeps rapid clicks (e.g., preset + manual tweak) from flooding the backend
+    // Auto-generate keeps the report data synchronized with the current date inputs without requiring manual clicks
     const queueAutoGenerate = debounce(() => {
         const startValue = startInput?.value;
         const endValue = endInput?.value;
@@ -471,6 +478,7 @@ export function bindConfigEvents() {
     // Summary Expand/Collapse Toggle - use event delegation
     const summaryExpandToggleContainer = document.getElementById('summaryExpandToggleContainer');
     if (summaryExpandToggleContainer) {
+        // The expand/collapse toggle is only shown when billable breakdown is enabled
         // Initialize button
         UI.renderSummaryExpandToggle();
 
@@ -526,6 +534,7 @@ export async function handleGenerateReport() {
     const startDate = document.getElementById('startDate').value;
     const endDate = document.getElementById('endDate').value;
 
+    // Ensure both dates are selected before issuing API calls
     if (!startDate || !endDate) {
         UI.renderLoading(false);
         const emptyState = document.getElementById('emptyState');
@@ -565,6 +574,8 @@ export async function handleGenerateReport() {
         store.rawEntries = entries;
 
         // Prepare optional fetch promises (these can fail gracefully)
+        // Optional metadata fetches enhance accuracy but are allowed to fail silently
+        // Optional metadata fetches (profiles/holidays/time-off) that can fail without blocking the report
         const optionalPromises = [];
 
         // 2. Fetch Profiles (Capacity/Working Days) - OPTIONAL
@@ -690,6 +701,7 @@ export function runCalculation(dateRange) {
         store.currentDateRange = dateRange;
     }
 
+    // Ensure the amount display select reflects the latest data (earned/cost/profit availability)
     syncAmountDisplayAvailability(store.rawEntries);
     const analysis = calculateAnalysis(store.rawEntries, store, effectiveDateRange);
     store.analysisResults = analysis;

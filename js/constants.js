@@ -44,6 +44,7 @@ export const CONSTANTS = {
  * Definition of columns for the Summary Table.
  * @type {Array<{key: string, label: string, defaultVisible: boolean}>}
  */
+// Controls which columns appear in the summary table and their default visibility in the UI configuration panel.
 export const SUMMARY_COLUMNS = [
     { key: 'capacity', label: 'Capacity (expected)', defaultVisible: true },
     { key: 'regular', label: 'Regular', defaultVisible: true },
@@ -66,6 +67,7 @@ export const SUMMARY_COLUMNS = [
  */
 export const WEEKDAYS = (() => {
     const days = [];
+    // Generate localized labels for each weekday key to keep UI text consistent with user locale.
     // 2024-01-01 was a Monday. We use this anchor to generate sequential weekdays.
     const monday = new Date(Date.UTC(2024, 0, 1));
     const formatter = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
@@ -274,6 +276,7 @@ export const ERROR_TYPES = {
 /**
  * User-facing messages and actions for each error type.
  */
+// Provides localized UI text for the error banner to keep troubleshooting guidance consistent across types.
 export const ERROR_MESSAGES = {
     [ERROR_TYPES.NETWORK]: {
         title: 'Network Error',

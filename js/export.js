@@ -37,6 +37,7 @@ function sanitizeFormulaInjection(str) {
  * @param {string} [fileName='otplus-report.csv'] - The desired filename for the download.
  */
 export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
+    // Column headers describing the values in each exported row
     const headers = [
         'Date',
         'User',
@@ -56,11 +57,14 @@ export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
         'isTimeOff'
     ];
 
+    // Build CSV rows with sanitized values, ensuring even empty days appear in the export
+    // Build each CSV row with sanitized text to prevent formula injection
     const rows = [];
 
     analysis.forEach(user => {
         Array.from(user.days.entries()).forEach(([dateKey, day]) => {
             // Ensure gapless export: include a placeholder row for days with no time entries
+            // Even days without entries produce a placeholder row to keep exported data gapless
             const entriesToLoop = day.entries.length > 0 ? day.entries : [{
                 description: '(no entries)',
                 timeInterval: { start: dateKey + 'T00:00:00Z', duration: 'PT0H' },
@@ -80,6 +84,7 @@ export function downloadCsv(analysis, fileName = 'otplus-report.csv') {
                 const nonBillableOT = !e.analysis?.isBillable ? (e.analysis?.overtime || 0) : 0;
                 const totalHours = e.timeInterval.duration ? parseIsoDuration(e.timeInterval.duration) : 0;
 
+                // Build row with sanitized metrics, using day metadata for status columns
                 const row = [
                     (e.timeInterval.start || '').split('T')[0],
                     userName,

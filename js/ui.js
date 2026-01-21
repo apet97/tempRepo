@@ -139,6 +139,7 @@ export function renderSummaryStrip(users) {
   const strip = Elements.summaryStrip;
   if (!strip) return;
 
+  // Aggregate totals from every user so strip shows global KPIs
   const totals = users.reduce((acc, u) => {
     acc.users += 1;
     acc.capacity += u.totals.expectedCapacity;
@@ -228,6 +229,7 @@ export function renderSummaryStrip(users) {
   `;
 
   // Money metrics (on bottom row when billable breakdown is ON)
+  // Build the secondary row that displays money metrics based on the active amount mode
   const moneyMetrics = isProfitMode
     ? `
       <div class="summary-item highlight"><span class="summary-label">${amountLabels.total}</span><span class="summary-value">${renderAmountStack([
@@ -278,7 +280,7 @@ export function renderSummaryExpandToggle() {
   const container = document.getElementById('summaryExpandToggleContainer');
   if (!container) return;
 
-  // Only render if billable breakdown is enabled
+  // Only render if billable breakdown is enabled (toggle meaningless otherwise)
   if (!store.config.showBillableBreakdown) {
     container.innerHTML = '';
     return;
@@ -307,6 +309,7 @@ export function renderSummaryExpandToggle() {
 function computeSummaryRows(analysisUsers, groupBy) {
   const groups = new Map();
 
+  // Aggregate metrics by the selected grouping dimension to keep summary rows consistent
   for (const user of analysisUsers) {
     for (const [dateKey, dayData] of user.days) {
       for (const entry of dayData.entries) {
@@ -344,6 +347,7 @@ function computeSummaryRows(analysisUsers, groupBy) {
 
         // Initialize group if not exists
         if (!groups.has(groupKey)) {
+          // Initialize a clean accumulator for this grouping bucket
           groups.set(groupKey, {
             groupKey,
             groupName,
@@ -365,6 +369,7 @@ function computeSummaryRows(analysisUsers, groupBy) {
         }
 
         const group = groups.get(groupKey);
+        // Fallback to zero if duration metadata is missing
         const duration = parseIsoDuration(entry.timeInterval?.duration || 'PT0H');
 
         // Accumulate regular and overtime from entry analysis
@@ -389,7 +394,7 @@ function computeSummaryRows(analysisUsers, groupBy) {
           group.nonBillableOT += entry.analysis?.overtime || 0;
         }
 
-        // Cost
+        // Cost: totals are based on the detailed per-entry amount view selected via the dropdown
         group.amount += entry.analysis?.cost || 0;
         const amountsByType = entry.analysis?.amounts;
         if (amountsByType) {
@@ -409,6 +414,7 @@ function computeSummaryRows(analysisUsers, groupBy) {
 
     // For user grouping, if a user has no entries, still include them
     if (groupBy === 'user' && !groups.has(user.userId)) {
+      // Guarantee a row exists for users who had no entries during the range
       groups.set(user.userId, {
         groupKey: user.userId,
         groupName: user.userName,
@@ -601,7 +607,7 @@ export function renderSummaryTable(users) {
     thead.innerHTML = renderSummaryHeaders(groupBy, expanded, showBillable);
   }
 
-  // Render rows
+  // Render rows using a document fragment to minimize DOM thrashing
   const fragment = document.createDocumentFragment();
   for (const row of rows) {
     const tr = document.createElement('tr');
@@ -647,7 +653,7 @@ export function renderDetailedTable(users, activeFilter = null) {
     store.ui.activeDetailedFilter = 'all';
   }
 
-  // Flatten entries and attach day metadata
+  // Flatten entries, attach day-level metadata, and sort by start time so filtering/pagination have consistent context
   // MEDIUM FIX #18: Access d.meta.* instead of d.* for day metadata
   let allEntries = users.flatMap(u =>
     Array.from(u.days.values()).flatMap(d =>
@@ -664,7 +670,7 @@ export function renderDetailedTable(users, activeFilter = null) {
     )
   ).sort((a, b) => (b.timeInterval.start || '').localeCompare(a.timeInterval.start || ''));
 
-  // Apply filters
+  // Apply user-selected filter chips (holiday/off-day/billable) using attached metadata
   if (currentFilter === 'holiday') {
     allEntries = allEntries.filter(e => e.dayMeta.isHoliday);
   } else if (currentFilter === 'offday') {
@@ -683,7 +689,7 @@ export function renderDetailedTable(users, activeFilter = null) {
     return;
   }
 
-  // Pagination Logic
+  // Pagination Logic: slice entries based on current page and configured page size
   const pageSize = store.ui.detailedPageSize || 50;
   const page = store.ui.detailedPage || 1;
   const totalPages = Math.ceil(allEntries.length / pageSize);
@@ -727,9 +733,11 @@ export function renderDetailedTable(users, activeFilter = null) {
       </thead>
       <tbody>`;
 
+  // Build table rows for the current page, rendering rates, amounts, and status badges
   pageEntries.forEach(e => {
     const date = (e.timeInterval.start || '').split('T')[0];
     const tags = [];
+    // Deduplicate badge rendering so we don't spam identical tags
     const tagKeys = new Set();
     const addTag = (key, html) => {
       if (tagKeys.has(key)) return;
@@ -743,6 +751,7 @@ export function renderDetailedTable(users, activeFilter = null) {
       .replace(/\s+/g, ' ')
       .trim();
     const entryTags = Array.isArray(e.tags) ? e.tags : [];
+    // Normalize entry.type for consistent badge logic
     const normalizedType = String(e.type || '')
       .trim()
       .toUpperCase()
@@ -779,6 +788,7 @@ export function renderDetailedTable(users, activeFilter = null) {
 
     // Existing entry tags
     if (!isPtoEntry) {
+      // Preserve user-defined tags that are not reserved system badges
       const systemTags = new Set([
         'HOLIDAY',
         'OFF DAY',
@@ -799,10 +809,13 @@ export function renderDetailedTable(users, activeFilter = null) {
       });
     }
 
+    // Show badge if entry is billable for quick visual scanning
+    // Visual indicator for billable entries
     const billable = e.analysis?.isBillable
       ? '<span class="badge badge-billable">✓</span>'
       : '<span style="color:var(--text-muted)">—</span>';
 
+    // Use precomputed amount breakdowns so we don't recalc rates for each column
     const amountsByType = e.analysis?.amounts || {};
     const rateCell = isProfitMode
       ? buildProfitStacks(amountsByType, (amount) => amount.rate || 0, 'right')
@@ -874,6 +887,7 @@ function renderPerDayInputs(userId, perDayOverrides, profileCapacity, defaultPla
     return '<p class="muted" style="padding: 1rem;">Select a date range to configure per-day overrides.</p>';
   }
 
+  // Generate each calendar day in the currently selected range to render per-day rows
   const dates = IsoUtils.generateDateRange(startInput.value, endInput.value);
   const override = store.overrides[userId] || {};
   const hasGlobalValues = override.capacity || override.multiplier;
@@ -959,6 +973,7 @@ function renderPerDayInputs(userId, perDayOverrides, profileCapacity, defaultPla
 function renderWeeklyInputs(userId, weeklyOverrides, profileCapacity, defaultPlaceholder) {
   const override = store.overrides[userId] || {};
   const hasGlobalValues = override.capacity || override.multiplier;
+  // Always show all seven weekdays to keep the weekly editor predictable
   const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
   let html = '<div class="weekly-inputs-container">';
@@ -1213,6 +1228,7 @@ function createErrorBanner() {
 export function bindEvents(callbacks) {
   const Elements = getElements();
 
+  // Use delegated listeners on overrides table rows so dynamically added editors remain interactive
   // Prevent scroll wheel from changing number inputs when focused
   document.addEventListener('wheel', (e) => {
     if (e.target.tagName === 'INPUT' && e.target.type === 'number' && document.activeElement === e.target) {
@@ -1261,6 +1277,7 @@ export function bindEvents(callbacks) {
   });
 
   // Pagination Event Delegation
+  // Pagination controls are rendered inside the table container, so delegate clicks here
   document.getElementById('detailedTableContainer')?.addEventListener('click', (e) => {
     if (e.target.matches('.pagination-btn')) {
       const newPage = parseInt(e.target.dataset.page, 10);

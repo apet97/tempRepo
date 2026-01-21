@@ -90,6 +90,7 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
 
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
+            // Merge auth headers with any caller-provided overrides, ensuring JSON responses are accepted
             const headers = {
                 'X-Addon-Token': store.token,
                 'Accept': 'application/json',
@@ -101,9 +102,11 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
                 headers['Content-Type'] = 'application/json';
             }
 
+            // Fire the HTTP request using the Clockify backend proxy defined in the addon claims
             const response = await fetch(url, { ...options, headers, signal: options.signal });
 
             // HIGH FIX #9: 401/403/404 are non-retryable errors
+            // These status codes indicate invalid tokens/permissions or missing resources—do not retry
             if (response.status === 401 || response.status === 403 || response.status === 404) {
                 return { data: null, failed: true, status: response.status };
             }
@@ -129,6 +132,7 @@ async function fetchWithAuth(url, options = {}, maxRetries) {
                 }
             }
 
+            // Treat any other non-success status as a failure; log validation payload for easier debugging
             if (!response.ok) {
                 const error = new Error(`API Error: ${response.status}`);
                 error.status = response.status;
@@ -237,14 +241,16 @@ export const Api = {
         let page = 1;
         const pageSize = 200; // Max allowed
         let hasMore = true;
+        // Normalize amountDisplay once to keep request logic consistent with UI toggle
         const amountDisplay = String(store.config.amountDisplay || 'earned').toLowerCase();
         const amountShownMap = { earned: 'EARNED', cost: 'COST', profit: 'PROFIT' };
         const amountShown = amountShownMap[amountDisplay] || 'EARNED';
 
         console.log(`Fetching detailed report for ${startIso} to ${endIso}...`);
 
+        // Iterate through paginated report response until the API signals the final page
         while (hasMore) {
-            // Minimal request - only required params
+            // Build the minimal report body; we always ask for all amount types so profit mode can stack values locally
             const requestBody = {
                 dateRangeStart: startIso,
                 dateRangeEnd: endIso,
@@ -268,11 +274,11 @@ export const Api = {
                 break;
             }
 
-            // Reports API uses 'timeentries' (lowercase) not 'timeEntries'
+            // Reports API keys vary in casing; normalize before processing the payload
             const entries = data.timeentries || data.timeEntries || [];
             console.log(`Page ${page}: Retrieved ${entries.length} entries`);
 
-            // Transform report entries to match time-entries API format
+            // Transform the detailed report payload into the legacy time entry shape that downstream logic expects so calc.js stays unchanged
             const transformed = entries.map(e => ({
                 id: e._id || e.id,  // Reports API uses _id
                 description: e.description,
@@ -303,6 +309,7 @@ export const Api = {
             allEntries.push(...transformed);
 
             // Check if more pages
+            // If we receive less than a full page, assume there are no more pages
             if (entries.length < pageSize) {
                 hasMore = false;
             } else {
@@ -336,6 +343,7 @@ export const Api = {
 
         for (let i = 0; i < users.length; i += BATCH_SIZE) {
             const batch = users.slice(i, i + BATCH_SIZE);
+            // This approach is the legacy per-user fetch flow; kept for backwards compatibility in tests.
             console.log(`Fetching entries for users ${i + 1}-${Math.min(i + BATCH_SIZE, users.length)} of ${users.length}...`);
 
             const batchPromises = batch.map(user => fetchUserEntriesPaginated(workspaceId, user, startIso, endIso, options));
@@ -503,7 +511,7 @@ export const Api = {
         // Build per-user per-date map
         const results = new Map();
 
-        // Try multiple possible response formats
+        // Try multiple possible response formats to tolerate backend variations (array vs object wrapper)
         let requests = [];
         if (Array.isArray(data?.requests)) {
             requests = data.requests;
@@ -514,6 +522,7 @@ export const Api = {
             requests = data.timeOffRequests;
         }
 
+        // Process each approved request and expand multi-day periods into per-date records
         requests.forEach(request => {
             // FIX: Status is an object with statusType property, not a string
             const statusType = request.status?.statusType || request.status;

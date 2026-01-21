@@ -97,6 +97,7 @@ function getCostRate(entry, durationHours) {
 }
 
 function buildAmountBreakdown(rate, regular, overtime, multiplier, tier2EligibleHours, tier2Multiplier) {
+    // Guard against missing or invalid multiplier inputs so premium calculations never break
     const safeMultiplier = multiplier > 0 ? multiplier : 1;
     const safeTier2Multiplier = tier2Multiplier > safeMultiplier ? tier2Multiplier : safeMultiplier;
     // Base amounts (no OT premiums)
@@ -108,6 +109,7 @@ function buildAmountBreakdown(rate, regular, overtime, multiplier, tier2Eligible
     let tier2Premium = 0;
     let overtimeRate = rate;
 
+    // Tiered overtime premium: Tier1 applies to all OT, Tier2 to hours beyond configured threshold
     if (overtime > 0) {
         // Tier 1: multiplier applied to all OT hours
         tier1Premium = overtime * rate * (safeMultiplier - 1);
@@ -347,6 +349,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
     const amountDisplay = normalizeAmountDisplay(storeRef.config?.amountDisplay);
     const usersMap = new Map();
 
+    // Seed the map with every user so the UI can show rows even when no entries exist
     // Initialize users from the store's user list (not just entries)
     // This ensures we have all users even if they have no entries
     (users || []).forEach(user => {
@@ -391,6 +394,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
     });
 
     // 1. Group entries by User & Day
+    // Each entry is appended to the map bucket of its user/date to allow day-level capacity calculus.
     entries.forEach(entry => {
         // Skip null/undefined entries
         if (!entry || !entry.timeInterval || !entry.timeInterval.start) {
@@ -463,7 +467,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
         // Initialize cumulative OT tracker for this user
         userCumulativeOT.set(user.userId, 0);
 
-        // Iterate over the FULL date range, not just days with entries
+        // Iterate through each calendar day in the selected range so empty days still contribute to capacity totals
         const daysToProcess = allDateKeys.length > 0 ? allDateKeys : Array.from(user.days.keys()).sort();
 
         daysToProcess.forEach(dateKey => {
@@ -581,8 +585,10 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
             // Sort entries by start time (Tail Attribution)
             dayData.entries.sort((a, b) => (a.timeInterval.start || '').localeCompare(b.timeInterval.start || ''));
 
+            // Each entry is scored relative to the day's capacity using tail attribution
             let dailyAccumulator = 0;
 
+            // Determine duration/classification and accumulate amounts for each entry
             dayData.entries.forEach(entry => {
                 const duration = round(calculateDuration(entry));
                 const isBillable = entry.billable === true;
@@ -595,21 +601,21 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 let regular = 0;
                 let overtime = 0;
 
-                // Handle BREAK entries
+                // Handle BREAK entries: record the duration but do not advance the capacity counter
                 if (entryClass === 'break') {
                     user.totals.breaks += duration;
                     regular = duration;  // Count as worked hours
                     overtime = 0;
                     // Do NOT add to dailyAccumulator (doesn't trigger OT for other entries)
                 }
-                // Handle PTO entries (HOLIDAY/TIME_OFF) - regardless of billable flag
+                // Handle PTO entries (HOLIDAY/TIME_OFF) - they count for stats but do not trigger overtime
                 else if (entryClass === 'pto') {
                     user.totals.vacationEntryHours += duration;
                     regular = duration;  // Count as worked hours
                     overtime = 0;
                     // Do NOT add to dailyAccumulator (doesn't trigger OT for other entries)
                 }
-                // Handle WORK entries
+                // Handle WORK entries by attributing the portion up to capacity as regular and the rest as overtime
                 else {
                     // Standard tail attribution logic
                     if (dailyAccumulator >= capacity) {
@@ -640,6 +646,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 }
 
                 // Amount Calculation (earned + cost; profit always computed)
+                // Build parallel views for earned/cost/profit so UI toggles can switch between them without recomputing
                 const multiplier = userMultiplier > 0 ? userMultiplier : 1;
                 let tier2EligibleHours = 0;  // Track for per-entry analysis
 
@@ -713,7 +720,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                 user.totals.otPremium += displayAmounts.tier1Premium;
                 user.totals.otPremiumTier2 += displayAmounts.tier2Premium;
 
-                // Attach analysis to ALL entries
+                // Attach entry-level analysis metadata so the UI can render detailed columns and badges
                 const tags = [];
                 if (isHoliday) tags.push('HOLIDAY');
                 if (isNonWorking) tags.push('OFF-DAY');

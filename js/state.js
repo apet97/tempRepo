@@ -124,19 +124,21 @@ class Store {
      * @private
      */
     _loadConfig() {
+        // Load persisted configuration blob (calc params + toggles)
         const savedConfig = localStorage.getItem('otplus_config');
         if (savedConfig) {
             const parsed = safeJSONParse(savedConfig, null);
-            if (parsed && typeof parsed === 'object') {
-                // Merge config with validation
-                if (parsed.config && typeof parsed.config === 'object') {
-                    this.config = { ...this.config, ...parsed.config };
-                }
-                const amountDisplay = String(this.config.amountDisplay || '').toLowerCase();
-                const validAmountDisplays = new Set(['earned', 'cost', 'profit']);
-                this.config.amountDisplay = validAmountDisplays.has(amountDisplay)
-                    ? amountDisplay
-                    : 'earned';
+                if (parsed && typeof parsed === 'object') {
+                    // Merge config with validation
+                    if (parsed.config && typeof parsed.config === 'object') {
+                        this.config = { ...this.config, ...parsed.config };
+                    }
+                    const amountDisplay = String(this.config.amountDisplay || '').toLowerCase();
+                    const validAmountDisplays = new Set(['earned', 'cost', 'profit']);
+                    // Coerce amount display to a supported mode to keep the dropdown in sync
+                    this.config.amountDisplay = validAmountDisplays.has(amountDisplay)
+                        ? amountDisplay
+                        : 'earned';
                 // Merge calcParams with validation
                 if (parsed.calcParams && typeof parsed.calcParams === 'object') {
                     const cp = parsed.calcParams;
@@ -164,6 +166,7 @@ class Store {
      * Persists current configuration to LocalStorage.
      */
     saveConfig() {
+        // Persist both config toggles and numeric parameters in one JSON blob for easy retrieval
         localStorage.setItem('otplus_config', JSON.stringify({
             config: this.config,
             calcParams: this.calcParams
@@ -196,6 +199,7 @@ class Store {
      * @private
      */
     _getOverrideKey() {
+        // Each workspace has a unique override bucket to avoid collisions between tenants
         return this.claims?.workspaceId ? `${STORAGE_KEYS.OVERRIDES_PREFIX}${this.claims.workspaceId}` : null;
     }
 
@@ -204,6 +208,7 @@ class Store {
      * @private
      */
     _loadOverrides() {
+        // Read per-workspace override data so we can rehydrate editor state
         const key = this._getOverrideKey();
         if (key) {
             const saved = localStorage.getItem(key);
@@ -212,6 +217,7 @@ class Store {
             // Migrate old format: add mode if missing
             Object.keys(this.overrides).forEach(userId => {
                 if (!this.overrides[userId].mode) {
+                    // Backfill legacy overrides that lacked a mode flag
                     this.overrides[userId].mode = 'global';
                 }
             });
@@ -224,6 +230,7 @@ class Store {
     saveOverrides() {
         const key = this._getOverrideKey();
         if (key) {
+            // Persist overrides separately so user-level changes survive reloads
             localStorage.setItem(key, JSON.stringify(this.overrides));
         }
     }
@@ -247,6 +254,7 @@ class Store {
                 delete this.overrides[userId];
             }
         } else {
+            // Validate numeric value before persisting to avoid NaN propagation
             // Validate numeric fields
             const numValue = parseFloat(value);
             if (isNaN(numValue)) {
@@ -334,10 +342,12 @@ class Store {
             delete this.overrides[userId].perDayOverrides[dateKey][field];
 
             // Cleanup empty day entries
+            // Clean up empty date buckets to avoid storing redundant objects
             if (Object.keys(this.overrides[userId].perDayOverrides[dateKey]).length === 0) {
                 delete this.overrides[userId].perDayOverrides[dateKey];
             }
         } else {
+            // Validate per-day numeric inputs just like global overrides
             const numValue = parseFloat(value);
             if (isNaN(numValue)) {
                 console.warn(`Invalid per-day override value for ${field}: ${value}`);
@@ -386,12 +396,13 @@ class Store {
             return false;
         }
 
+        // Copy the user's global override values into each day for easier per-day editing
         const globalCapacity = override.capacity;
         const globalMultiplier = override.multiplier;
         const globalTier2Threshold = override.tier2Threshold;
         const globalTier2Multiplier = override.tier2Multiplier;
 
-        // Copy global values to all days in range
+        // Copy the global override values to each date bucket so the per-day editor can show them
         dates.forEach(dateKey => {
             if (!override.perDayOverrides[dateKey]) {
                 override.perDayOverrides[dateKey] = {};
@@ -435,6 +446,7 @@ class Store {
             this.overrides[userId].weeklyOverrides[weekday] = {};
         }
 
+        // Weekly overrides mirror the same validation rules as global overrides
         // Validation (same as updateOverride)
         if (value === null || value === '') {
             delete this.overrides[userId].weeklyOverrides[weekday][field];
@@ -469,6 +481,7 @@ class Store {
             if (!override.weeklyOverrides[weekday]) {
                 override.weeklyOverrides[weekday] = {};
             }
+            // Mirror global override values across every weekday entry for convenience
             if (override.capacity !== undefined && override.capacity !== '') {
                 override.weeklyOverrides[weekday].capacity = override.capacity;
             }

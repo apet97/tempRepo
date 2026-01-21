@@ -460,6 +460,7 @@ export const IsoUtils = {
         const y = date.getFullYear();
         const m = String(date.getMonth() + 1).padStart(2, '0');
         const d = String(date.getDate()).padStart(2, '0');
+        // Use local calendar day so entries recorded late at night align with the user's intended day
         return `${y}-${m}-${d}`;
     },
 
@@ -502,6 +503,7 @@ export const IsoUtils = {
         const end = this.parseDate(endIso);
         if (!current || !end) return [];
 
+        // Iterate inclusive so we represent both the start and end dates
         while (current <= end) {
             dates.push(this.toISODate(current));
             current.setUTCDate(current.getUTCDate() + 1);
