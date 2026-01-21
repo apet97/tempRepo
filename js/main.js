@@ -177,14 +177,15 @@ function hasCostRates(entries) {
     if (!Array.isArray(entries) || entries.length === 0) return true;
     return entries.some(entry => {
         const rawCostRate = entry?.costRate?.amount ?? entry?.costRate;
-        if (rawCostRate !== null && rawCostRate !== undefined) return true;
-        if (Array.isArray(entry?.amounts)) {
-            return entry.amounts.some(amount => {
-                const type = String(amount?.type || amount?.amountType || '').toUpperCase();
-                return type === 'COST' || type === 'PROFIT';
-            });
-        }
-        return false;
+        const costRate = Number(rawCostRate);
+        if (Number.isFinite(costRate) && costRate !== 0) return true;
+        const amounts = Array.isArray(entry?.amounts) ? entry.amounts : [];
+        return amounts.some(amount => {
+            const type = String(amount?.type || amount?.amountType || '').toUpperCase();
+            if (type !== 'COST' && type !== 'PROFIT') return false;
+            const value = Number(amount?.value ?? amount?.amount);
+            return Number.isFinite(value) && value !== 0;
+        });
     });
 }
 
@@ -375,6 +376,22 @@ export function bindConfigEvents() {
         document.getElementById('startDate').value = IsoUtils.toISODate(start);
         document.getElementById('endDate').value = IsoUtils.toISODate(end);
     };
+    const startInput = document.getElementById('startDate');
+    const endInput = document.getElementById('endDate');
+    const queueAutoGenerate = debounce(() => {
+        const startValue = startInput?.value;
+        const endValue = endInput?.value;
+        if (!startValue || !endValue) return;
+        if (startValue > endValue) return;
+        handleGenerateReport();
+    }, 300);
+
+    if (startInput) {
+        startInput.addEventListener('change', queueAutoGenerate);
+    }
+    if (endInput) {
+        endInput.addEventListener('change', queueAutoGenerate);
+    }
 
     document.getElementById('datePresetThisWeek')?.addEventListener('click', () => {
         const now = new Date();
@@ -383,6 +400,7 @@ export function bindConfigEvents() {
         const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset));
         const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
         setDateRange(start, end);
+        queueAutoGenerate();
     });
 
     document.getElementById('datePresetLastWeek')?.addEventListener('click', () => {
@@ -393,6 +411,7 @@ export function bindConfigEvents() {
         const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + lastMondayOffset));
         const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + lastSundayOffset));
         setDateRange(start, end);
+        queueAutoGenerate();
     });
 
     document.getElementById('datePresetLast2Weeks')?.addEventListener('click', () => {
@@ -400,6 +419,7 @@ export function bindConfigEvents() {
         const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 13)); // 14 days including today
         const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
         setDateRange(start, end);
+        queueAutoGenerate();
     });
 
     document.getElementById('datePresetLastMonth')?.addEventListener('click', () => {
@@ -407,6 +427,7 @@ export function bindConfigEvents() {
         const start = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
         const end = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 0));
         setDateRange(start, end);
+        queueAutoGenerate();
     });
 
     document.getElementById('datePresetThisMonth')?.addEventListener('click', () => {
@@ -414,6 +435,7 @@ export function bindConfigEvents() {
         const start = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
         const end = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
         setDateRange(start, end);
+        queueAutoGenerate();
     });
 
     // Detailed Filter Chips

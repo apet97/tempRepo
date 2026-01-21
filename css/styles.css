@@ -876,6 +876,9 @@ body.density-spacious {
 
 #summaryCard .report-table th {
   white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
 }
 
 #detailedCard .report-table th:nth-child(8),
@@ -894,6 +897,12 @@ body.density-spacious {
 }
 
 #detailedCard .report-table th.amount-cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+#detailedCard .report-table td.amount-cell {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
@@ -1044,8 +1053,8 @@ body.density-spacious {
 }
 
 #amountDisplay {
-  width: 96px;
-  min-width: 96px;
+  width: 112px;
+  min-width: 112px;
 }
 
 /* API Status Banner */
