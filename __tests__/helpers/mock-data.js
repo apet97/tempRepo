@@ -187,6 +187,7 @@ export function createMockStore(options = {}) {
       applyTimeOff: true,
       showBillableBreakdown: true,
       showDecimalTime: false,
+      amountDisplay: 'earned',
       overtimeBasis: 'daily'
     },
     calcParams: {

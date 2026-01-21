@@ -23,6 +23,7 @@ export default {
   ],
   moduleFileExtensions: ['js'],
   verbose: false,
+  silent: true,
   clearMocks: true,
   fakeTimers: {
     enableGlobally: true
