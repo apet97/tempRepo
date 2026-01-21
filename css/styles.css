@@ -874,6 +874,10 @@ body.density-spacious {
   overflow-wrap: anywhere;
 }
 
+#summaryCard .report-table th {
+  white-space: normal;
+}
+
 #detailedCard .report-table th:nth-child(8),
 #detailedCard .report-table td:nth-child(8),
 #detailedCard .report-table th:nth-child(9),

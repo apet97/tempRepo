@@ -704,6 +704,7 @@ export function renderDetailedTable(users, activeFilter = null) {
 
   const amountHeaderNote = isProfitMode ? '<div class="amount-header-sub">Amt / Cost / Profit</div>' : '';
   const amountOnlyNote = isProfitMode ? '<div class="amount-header-sub">Amt</div>' : '';
+  const detailedRateLabel = 'Rate';
   let html = `
   <div class="table-scroll" style="margin-top: 10px;">
     <table class="report-table">
@@ -716,7 +717,7 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">Regular</th>
           <th class="text-right">Overtime</th>
           <th class="text-right">Billable</th>
-          <th class="text-right amount-cell">${amountLabels.rate}${amountHeaderNote}</th>
+          <th class="text-right amount-cell">${detailedRateLabel}${amountHeaderNote}</th>
           <th class="text-right amount-cell">Regular $${amountOnlyNote}</th>
           <th class="text-right amount-cell">OT $${amountOnlyNote}</th>
           <th class="text-right amount-cell">T2 $${amountOnlyNote}</th>
