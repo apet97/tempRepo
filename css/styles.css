@@ -1367,6 +1367,26 @@ body.density-spacious {
     min-width: 400px;
   }
 
+  #detailedCard.amount-profit .report-table th {
+    padding: 6px 6px;
+    font-size: 10px;
+    line-height: 1.15;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  #detailedCard.amount-profit .report-table th:nth-child(1),
+  #detailedCard.amount-profit .report-table th:nth-child(2),
+  #detailedCard.amount-profit .report-table th:nth-child(3),
+  #detailedCard.amount-profit .report-table th:nth-child(4),
+  #detailedCard.amount-profit .report-table th:nth-child(5),
+  #detailedCard.amount-profit .report-table th:nth-child(6),
+  #detailedCard.amount-profit .report-table th:nth-child(7) {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
   .btn-primary,
   .btn-secondary {
     padding: 8px 12px;
