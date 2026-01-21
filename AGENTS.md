@@ -9,7 +9,7 @@ Primary objectives:
 - Clean, Clockify-native UI with working grouping + breakdown
 
 ## Working agreements
-- Prefer small, targeted changes and incremental diffs.
+- Prefer small, targeted changes and incremental diffs, unless the user says "OVERRIDE SMALL".
 - Do not add new dependencies/frameworks.
 - After modifying JS, run:
   - `npm test`
@@ -24,6 +24,7 @@ Primary objectives:
 - `calc.js`: core calculations (regular/overtime split, premiums, aggregation/grouping)
 - `utils.js`: formatting helpers (durations, money, dates)
 - `export.js`: CSV export
+- `docs/guide.md`: explains the addon’s dependencies, persistence schema, and the exact API calls it makes.
 
 ## Data and API assumptions (Detailed Report)
 Entries are expected to contain:
@@ -87,6 +88,9 @@ Do not silently drop fields needed for the UI; preserve and pass through what th
 
 ## How to scope prompts (for Codex sessions)
 - Treat each Codex prompt like a GitHub issue:
-  - list the files/components involved
-  - define acceptance criteria
-  - include repro/validation steps
+- list the files/components involved
+- define acceptance criteria
+- include repro/validation steps
+
+## Operational Guide Reference
+- Refer to `docs/guide.md` for a quick rundown of what OTPLUS uses (modules, storage, feature toggles) and every Clockify API call it executes (headers, parameters, fallbacks). Use it before filing issues or modifying data ingestion logic.

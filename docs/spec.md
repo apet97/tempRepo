@@ -147,7 +147,11 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 | Holidays | `/v1/workspaces/{wid}/holidays/in-period` | GET | `YYYY-MM-DD` strict format |
 | Time Off | `/v1/workspaces/{wid}/time-off/requests` | POST | Approved status filter |
 
---- 
+---
+
+## 8. Guide & Operational Reference
+- The new `docs/guide.md` summarizes how each module (state, calc, UI) consumes these APIs, plus the storage schema and override workflow.
+- Use the guide as a quick reference when triaging bugs or onboarding new team members—its API catalog explicitly states headers (`X-Addon-Token`), rate limiting expectations (token bucket), and abort handling via `AbortController`.
 
 ## 8. Persistence Schema (localStorage)
 

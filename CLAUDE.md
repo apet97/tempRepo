@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 # OTPLUS (Clockify Overtime Addon)
-See `docs/adr/README.md` for architecture decisions, `docs/spec.md` for technical details, `docs/prd.md` for product rules.
+See `docs/adr/README.md` for architecture decisions, `docs/spec.md` for technical details, `docs/prd.md` for product rules, and `docs/guide.md` for the operational summary of what the addon consumes plus every Clockify API call it makes.
 
 ## One-line goal
 Maintain and improve OTPLUS: a read-only Clockify addon that generates accurate overtime + billable/non-billable reports, at scale (100+ users), with deterministic calculations and strong safety guarantees.
@@ -55,6 +55,8 @@ If adding new tooling (lint/e2e), add it as an npm script and document here.
    - group summaries (project/client/task/week)
    - detail rows (per-entry with regular/OT split)
 6. Render progressively; export uses computed results (never raw unescaped fields).
+
+> **Pro tip:** `docs/guide.md` restates this flow alongside the exact APIs and storage keys, so link it when onboarding or debugging ingestion issues.
 
 ## Calculation rules (do not change without updating tests)
 ### Capacity precedence (per user, per day)

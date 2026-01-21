@@ -74,3 +74,7 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 - **Load Time:** < 3 seconds for workspaces with 50+ users.
 - **Zero Freeze:** UI remains responsive during massive data fetches due to pagination and parallelization.
 - **Persistence:** 100% of configuration choices survive a browser reload.
+
+## 7. Operational Guide & APIs
+- **Guide:** `docs/guide.md` documents what OTPLUS consumes (modules, storage, UI toggles) and enumerates every Clockify API request it issues.
+- **Runbook:** When diagnosing failures, consult the guide’s API list to confirm rate limits/history and fallbacks for holidays/profiles/time-off before touching the UI or storage layers.
