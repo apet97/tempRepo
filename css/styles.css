@@ -936,10 +936,33 @@ body.density-spacious {
   text-overflow: clip;
 }
 
+/* Profit mode: wider columns for stacked AMT/COST/PROFIT values */
+#detailedCard.amount-profit .report-table th:nth-child(8),
+#detailedCard.amount-profit .report-table td:nth-child(8) {
+  min-width: 110px;
+}
+
+#detailedCard.amount-profit .report-table th:nth-child(9),
+#detailedCard.amount-profit .report-table td:nth-child(9) {
+  min-width: 110px;
+}
+
+#detailedCard.amount-profit .report-table th:nth-child(10),
+#detailedCard.amount-profit .report-table td:nth-child(10),
+#detailedCard.amount-profit .report-table th:nth-child(11),
+#detailedCard.amount-profit .report-table td:nth-child(11) {
+  min-width: 100px;
+}
+
+#detailedCard.amount-profit .report-table th:nth-child(12),
+#detailedCard.amount-profit .report-table td:nth-child(12) {
+  min-width: 120px;
+}
+
 .amount-stack {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .amount-stack-left {
