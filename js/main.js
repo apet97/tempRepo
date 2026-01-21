@@ -173,6 +173,49 @@ function updateDailyThresholdState() {
     }
 }
 
+function hasCostRates(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return true;
+    return entries.some(entry => {
+        const rawCostRate = entry?.costRate?.amount ?? entry?.costRate;
+        if (rawCostRate !== null && rawCostRate !== undefined) return true;
+        if (Array.isArray(entry?.amounts)) {
+            return entry.amounts.some(amount => {
+                const type = String(amount?.type || amount?.amountType || '').toUpperCase();
+                return type === 'COST' || type === 'PROFIT';
+            });
+        }
+        return false;
+    });
+}
+
+function syncAmountDisplayAvailability(entries) {
+    const costRatesAvailable = hasCostRates(entries);
+    store.ui.hasCostRates = costRatesAvailable;
+
+    const amountDisplayEl = document.getElementById('amountDisplay');
+    if (!amountDisplayEl) return;
+
+    const costOption = amountDisplayEl.querySelector('option[value="cost"]');
+    if (costOption) {
+        costOption.hidden = !costRatesAvailable;
+        costOption.disabled = !costRatesAvailable;
+    }
+
+    const validDisplays = new Set(['earned', 'cost']);
+    let nextDisplay = String(store.config.amountDisplay || '').toLowerCase();
+    if (!validDisplays.has(nextDisplay)) nextDisplay = 'earned';
+    if (!costRatesAvailable && nextDisplay === 'cost') {
+        nextDisplay = 'earned';
+    }
+
+    if (store.config.amountDisplay !== nextDisplay) {
+        store.config.amountDisplay = nextDisplay;
+        store.saveConfig();
+    }
+
+    amountDisplayEl.value = nextDisplay;
+}
+
 /**
  * Binds event listeners to configuration controls (toggles, inputs).
  * Handles persistence to localStorage and auto-recalculation.
@@ -227,8 +270,14 @@ export function bindConfigEvents() {
         amountDisplayEl.value = validDisplays.has(currentDisplay) ? currentDisplay : 'earned';
         amountDisplayEl.addEventListener('change', (e) => {
             const nextValue = String(e.target.value || '').toLowerCase();
-            store.config.amountDisplay = validDisplays.has(nextValue) ? nextValue : 'earned';
+            const allowCost = store.ui.hasCostRates !== false;
+            let normalized = validDisplays.has(nextValue) ? nextValue : 'earned';
+            if (!allowCost && normalized === 'cost') {
+                normalized = 'earned';
+            }
+            store.config.amountDisplay = normalized;
             store.saveConfig();
+            amountDisplayEl.value = store.config.amountDisplay;
             if (store.rawEntries) runCalculation();
         });
     }
@@ -610,6 +659,7 @@ export function runCalculation(dateRange) {
         store.currentDateRange = dateRange;
     }
 
+    syncAmountDisplayAvailability(store.rawEntries);
     const analysis = calculateAnalysis(store.rawEntries, store, effectiveDateRange);
     store.analysisResults = analysis;
     UI.renderSummaryStrip(analysis);

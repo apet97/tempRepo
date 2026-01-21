@@ -92,7 +92,8 @@ class Store {
             activeTab: 'summary',
             detailedPage: 1,
             detailedPageSize: 50,
-            activeDetailedFilter: 'all'
+            activeDetailedFilter: 'all',
+            hasCostRates: true
         };
 
         /** @type {Set<Function>} Set of subscriber functions. */

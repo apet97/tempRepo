@@ -92,9 +92,7 @@ function getCostRate(entry, durationHours) {
     const costRate = readRateCents(rawCostRate);
     if (costRate !== null) return costRate;
     const amountRate = getAmountRate(entry.amounts, durationHours, AMOUNT_RATE_TYPES.cost);
-    if (Number.isFinite(amountRate)) return amountRate;
-    const hourlyRate = readRateCents(entry.hourlyRate?.amount);
-    return hourlyRate !== null ? hourlyRate : 0;
+    return Number.isFinite(amountRate) ? amountRate : 0;
 }
 
 function buildAmountBreakdown(rate, regular, overtime, multiplier, tier2EligibleHours, tier2Multiplier) {

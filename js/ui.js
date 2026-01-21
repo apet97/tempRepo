@@ -52,9 +52,9 @@ function formatHoursDisplay(hours) {
 function getAmountLabels() {
   const amountDisplay = String(store.config.amountDisplay || 'earned').toLowerCase();
   if (amountDisplay === 'cost') {
-    return { column: 'Cost', total: 'Total Cost (with OT)', base: 'Cost (no OT)' };
+    return { column: 'Cost', total: 'Total Cost (with OT)', base: 'Cost (no OT)', rate: 'Cost rate $/h' };
   }
-  return { column: 'Amount', total: 'Total (with OT)', base: 'Amount (no OT)' };
+  return { column: 'Amount', total: 'Total (with OT)', base: 'Amount (no OT)', rate: 'Rate $/h' };
 }
 
 // --- Renderers ---
@@ -506,6 +506,7 @@ export function renderDetailedTable(users, activeFilter = null) {
   if (!container) return;
   const detailedCard = document.getElementById('detailedCard');
   const showBillable = store.config.showBillableBreakdown;
+  const amountLabels = getAmountLabels();
   if (detailedCard) {
     detailedCard.classList.toggle('billable-off', !showBillable);
   }
@@ -588,7 +589,7 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">Regular</th>
           <th class="text-right">Overtime</th>
           <th class="text-right">Billable</th>
-          <th class="text-right">Rate $/h</th>
+          <th class="text-right">${amountLabels.rate}</th>
           <th class="text-right">Regular $</th>
           <th class="text-right">OT $</th>
           <th class="text-right">T2 $</th>

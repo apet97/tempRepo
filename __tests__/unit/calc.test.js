@@ -560,6 +560,29 @@ describe('Calculation Module - calculateAnalysis', () => {
       expect(userResult.totals.otPremium).toBe(0);
     });
 
+    it('should not fall back to earned rate when cost rate is missing', () => {
+      mockStore.config.amountDisplay = 'cost';
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T11:00:00Z',
+          duration: 'PT2H'
+        },
+        hourlyRate: { amount: 5000 }, // $50/hour earned
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      const userResult = results.find(u => u.userId === 'user0');
+      expect(userResult.totals.amount).toBe(0);
+      expect(userResult.totals.profit).toBe(100);
+    });
+
     it('should calculate profit from earned minus cost', () => {
       const entries = [{
         id: 'entry_1',

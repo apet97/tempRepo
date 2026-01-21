@@ -48,6 +48,7 @@ describe('State Module - Store Class', () => {
         applyTimeOff: true,
         showBillableBreakdown: true,
         showDecimalTime: false,
+        amountDisplay: 'earned',
         overtimeBasis: 'daily'
       });
     });
@@ -79,7 +80,8 @@ describe('State Module - Store Class', () => {
         activeTab: 'summary',
         detailedPage: 1,
         detailedPageSize: 50,
-        activeDetailedFilter: 'all'
+        activeDetailedFilter: 'all',
+        hasCostRates: true
       });
     });
   });

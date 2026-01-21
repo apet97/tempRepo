@@ -293,6 +293,7 @@ export const Api = {
                 },
                 // Rate from Reports API is direct field in cents (e.g., 15300 = $153.00)
                 hourlyRate: { amount: (e.earnedRate ?? e.rate) || 0, currency: 'USD' },
+                earnedRate: e.earnedRate,
                 costRate: e.costRate,
                 amounts: Array.isArray(e.amounts) ? e.amounts : [],
                 tags: e.tags || []
