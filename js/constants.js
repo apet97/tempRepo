@@ -97,6 +97,8 @@ export const WEEKDAYS = (() => {
  * @property {string} [project.id] - Project ID
  * @property {Object} [hourlyRate] - Rate information
  * @property {number} [hourlyRate.amount] - Rate in cents
+ * @property {number|Object} [earnedRate] - Earned/billable rate in cents
+ * @property {number|Object} [costRate] - Cost rate in cents
  * @property {string} [currency] - Currency code (e.g., 'USD')
  * @property {string} [description] - Entry description
  * @property {Array<Object>} [tags] - Tags array

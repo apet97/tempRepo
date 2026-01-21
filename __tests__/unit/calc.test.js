@@ -583,6 +583,28 @@ describe('Calculation Module - calculateAnalysis', () => {
       expect(day.entries[0].analysis.profit).toBe(220);
     });
 
+    it('should use earnedRate and costRate (cents) when provided', () => {
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T11:00:00Z',
+          duration: 'PT2H'
+        },
+        earnedRate: 6000, // $60/hour in cents
+        costRate: 2500, // $25/hour in cents
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      const userResult = results.find(u => u.userId === 'user0');
+      expect(userResult.totals.amount).toBe(120);
+      expect(userResult.totals.profit).toBe(70);
+    });
+
     it('should use user override multiplier', () => {
       mockStore.overrides = {
         'user0': { multiplier: 2.0 }

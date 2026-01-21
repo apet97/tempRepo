@@ -69,33 +69,32 @@ function getAmountRate(amounts, durationHours, type) {
     if (!durationHours || durationHours <= 0) return null;
     const value = getAmountValue(amounts, type);
     if (!Number.isFinite(value)) return null;
-    return value / durationHours;
+    return (value / 100) / durationHours;
 }
 
-function getRateFromCents(rawValue) {
+function readRateCents(rawValue) {
+    if (rawValue === null || rawValue === undefined) return null;
     const parsed = Number(rawValue);
-    return Number.isFinite(parsed) ? parsed / 100 : 0;
+    return Number.isFinite(parsed) ? parsed / 100 : null;
 }
 
 function getEarnedRate(entry, durationHours) {
-    const rawHourlyRate = entry.hourlyRate?.amount;
-    const parsedHourlyRate = Number(rawHourlyRate);
-    if (Number.isFinite(parsedHourlyRate)) {
-        return parsedHourlyRate / 100;
-    }
+    const earnedRate = readRateCents(entry.earnedRate?.amount ?? entry.earnedRate);
+    if (earnedRate !== null) return earnedRate;
+    const hourlyRate = readRateCents(entry.hourlyRate?.amount);
+    if (hourlyRate !== null) return hourlyRate;
     const amountRate = getAmountRate(entry.amounts, durationHours, AMOUNT_RATE_TYPES.earned);
     return Number.isFinite(amountRate) ? amountRate : 0;
 }
 
 function getCostRate(entry, durationHours) {
     const rawCostRate = entry.costRate?.amount ?? entry.costRate;
-    const parsedCostRate = Number(rawCostRate);
-    if (Number.isFinite(parsedCostRate)) {
-        return parsedCostRate / 100;
-    }
+    const costRate = readRateCents(rawCostRate);
+    if (costRate !== null) return costRate;
     const amountRate = getAmountRate(entry.amounts, durationHours, AMOUNT_RATE_TYPES.cost);
     if (Number.isFinite(amountRate)) return amountRate;
-    return getRateFromCents(entry.hourlyRate?.amount);
+    const hourlyRate = readRateCents(entry.hourlyRate?.amount);
+    return hourlyRate !== null ? hourlyRate : 0;
 }
 
 function buildAmountBreakdown(rate, regular, overtime, multiplier, tier2EligibleHours, tier2Multiplier) {
