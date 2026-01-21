@@ -1361,6 +1361,22 @@ body.density-spacious {
   }
 }
 
+@media (max-width: 640px) {
+  #detailedCard.amount-profit .report-table th:nth-child(1),
+  #detailedCard.amount-profit .report-table th:nth-child(2),
+  #detailedCard.amount-profit .report-table th:nth-child(3),
+  #detailedCard.amount-profit .report-table th:nth-child(4),
+  #detailedCard.amount-profit .report-table th:nth-child(5),
+  #detailedCard.amount-profit .report-table th:nth-child(6),
+  #detailedCard.amount-profit .report-table th:nth-child(7) {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+}
+
 @media (max-width: 480px) {
 /* Tighten spacing further for small phones and very narrow viewports */
   .report-table {
