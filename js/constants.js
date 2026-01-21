@@ -209,7 +209,7 @@ export const WEEKDAYS = (() => {
  * @property {boolean} applyHolidays - Apply holidays to capacity calculation
  * @property {boolean} applyTimeOff - Apply time off to capacity calculation
  * @property {boolean} showBillableBreakdown - Show billable breakdown in UI
- * @property {'earned'|'cost'} amountDisplay - Amount display mode
+ * @property {'earned'|'cost'|'profit'} amountDisplay - Amount display mode
  * @property {string} overtimeBasis - 'daily' or 'weekly'
  */
 

@@ -238,7 +238,8 @@ export const Api = {
         const pageSize = 200; // Max allowed
         let hasMore = true;
         const amountDisplay = String(store.config.amountDisplay || 'earned').toLowerCase();
-        const amountShown = amountDisplay === 'cost' ? 'COST' : 'EARNED';
+        const amountShownMap = { earned: 'EARNED', cost: 'COST', profit: 'PROFIT' };
+        const amountShown = amountShownMap[amountDisplay] || 'EARNED';
 
         console.log(`Fetching detailed report for ${startIso} to ${endIso}...`);
 

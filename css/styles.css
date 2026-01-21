@@ -815,14 +815,8 @@ body.density-spacious {
   min-width: 90px;
 }
 
-#detailedCard .report-table th:nth-child(13), /* Profit $ */
+#detailedCard .report-table th:nth-child(13), /* Status */
 #detailedCard .report-table td:nth-child(13) {
-  width: 8%;
-  min-width: 80px;
-}
-
-#detailedCard .report-table th:nth-child(14), /* Status */
-#detailedCard .report-table td:nth-child(14) {
   width: 12%;
   min-width: 120px;
 }
@@ -889,9 +883,7 @@ body.density-spacious {
 #detailedCard .report-table th:nth-child(11),
 #detailedCard .report-table td:nth-child(11),
 #detailedCard .report-table th:nth-child(12),
-#detailedCard .report-table td:nth-child(12),
-#detailedCard .report-table th:nth-child(13),
-#detailedCard .report-table td:nth-child(13) {
+#detailedCard .report-table td:nth-child(12) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

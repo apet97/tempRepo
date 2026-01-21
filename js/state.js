@@ -133,7 +133,7 @@ class Store {
                     this.config = { ...this.config, ...parsed.config };
                 }
                 const amountDisplay = String(this.config.amountDisplay || '').toLowerCase();
-                const validAmountDisplays = new Set(['earned', 'cost']);
+                const validAmountDisplays = new Set(['earned', 'cost', 'profit']);
                 this.config.amountDisplay = validAmountDisplays.has(amountDisplay)
                     ? amountDisplay
                     : 'earned';

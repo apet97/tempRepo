@@ -196,15 +196,20 @@ function syncAmountDisplayAvailability(entries) {
     if (!amountDisplayEl) return;
 
     const costOption = amountDisplayEl.querySelector('option[value="cost"]');
+    const profitOption = amountDisplayEl.querySelector('option[value="profit"]');
     if (costOption) {
         costOption.hidden = !costRatesAvailable;
         costOption.disabled = !costRatesAvailable;
     }
+    if (profitOption) {
+        profitOption.hidden = !costRatesAvailable;
+        profitOption.disabled = !costRatesAvailable;
+    }
 
-    const validDisplays = new Set(['earned', 'cost']);
+    const validDisplays = new Set(['earned', 'cost', 'profit']);
     let nextDisplay = String(store.config.amountDisplay || '').toLowerCase();
     if (!validDisplays.has(nextDisplay)) nextDisplay = 'earned';
-    if (!costRatesAvailable && nextDisplay === 'cost') {
+    if (!costRatesAvailable && (nextDisplay === 'cost' || nextDisplay === 'profit')) {
         nextDisplay = 'earned';
     }
 
@@ -265,14 +270,14 @@ export function bindConfigEvents() {
 
     const amountDisplayEl = document.getElementById('amountDisplay');
     if (amountDisplayEl) {
-        const validDisplays = new Set(['earned', 'cost']);
+        const validDisplays = new Set(['earned', 'cost', 'profit']);
         const currentDisplay = String(store.config.amountDisplay || '').toLowerCase();
         amountDisplayEl.value = validDisplays.has(currentDisplay) ? currentDisplay : 'earned';
         amountDisplayEl.addEventListener('change', (e) => {
             const nextValue = String(e.target.value || '').toLowerCase();
             const allowCost = store.ui.hasCostRates !== false;
             let normalized = validDisplays.has(nextValue) ? nextValue : 'earned';
-            if (!allowCost && normalized === 'cost') {
+            if (!allowCost && (normalized === 'cost' || normalized === 'profit')) {
                 normalized = 'earned';
             }
             store.config.amountDisplay = normalized;

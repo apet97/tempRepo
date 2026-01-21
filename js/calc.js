@@ -45,7 +45,8 @@ function calculateDuration(entry) {
 
 const AMOUNT_RATE_TYPES = {
     earned: 'EARNED',
-    cost: 'COST'
+    cost: 'COST',
+    profit: 'PROFIT'
 };
 
 function normalizeAmountDisplay(value) {
@@ -630,8 +631,21 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
                     tier2EligibleHours,
                     userTier2Multiplier
                 );
+                const profitRate = earnedEffectiveRate - costEffectiveRate;
+                const profitAmounts = buildAmountBreakdown(
+                    profitRate,
+                    regular,
+                    overtime,
+                    multiplier,
+                    tier2EligibleHours,
+                    userTier2Multiplier
+                );
                 const profitTotal = earnedAmounts.totalAmountWithOT - costAmounts.totalAmountWithOT;
-                const displayAmounts = amountDisplay === 'cost' ? costAmounts : earnedAmounts;
+                const displayAmounts = amountDisplay === 'cost'
+                    ? costAmounts
+                    : amountDisplay === 'profit'
+                        ? profitAmounts
+                        : earnedAmounts;
 
                 user.totals.amount += displayAmounts.totalAmountWithOT;
                 user.totals.amountBase += displayAmounts.totalAmountNoOT;

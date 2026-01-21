@@ -606,6 +606,32 @@ describe('Calculation Module - calculateAnalysis', () => {
       expect(day.entries[0].analysis.profit).toBe(220);
     });
 
+    it('should use profit amounts when amount display is profit', () => {
+      mockStore.config.amountDisplay = 'profit';
+
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T17:00:00Z',
+          duration: 'PT8H'
+        },
+        hourlyRate: { amount: 5000 }, // $50/hour earned
+        costRate: { amount: 3000 }, // $30/hour cost
+        billable: true
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      const userResult = results.find(u => u.userId === 'user0');
+      expect(userResult.totals.amount).toBe(160);
+      const day = userResult.days.get('2025-01-15');
+      expect(day.entries[0].analysis.hourlyRate).toBe(20);
+      expect(day.entries[0].analysis.totalAmountWithOT).toBe(160);
+    });
+
     it('should use earnedRate and costRate (cents) when provided', () => {
       const entries = [{
         id: 'entry_1',
