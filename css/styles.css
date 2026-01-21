@@ -971,15 +971,15 @@ body.density-spacious {
 #detailedCard.amount-profit .report-table th:nth-child(5),
 #detailedCard.amount-profit .report-table th:nth-child(6),
 #detailedCard.amount-profit .report-table th:nth-child(7) {
-  white-space: normal;
-  overflow: visible;
+  white-space: nowrap;
+  overflow: hidden;
   text-overflow: clip;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
   font-size: 11px;
-  line-height: 1.15;
-  padding-left: 8px;
-  padding-right: 8px;
+  line-height: 1.1;
+  padding-left: 6px;
+  padding-right: 6px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(8),
