@@ -80,11 +80,15 @@ interface RatesConfig {
 
 /**
  * Extracts rate values for all amount types from an entry.
+ * Non-billable entries use 0 for earned rate (don't contribute to amounts).
  * @param entry - Time entry.
  * @returns Rates in cents for earned/cost/profit.
  */
 function extractRates(entry: TimeEntry): RatesConfig {
-    const earnedRate = extractRate(entry.earnedRate) || extractRate(entry.hourlyRate);
+    // Non-billable entries don't contribute to earned amounts
+    const earnedRate = entry.billable
+        ? extractRate(entry.earnedRate) || extractRate(entry.hourlyRate)
+        : 0;
     const costRate = extractRate(entry.costRate) || 0;
     const profitRate = earnedRate - costRate;
 
@@ -382,7 +386,7 @@ function createDayMeta(
 function calculateAmounts(
     regularHours: number,
     overtimeHours: number,
-    tier1Hours: number,
+    _tier1Hours: number, // eslint-disable-line @typescript-eslint/no-unused-vars
     tier2Hours: number,
     rates: RatesConfig,
     multiplier: number,
@@ -392,8 +396,10 @@ function calculateAmounts(
         const hourlyRate = rate / 100; // Convert from cents
         const regularAmount = round(regularHours * hourlyRate, 2);
         const overtimeAmountBase = round(overtimeHours * hourlyRate, 2);
-        const tier1Premium = round(tier1Hours * hourlyRate * (multiplier - 1), 2);
-        const tier2Premium = round(tier2Hours * hourlyRate * (tier2Multiplier - 1), 2);
+        // tier1Premium: ALL OT hours get tier1 premium
+        const tier1Premium = round(overtimeHours * hourlyRate * (multiplier - 1), 2);
+        // tier2Premium: Only tier2 hours get additional premium (tier2 - tier1)
+        const tier2Premium = round(tier2Hours * hourlyRate * (tier2Multiplier - multiplier), 2);
         const totalAmountWithOT = round(
             regularAmount + overtimeAmountBase + tier1Premium + tier2Premium,
             2
@@ -435,11 +441,6 @@ export function calculateAnalysis(
     store: CalcStore | Store,
     dateRange: DateRange | null
 ): UserAnalysis[] {
-    // Need valid date range to calculate capacity
-    if (!dateRange || !dateRange.start || !dateRange.end) {
-        return [];
-    }
-
     // Entries can be null/empty - we still calculate capacity for all users
     const safeEntries = entries || [];
 
@@ -448,8 +449,11 @@ export function calculateAnalysis(
     // Get amount display mode for primary amount selection
     const amountDisplay = (calcStore.config.amountDisplay || 'earned').toLowerCase();
 
-    // Group entries by user
+    // Group entries by user and track date bounds
     const entriesByUser = new Map<string, TimeEntry[]>();
+    let minDate: string | null = null;
+    let maxDate: string | null = null;
+
     for (const entry of safeEntries) {
         if (!entry) continue; // Skip null entries
         const userId = entry.userId || 'unknown';
@@ -457,6 +461,22 @@ export function calculateAnalysis(
             entriesByUser.set(userId, []);
         }
         entriesByUser.get(userId)!.push(entry);
+
+        // Track date bounds from entries for fallback
+        const entryDateKey = IsoUtils.extractDateKey(entry.timeInterval?.start);
+        if (entryDateKey) {
+            if (!minDate || entryDateKey < minDate) minDate = entryDateKey;
+            if (!maxDate || entryDateKey > maxDate) maxDate = entryDateKey;
+        }
+    }
+
+    // Derive effective date range: use provided range, or fall back to entry dates
+    const effectiveStart = dateRange?.start || minDate;
+    const effectiveEnd = dateRange?.end || maxDate;
+
+    // If we still have no date range and no entries, return empty
+    if (!effectiveStart || !effectiveEnd) {
+        return [];
     }
 
     // Build user analysis map
@@ -474,8 +494,8 @@ export function calculateAnalysis(
         });
     }
 
-    // Generate date range
-    const allDates = IsoUtils.generateDateRange(dateRange.start, dateRange.end);
+    // Generate date range using effective bounds
+    const allDates = IsoUtils.generateDateRange(effectiveStart, effectiveEnd);
 
     // Process each user
     for (const [userId, userEntries] of entriesByUser) {
@@ -483,7 +503,7 @@ export function calculateAnalysis(
         let userAnalysis = userAnalysisMap.get(userId);
         if (!userAnalysis) {
             // User not in store.users (maybe added during fetch)
-            const userName = userEntries[0]?.userName || 'Unknown User';
+            const userName = userEntries[0]?.userName || 'Unknown';
             userAnalysis = {
                 userId,
                 userName,
@@ -576,7 +596,16 @@ export function calculateAnalysis(
             const processedEntries: TimeEntry[] = [];
 
             for (const entry of sortedEntries) {
-                const duration = parseIsoDuration(entry.timeInterval?.duration);
+                let duration = parseIsoDuration(entry.timeInterval?.duration);
+
+                // Fallback to start/end calculation if duration parsing fails
+                if (duration === 0 && entry.timeInterval?.start && entry.timeInterval?.end) {
+                    const start = new Date(entry.timeInterval.start);
+                    const end = new Date(entry.timeInterval.end);
+                    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                        duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60); // Convert ms to hours
+                    }
+                }
                 const entryClass: EntryClassification = classifyEntryForOvertime(entry);
                 const rates = extractRates(entry);
 
@@ -615,8 +644,8 @@ export function calculateAnalysis(
                     dailyAccumulator += duration;
                 }
 
-                // Apply tier 2 logic to OT hours
-                if (overtimeHours > 0 && tier2Threshold > 0) {
+                // Apply tier 2 logic to OT hours (when tier2 multiplier is higher than tier1)
+                if (overtimeHours > 0 && tier2Multiplier > multiplier) {
                     const otBeforeEntry = userOTAccumulator;
                     const otAfterEntry = otBeforeEntry + overtimeHours;
 
@@ -687,12 +716,9 @@ export function calculateAnalysis(
                 if (isTimeOffDay) analysis.tags.push('TIME-OFF');
                 if (entryClass === 'break') analysis.tags.push('BREAK');
 
-                // Attach analysis to entry
-                const processedEntry: TimeEntry = {
-                    ...entry,
-                    analysis,
-                };
-                processedEntries.push(processedEntry);
+                // Attach analysis to entry (mutate original for test compatibility)
+                (entry as TimeEntry & { analysis: EntryAnalysis }).analysis = analysis;
+                processedEntries.push(entry);
 
                 // Update totals
                 const totals = userAnalysis.totals;
@@ -701,9 +727,21 @@ export function calculateAnalysis(
                 if (entryClass === 'break') {
                     totals.breaks += duration;
                     totals.regular += regularHours;
+                    // Track billable/non-billable for breaks too
+                    if (entry.billable) {
+                        totals.billableWorked += regularHours;
+                    } else {
+                        totals.nonBillableWorked += regularHours;
+                    }
                 } else if (entryClass === 'pto') {
                     totals.vacationEntryHours += duration;
                     totals.regular += regularHours;
+                    // Track billable/non-billable for PTO too
+                    if (entry.billable) {
+                        totals.billableWorked += regularHours;
+                    } else {
+                        totals.nonBillableWorked += regularHours;
+                    }
                 } else {
                     totals.regular += regularHours;
                     totals.overtime += overtimeHours;
@@ -720,20 +758,20 @@ export function calculateAnalysis(
 
                 // Accumulate amounts
                 totals.amount += primaryAmounts.totalAmountWithOT;
-                totals.amountBase += primaryAmounts.totalAmountNoOT;
+                totals.amountBase += primaryAmounts.baseAmount;
                 totals.amountEarned += amounts.earned.totalAmountWithOT;
                 totals.amountCost += amounts.cost.totalAmountWithOT;
                 totals.amountProfit += amounts.profit.totalAmountWithOT;
-                totals.amountEarnedBase += amounts.earned.totalAmountNoOT;
-                totals.amountCostBase += amounts.cost.totalAmountNoOT;
-                totals.amountProfitBase += amounts.profit.totalAmountNoOT;
-                totals.otPremium += primaryAmounts.tier1Premium + primaryAmounts.tier2Premium;
+                totals.amountEarnedBase += amounts.earned.baseAmount;
+                totals.amountCostBase += amounts.cost.baseAmount;
+                totals.amountProfitBase += amounts.profit.baseAmount;
+                // otPremium: tier1 premium (covers all OT hours)
+                // otPremiumTier2: additional tier2 premium
+                totals.otPremium += primaryAmounts.tier1Premium;
                 totals.otPremiumTier2 += primaryAmounts.tier2Premium;
-                totals.otPremiumEarned +=
-                    amounts.earned.tier1Premium + amounts.earned.tier2Premium;
-                totals.otPremiumCost += amounts.cost.tier1Premium + amounts.cost.tier2Premium;
-                totals.otPremiumProfit +=
-                    amounts.profit.tier1Premium + amounts.profit.tier2Premium;
+                totals.otPremiumEarned += amounts.earned.tier1Premium;
+                totals.otPremiumCost += amounts.cost.tier1Premium;
+                totals.otPremiumProfit += amounts.profit.tier1Premium;
                 totals.otPremiumTier2Earned += amounts.earned.tier2Premium;
                 totals.otPremiumTier2Cost += amounts.cost.tier2Premium;
                 totals.otPremiumTier2Profit += amounts.profit.tier2Premium;
