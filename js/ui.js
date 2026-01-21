@@ -703,6 +703,7 @@ export function renderDetailedTable(users, activeFilter = null) {
   };
 
   const amountHeaderNote = isProfitMode ? '<div class="amount-header-sub">Amt / Cost / Profit</div>' : '';
+  const amountOnlyNote = isProfitMode ? '<div class="amount-header-sub">Amt</div>' : '';
   let html = `
   <div class="table-scroll" style="margin-top: 10px;">
     <table class="report-table">
@@ -716,10 +717,10 @@ export function renderDetailedTable(users, activeFilter = null) {
           <th class="text-right">Overtime</th>
           <th class="text-right">Billable</th>
           <th class="text-right amount-cell">${amountLabels.rate}${amountHeaderNote}</th>
-          <th class="text-right amount-cell">Regular $</th>
-          <th class="text-right amount-cell">OT $</th>
-          <th class="text-right amount-cell">T2 $</th>
-          <th class="text-right amount-cell">Total $</th>
+          <th class="text-right amount-cell">Regular $${amountOnlyNote}</th>
+          <th class="text-right amount-cell">OT $${amountOnlyNote}</th>
+          <th class="text-right amount-cell">T2 $${amountOnlyNote}</th>
+          <th class="text-right amount-cell">Total $${amountHeaderNote}</th>
           <th class="text-right">Status</th>
         </tr>
       </thead>
@@ -801,24 +802,23 @@ export function renderDetailedTable(users, activeFilter = null) {
       ? '<span class="badge badge-billable">✓</span>'
       : '<span style="color:var(--text-muted)">—</span>';
 
+    const amountsByType = e.analysis?.amounts || {};
+    const earnedAmounts = amountsByType.earned || {};
     const rateCell = isProfitMode
-      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.rate, 'right')
+      ? buildProfitStacks(amountsByType, (amount) => amount.rate, 'right')
       : formatCurrency(e.analysis?.hourlyRate || 0);
     const regularCell = isProfitMode
-      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.regularAmount, 'right')
+      ? formatCurrency(earnedAmounts.regularAmount || 0)
       : formatCurrency(e.analysis?.regularAmount || 0);
+    const earnedOtAmount = (earnedAmounts.overtimeAmountBase || 0) + (earnedAmounts.tier1Premium || 0);
     const otCell = isProfitMode
-      ? buildProfitStacks(
-        e.analysis?.amounts,
-        (amount) => (amount.overtimeAmountBase || 0) + (amount.tier1Premium || 0),
-        'right'
-      )
+      ? formatCurrency(earnedOtAmount)
       : formatCurrency((e.analysis?.overtimeAmountBase || 0) + (e.analysis?.tier1Premium || 0));
     const t2Cell = isProfitMode
-      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.tier2Premium, 'right')
+      ? formatCurrency(earnedAmounts.tier2Premium || 0)
       : formatCurrency(e.analysis?.tier2Premium || 0);
     const totalCell = isProfitMode
-      ? buildProfitStacks(e.analysis?.amounts, (amount) => amount.totalAmountWithOT, 'right')
+      ? buildProfitStacks(amountsByType, (amount) => amount.totalAmountWithOT, 'right')
       : formatCurrency(e.analysis?.totalAmountWithOT || 0);
 
     html += `

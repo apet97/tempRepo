@@ -889,6 +889,12 @@ body.density-spacious {
   text-overflow: ellipsis;
 }
 
+#detailedCard .report-table th.amount-cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 #detailedCard.amount-profit .report-table th.amount-cell,
 #detailedCard.amount-profit .report-table td.amount-cell {
   white-space: normal;
@@ -1031,6 +1037,11 @@ body.density-spacious {
   padding: var(--input-padding);
   border: 1px solid var(--border-color);
   border-radius: 6px;
+}
+
+#amountDisplay {
+  width: 96px;
+  min-width: 96px;
 }
 
 /* API Status Banner */
