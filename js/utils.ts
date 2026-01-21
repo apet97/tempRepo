@@ -4,34 +4,46 @@
  * and data sanitization. These functions are pure and stateless where possible.
  */
 
-import { ERROR_MESSAGES, ERROR_TYPES } from './constants.js';
+import { ERROR_MESSAGES, ERROR_TYPES, type ErrorType, type FriendlyError } from './constants.js';
+// Types imported as needed by callers
 
 // ==================== TYPE VALIDATION ====================
 
 /**
- * Creates a validation error.
- * @param {string} message - The error message.
- * @returns {import('./constants.js').FriendlyError} The structured error.
- * @private
+ * Extended error with status code
  */
-function createValidationError(message) {
+interface ErrorWithStatus extends Error {
+    status?: number;
+}
+
+/**
+ * Creates a validation error.
+ * @param message - The error message.
+ * @returns The structured error.
+ */
+function createValidationError(message: string): FriendlyError {
     return createUserFriendlyError(new Error(message), ERROR_TYPES.VALIDATION);
 }
 
 /**
  * Validates that required fields exist in an object.
- * @param {Object} obj - Object to validate.
- * @param {Array<string>} requiredFields - Array of required field names.
- * @param {string} [context='Object'] - Context for error messages.
- * @returns {boolean} true if valid.
- * @throws {Error} with VALIDATION type if validation fails.
+ * @param obj - Object to validate.
+ * @param requiredFields - Array of required field names.
+ * @param context - Context for error messages.
+ * @returns true if valid.
+ * @throws Error with VALIDATION type if validation fails.
  */
-export function validateRequiredFields(obj, requiredFields, context = 'Object') {
+export function validateRequiredFields(
+    obj: unknown,
+    requiredFields: string[],
+    context = 'Object'
+): boolean {
     if (!obj || typeof obj !== 'object') {
         throw createValidationError(`${context} is not an object`);
     }
 
-    const missing = requiredFields.filter(field => !obj[field]);
+    const record = obj as Record<string, unknown>;
+    const missing = requiredFields.filter((field) => !record[field]);
 
     if (missing.length > 0) {
         throw createValidationError(`${context} missing required fields: ${missing.join(', ')}`);
@@ -42,12 +54,12 @@ export function validateRequiredFields(obj, requiredFields, context = 'Object') 
 
 /**
  * Validates that a value is a valid number.
- * @param {*} value - Value to validate.
- * @param {string} field - Field name for error messages.
- * @returns {number} The validated number.
- * @throws {Error} with VALIDATION type if invalid.
+ * @param value - Value to validate.
+ * @param field - Field name for error messages.
+ * @returns The validated number.
+ * @throws Error with VALIDATION type if invalid.
  */
-export function validateNumber(value, field) {
+export function validateNumber(value: unknown, field: string): number {
     if (value === null || value === undefined) {
         throw createValidationError(`${field} is required`);
     }
@@ -60,12 +72,12 @@ export function validateNumber(value, field) {
 
 /**
  * Validates that a value is a valid string.
- * @param {*} value - Value to validate.
- * @param {string} field - Field name for error messages.
- * @returns {string} The validated string.
- * @throws {Error} with VALIDATION type if invalid.
+ * @param value - Value to validate.
+ * @param field - Field name for error messages.
+ * @returns The validated string.
+ * @throws Error with VALIDATION type if invalid.
  */
-export function validateString(value, field) {
+export function validateString(value: unknown, field: string): string {
     if (value === null || value === undefined || typeof value !== 'string') {
         throw createValidationError(`${field} must be a non-empty string`);
     }
@@ -78,12 +90,12 @@ export function validateString(value, field) {
 
 /**
  * Validates that a value is a valid ISO date string.
- * @param {*} value - Value to validate.
- * @param {string} field - Field name for error messages.
- * @returns {string} The validated date string.
- * @throws {Error} with VALIDATION type if invalid.
+ * @param value - Value to validate.
+ * @param field - Field name for error messages.
+ * @returns The validated date string.
+ * @throws Error with VALIDATION type if invalid.
  */
-export function validateISODateString(value, field) {
+export function validateISODateString(value: unknown, field: string): string {
     const str = validateString(value, field);
 
     // Basic ISO format check (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)
@@ -101,40 +113,59 @@ export function validateISODateString(value, field) {
 }
 
 /**
- * Validates a time entry object structure.
- * @param {*} entry - Entry to validate.
- * @returns {boolean} true if valid.
- * @throws {Error} with VALIDATION type if invalid.
+ * Time entry for validation
  */
-export function validateTimeEntry(entry) {
+interface TimeEntryLike {
+    id?: string;
+    userId?: string;
+    timeInterval?: {
+        start?: string;
+        end?: string;
+        duration?: string;
+    };
+    hourlyRate?: {
+        amount?: number;
+    };
+    billable?: boolean;
+}
+
+/**
+ * Validates a time entry object structure.
+ * @param entry - Entry to validate.
+ * @returns true if valid.
+ * @throws Error with VALIDATION type if invalid.
+ */
+export function validateTimeEntry(entry: unknown): boolean {
     if (!entry || typeof entry !== 'object') {
         throw createValidationError('Time entry must be an object');
     }
 
+    const e = entry as TimeEntryLike;
+
     // Required fields
-    validateString(entry.id, 'Time entry ID');
-    validateString(entry.userId, 'Time entry user ID');
+    validateString(e.id, 'Time entry ID');
+    validateString(e.userId, 'Time entry user ID');
 
     // Validate timeInterval
-    validateRequiredFields(entry, ['timeInterval'], 'Time entry');
-    const interval = entry.timeInterval;
+    validateRequiredFields(e, ['timeInterval'], 'Time entry');
+    const interval = e.timeInterval;
     validateRequiredFields(interval, ['start', 'end'], 'Time interval');
 
-    validateISODateString(interval.start, 'Time entry start time');
-    validateISODateString(interval.end, 'Time entry end time');
+    validateISODateString(interval?.start, 'Time entry start time');
+    validateISODateString(interval?.end, 'Time entry end time');
 
     // Optional fields validation
-    if (interval.duration) {
+    if (interval?.duration) {
         validateString(interval.duration, 'Time entry duration');
     }
 
-    if (entry.hourlyRate) {
-        validateRequiredFields(entry.hourlyRate, ['amount'], 'Time entry hourly rate');
-        validateNumber(entry.hourlyRate.amount, 'Hourly rate amount');
+    if (e.hourlyRate) {
+        validateRequiredFields(e.hourlyRate, ['amount'], 'Time entry hourly rate');
+        validateNumber(e.hourlyRate.amount, 'Hourly rate amount');
     }
 
-    if (entry.billable !== undefined) {
-        if (typeof entry.billable !== 'boolean') {
+    if (e.billable !== undefined) {
+        if (typeof e.billable !== 'boolean') {
             throw createValidationError('Time entry billable must be a boolean');
         }
     }
@@ -143,44 +174,65 @@ export function validateTimeEntry(entry) {
 }
 
 /**
- * Validates a user object structure.
- * @param {*} user - User to validate.
- * @returns {boolean} true if valid.
- * @throws {Error} with VALIDATION type if invalid.
+ * User-like object for validation
  */
-export function validateUser(user) {
+interface UserLike {
+    id?: string;
+    name?: string;
+}
+
+/**
+ * Validates a user object structure.
+ * @param user - User to validate.
+ * @returns true if valid.
+ * @throws Error with VALIDATION type if invalid.
+ */
+export function validateUser(user: unknown): boolean {
     if (!user || typeof user !== 'object') {
         throw createValidationError('User must be an object');
     }
 
-    validateString(user.id, 'User ID');
-    validateString(user.name, 'User name');
+    const u = user as UserLike;
+    validateString(u.id, 'User ID');
+    validateString(u.name, 'User name');
 
     return true;
 }
 
 /**
- * Validates a user profile object structure.
- * @param {*} profile - Profile to validate.
- * @returns {boolean} true if valid.
- * @throws {Error} with VALIDATION type if invalid.
+ * Profile-like object for validation
  */
-export function validateUserProfile(profile) {
+interface ProfileLike {
+    workCapacity?: string;
+    workingDays?: unknown[];
+}
+
+/**
+ * Validates a user profile object structure.
+ * @param profile - Profile to validate.
+ * @returns true if valid.
+ * @throws Error with VALIDATION type if invalid.
+ */
+export function validateUserProfile(profile: unknown): boolean {
     if (!profile || typeof profile !== 'object') {
         throw createValidationError('User profile must be an object');
     }
 
-    if (profile.workCapacity !== undefined) {
-        validateString(profile.workCapacity, 'Work capacity');
+    const p = profile as ProfileLike;
+
+    if (p.workCapacity !== undefined) {
+        validateString(p.workCapacity, 'Work capacity');
     }
 
-    if (profile.workingDays !== undefined) {
-        if (!Array.isArray(profile.workingDays)) {
+    if (p.workingDays !== undefined) {
+        if (!Array.isArray(p.workingDays)) {
             throw createValidationError('Working days must be an array');
         }
-        profile.workingDays.forEach((day, index) => {
-            if (typeof day !== 'string' || day.trim() === '') {
-                throw createValidationError(`Working day at index ${index} must be a non-empty string`);
+        p.workingDays.forEach((day, index) => {
+            if (typeof day !== 'string' || (day as string).trim() === '') {
+                throw createValidationError(
+                    `Working day at index ${index} must be a non-empty string`
+                );
             }
         });
     }
@@ -190,12 +242,12 @@ export function validateUserProfile(profile) {
 
 /**
  * Validates a date range.
- * @param {string} startDate - Start date in YYYY-MM-DD format.
- * @param {string} endDate - End date in YYYY-MM-DD format.
- * @returns {boolean} true if valid.
- * @throws {Error} with VALIDATION type if validation fails.
+ * @param startDate - Start date in YYYY-MM-DD format.
+ * @param endDate - End date in YYYY-MM-DD format.
+ * @returns true if valid.
+ * @throws Error with VALIDATION type if validation fails.
  */
-export function validateDateRange(startDate, endDate) {
+export function validateDateRange(startDate: string, endDate: string): boolean {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -215,29 +267,31 @@ export function validateDateRange(startDate, endDate) {
 /**
  * Classifies an error object into a predefined category.
  * Used to determine retry logic and user-facing error messages.
- * 
- * @param {Error} error - The error object to classify.
- * @returns {string} One of the ERROR_TYPES constants.
+ *
+ * @param error - The error object to classify.
+ * @returns One of the ERROR_TYPES constants.
  */
-export function classifyError(error) {
+export function classifyError(error: unknown): ErrorType {
     if (!error) return ERROR_TYPES.UNKNOWN;
 
+    const err = error as ErrorWithStatus;
+
     // Network errors (fetch failures, timeouts)
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    if (err.name === 'TypeError' && err.message?.includes('fetch')) {
         return ERROR_TYPES.NETWORK;
     }
-    if (error.name === 'AbortError') {
+    if (err.name === 'AbortError') {
         return ERROR_TYPES.NETWORK;
     }
 
     // HTTP status based errors (if attached to the error object)
-    if (error.status === 401 || error.status === 403) {
+    if (err.status === 401 || err.status === 403) {
         return ERROR_TYPES.AUTH;
     }
-    if (error.status >= 400 && error.status < 500) {
+    if (err.status && err.status >= 400 && err.status < 500) {
         return ERROR_TYPES.VALIDATION;
     }
-    if (error.status >= 500) {
+    if (err.status && err.status >= 500) {
         return ERROR_TYPES.API;
     }
 
@@ -246,23 +300,24 @@ export function classifyError(error) {
 
 /**
  * Creates a structured, user-friendly error object from a raw error.
- * 
- * @param {Error|string} error - The raw error or error message.
- * @param {string} [type] - Optional explicit error type override.
- * @returns {import('./constants.js').FriendlyError} Structured error object.
+ *
+ * @param error - The raw error or error message.
+ * @param type - Optional explicit error type override.
+ * @returns Structured error object.
  */
-export function createUserFriendlyError(error, type) {
+export function createUserFriendlyError(error: Error | string, type?: ErrorType): FriendlyError {
     const errorType = type || classifyError(error);
     const errorMessage = ERROR_MESSAGES[errorType] || ERROR_MESSAGES[ERROR_TYPES.UNKNOWN];
+    const err = typeof error === 'string' ? new Error(error) : error;
 
     return {
         type: errorType,
         title: errorMessage.title,
         message: errorMessage.message,
         action: errorMessage.action,
-        originalError: error,
+        originalError: err,
         timestamp: new Date().toISOString(),
-        stack: error?.stack
+        stack: err?.stack,
     };
 }
 
@@ -271,12 +326,12 @@ export function createUserFriendlyError(error, type) {
 /**
  * Rounds a number to a specific number of decimal places.
  * Crucial for avoiding floating point drift in currency and hour calculations.
- * 
- * @param {number} num - The number to round.
- * @param {number} [decimals=4] - Number of decimal places.
- * @returns {number} The rounded number.
+ *
+ * @param num - The number to round.
+ * @param decimals - Number of decimal places.
+ * @returns The rounded number.
  */
-export function round(num, decimals = 4) {
+export function round(num: number, decimals = 4): number {
     if (!Number.isFinite(num)) return 0;
     const factor = Math.pow(10, decimals);
     return Math.round((num + Number.EPSILON) * factor) / factor;
@@ -284,23 +339,27 @@ export function round(num, decimals = 4) {
 
 /**
  * Safely parses a JSON string, returning a fallback value on failure.
- * 
- * @param {string|null} text - The JSON string to parse.
- * @param {*} fallback - Value to return if parsing fails.
- * @returns {*} Parsed object or fallback.
+ *
+ * @param text - The JSON string to parse.
+ * @param fallback - Value to return if parsing fails.
+ * @returns Parsed object or fallback.
  */
-export function safeJSONParse(text, fallback) {
+export function safeJSONParse<T>(text: string | null, fallback: T): T {
     if (!text) return fallback;
-    try { return JSON.parse(text); } catch (e) { return fallback; }
+    try {
+        return JSON.parse(text) as T;
+    } catch {
+        return fallback;
+    }
 }
 
 /**
  * Escapes HTML special characters to prevent XSS.
- * 
- * @param {string} str - The input string.
- * @returns {string} Escaped string safe for HTML insertion.
+ *
+ * @param str - The input string.
+ * @returns Escaped string safe for HTML insertion.
  */
-export function escapeHtml(str) {
+export function escapeHtml(str: string | null | undefined): string {
     if (!str) return '';
     return String(str)
         .replace(/&/g, '&amp;')
@@ -314,11 +373,11 @@ export function escapeHtml(str) {
  * Escapes a value for inclusion in a CSV file.
  * Handles quotes, commas, and newlines by wrapping in double quotes.
  * Escapes existing double quotes by doubling them.
- * 
- * @param {*} str - The value to escape.
- * @returns {string} The CSV-safe string.
+ *
+ * @param str - The value to escape.
+ * @returns The CSV-safe string.
  */
-export function escapeCsv(str) {
+export function escapeCsv(str: unknown): string {
     if (str === null || str === undefined) return '';
     const stringValue = String(str);
     if (/[",\n\r]/.test(stringValue)) {
@@ -331,30 +390,35 @@ export function escapeCsv(str) {
  * Parses an ISO 8601 duration string (e.g., "PT8H30M" or "PT8.5H") into decimal hours.
  * Supports fractional hours, minutes, and seconds.
  *
- * @param {string} durationStr - ISO duration string.
- * @returns {number} Duration in decimal hours.
+ * @param durationStr - ISO duration string.
+ * @returns Duration in decimal hours.
  */
-export function parseIsoDuration(durationStr) {
+export function parseIsoDuration(durationStr: string | null | undefined): number {
     if (!durationStr) return 0;
     // Support fractional values: PT8.5H, PT30.5M, PT45.5S
-    const match = durationStr.match(/PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?/);
+    const match = durationStr.match(
+        /PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?/
+    );
     if (!match) return 0;
-    const hours = parseFloat(match[1] || 0);
-    const minutes = parseFloat(match[2] || 0);
-    const seconds = parseFloat(match[3] || 0);
+    const hours = parseFloat(match[1] || '0');
+    const minutes = parseFloat(match[2] || '0');
+    const seconds = parseFloat(match[3] || '0');
     return hours + minutes / 60 + seconds / 3600;
 }
 
 /**
  * Creates a debounced version of a function.
- * 
- * @param {Function} fn - The function to debounce.
- * @param {number} [waitMs=0] - Delay in milliseconds.
- * @returns {Function} Debounced function.
+ *
+ * @param fn - The function to debounce.
+ * @param waitMs - Delay in milliseconds.
+ * @returns Debounced function.
  */
-export function debounce(fn, waitMs = 0) {
-    let timeoutId = null;
-    return (...args) => {
+export function debounce<T extends (...args: Parameters<T>) => void>(
+    fn: T,
+    waitMs = 0
+): (...args: Parameters<T>) => void {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    return (...args: Parameters<T>) => {
         if (timeoutId) clearTimeout(timeoutId);
         timeoutId = setTimeout(() => fn(...args), waitMs);
     };
@@ -362,12 +426,12 @@ export function debounce(fn, waitMs = 0) {
 
 /**
  * Formats a number as a currency string.
- * 
- * @param {number} amount - The amount to format.
- * @param {string} [currency='USD'] - Currency code.
- * @returns {string} Formatted currency string.
+ *
+ * @param amount - The amount to format.
+ * @param currency - Currency code.
+ * @returns Formatted currency string.
  */
-export function formatCurrency(amount, currency = 'USD') {
+export function formatCurrency(amount: number, currency = 'USD'): string {
     const safeAmount = Number.isFinite(amount) ? amount : 0;
     try {
         return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(safeAmount);
@@ -380,12 +444,12 @@ export function formatCurrency(amount, currency = 'USD') {
  * Formats decimal hours into a readable string (e.g., "8h 30m").
  * Handles edge case where rounding causes 60 minutes.
  *
- * @param {number} hours - Decimal hours.
- * @returns {string} Formatted string.
+ * @param hours - Decimal hours.
+ * @returns Formatted string.
  */
-export function formatHours(hours) {
+export function formatHours(hours: number | null | undefined): string {
     if (hours == null || isNaN(hours)) return '0h';
-    const h = parseFloat(hours);
+    const h = parseFloat(String(hours));
     let whole = Math.floor(h);
     let mins = Math.round((h - whole) * 60);
 
@@ -401,13 +465,13 @@ export function formatHours(hours) {
 /**
  * Formats decimal hours into a fixed two-decimal string (e.g., "8.50").
  *
- * @param {number} hours - Decimal hours.
- * @param {number} [decimals=2] - Decimal places.
- * @returns {string} Formatted decimal string.
+ * @param hours - Decimal hours.
+ * @param decimals - Decimal places.
+ * @returns Formatted decimal string.
  */
-export function formatHoursDecimal(hours, decimals = 2) {
+export function formatHoursDecimal(hours: number | null | undefined, decimals = 2): string {
     if (hours == null || isNaN(hours)) return '0.00';
-    const rounded = round(parseFloat(hours), decimals);
+    const rounded = round(parseFloat(String(hours)), decimals);
     return rounded.toFixed(decimals);
 }
 
@@ -417,11 +481,11 @@ export const IsoUtils = {
     /**
      * Converts a Date object to an ISO date string (YYYY-MM-DD).
      * Uses UTC methods to prevent local timezone shifts from changing the date.
-     * 
-     * @param {Date} date - The date object.
-     * @returns {string} YYYY-MM-DD string.
+     *
+     * @param date - The date object.
+     * @returns YYYY-MM-DD string.
      */
-    toISODate(date) {
+    toISODate(date: Date | null | undefined): string {
         if (!date) return '';
         const y = date.getUTCFullYear();
         const m = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -431,11 +495,11 @@ export const IsoUtils = {
 
     /**
      * Parses a YYYY-MM-DD string into a Date object (at UTC midnight).
-     * 
-     * @param {string} dateStr - YYYY-MM-DD string.
-     * @returns {Date|null} Date object or null if invalid.
+     *
+     * @param dateStr - YYYY-MM-DD string.
+     * @returns Date object or null if invalid.
      */
-    parseDate(dateStr) {
+    parseDate(dateStr: string | null | undefined): Date | null {
         if (!dateStr) return null;
         return new Date(`${dateStr}T00:00:00Z`);
     },
@@ -445,15 +509,15 @@ export const IsoUtils = {
      * Uses LOCAL time interpretation to ensure that entries created in the user's
      * local evening (e.g., 11 PM) are grouped under that calendar day, even if
      * they are technically the next day in UTC.
-     * 
-     * @param {string} isoString - ISO 8601 timestamp.
-     * @returns {string|null} YYYY-MM-DD string.
+     *
+     * @param isoString - ISO 8601 timestamp.
+     * @returns YYYY-MM-DD string.
      */
-    extractDateKey(isoString) {
+    extractDateKey(isoString: string | null | undefined): string | null {
         if (!isoString) return null;
         // If it's already a date string (YYYY-MM-DD), return it
         if (isoString.length === 10) return isoString;
-        
+
         const date = new Date(isoString);
         if (isNaN(date.getTime())) return null;
 
@@ -466,11 +530,11 @@ export const IsoUtils = {
 
     /**
      * Gets the weekday name (e.g., 'MONDAY') for a given date key.
-     * 
-     * @param {string} dateKey - YYYY-MM-DD string.
-     * @returns {string} Uppercase weekday name.
+     *
+     * @param dateKey - YYYY-MM-DD string.
+     * @returns Uppercase weekday name.
      */
-    getWeekdayKey(dateKey) {
+    getWeekdayKey(dateKey: string): string {
         const date = this.parseDate(dateKey);
         if (!date) return '';
         const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
@@ -479,11 +543,11 @@ export const IsoUtils = {
 
     /**
      * Checks if a date falls on a weekend (Sat/Sun).
-     * 
-     * @param {string} dateKey - YYYY-MM-DD string.
-     * @returns {boolean} True if weekend.
+     *
+     * @param dateKey - YYYY-MM-DD string.
+     * @returns True if weekend.
      */
-    isWeekend(dateKey) {
+    isWeekend(dateKey: string): boolean {
         const date = this.parseDate(dateKey);
         if (!date) return false;
         const day = date.getUTCDay(); // 0=Sun, 6=Sat
@@ -492,13 +556,13 @@ export const IsoUtils = {
 
     /**
      * Generates an array of date strings between start and end (inclusive).
-     * 
-     * @param {string} startIso - Start date YYYY-MM-DD.
-     * @param {string} endIso - End date YYYY-MM-DD.
-     * @returns {Array<string>} Array of date strings.
+     *
+     * @param startIso - Start date YYYY-MM-DD.
+     * @param endIso - End date YYYY-MM-DD.
+     * @returns Array of date strings.
      */
-    generateDateRange(startIso, endIso) {
-        const dates = [];
+    generateDateRange(startIso: string, endIso: string): string[] {
+        const dates: string[] = [];
         const current = this.parseDate(startIso);
         const end = this.parseDate(endIso);
         if (!current || !end) return [];
@@ -509,22 +573,22 @@ export const IsoUtils = {
             current.setUTCDate(current.getUTCDate() + 1);
         }
         return dates;
-    }
+    },
 };
 
 /**
  * Calculates the ISO week number for a given date.
  * ISO week 1 is the week containing the first Thursday of the year.
  *
- * @param {Date} date - The date object.
- * @returns {number} ISO week number (1-53).
+ * @param date - The date object.
+ * @returns ISO week number (1-53).
  */
-export function getISOWeek(date) {
+export function getISOWeek(date: Date): number {
     const target = new Date(date.valueOf());
     const dayNumber = (date.getDay() + 6) % 7; // Mon=0, Sun=6
     target.setDate(target.getDate() - dayNumber + 3); // Thursday of the week
     const firstThursday = new Date(target.getFullYear(), 0, 4);
-    const diff = target - firstThursday;
+    const diff = target.getTime() - firstThursday.getTime();
     const weekNumber = 1 + Math.round(diff / 604800000); // 604800000ms = 1 week
     return weekNumber;
 }
@@ -532,24 +596,29 @@ export function getISOWeek(date) {
 /**
  * Formats a date key (YYYY-MM-DD) to a human-readable string (e.g., "Jan 20, 2025").
  *
- * @param {string} dateKey - Date string in YYYY-MM-DD format.
- * @returns {string} Formatted date string.
+ * @param dateKey - Date string in YYYY-MM-DD format.
+ * @returns Formatted date string.
  */
-export function formatDate(dateKey) {
+export function formatDate(dateKey: string): string {
     const date = IsoUtils.parseDate(dateKey);
     if (!date) return dateKey;
 
-    const options = { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' };
+    const options: Intl.DateTimeFormatOptions = {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+    };
     return date.toLocaleDateString(undefined, options);
 }
 
 /**
  * Generates a week key (YYYY-W##) for a given date string.
  *
- * @param {string} dateKey - Date string in YYYY-MM-DD format.
- * @returns {string} Week key in format YYYY-W##.
+ * @param dateKey - Date string in YYYY-MM-DD format.
+ * @returns Week key in format YYYY-W##.
  */
-export function getWeekKey(dateKey) {
+export function getWeekKey(dateKey: string): string {
     const date = IsoUtils.parseDate(dateKey);
     if (!date) return '';
 
@@ -566,10 +635,10 @@ export function getWeekKey(dateKey) {
 /**
  * Formats a week key (YYYY-W##) to a human-readable string (e.g., "Week 3, 2025").
  *
- * @param {string} weekKey - Week key in format YYYY-W##.
- * @returns {string} Formatted week string.
+ * @param weekKey - Week key in format YYYY-W##.
+ * @returns Formatted week string.
  */
-export function formatWeekKey(weekKey) {
+export function formatWeekKey(weekKey: string): string {
     const match = weekKey.match(/^(\d{4})-W(\d{2})$/);
     if (!match) return weekKey;
 
@@ -578,13 +647,25 @@ export function formatWeekKey(weekKey) {
 }
 
 /**
+ * Entry classification result
+ */
+export type EntryClassification = 'break' | 'pto' | 'work';
+
+/**
+ * Entry-like object for classification
+ */
+interface EntryLike {
+    type?: string;
+}
+
+/**
  * Classifies a time entry for overtime calculation.
  * Determines if an entry should be treated as BREAK, PTO, or WORK.
  *
- * @param {Object} entry - Time entry object with a `type` field.
- * @returns {'break' | 'pto' | 'work'} Entry classification.
+ * @param entry - Time entry object with a `type` field.
+ * @returns Entry classification.
  */
-export function classifyEntryForOvertime(entry) {
+export function classifyEntryForOvertime(entry: EntryLike | null | undefined): EntryClassification {
     if (!entry || !entry.type) return 'work';
 
     const type = entry.type;

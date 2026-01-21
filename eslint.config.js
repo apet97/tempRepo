@@ -1,0 +1,97 @@
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import security from 'eslint-plugin-security';
+
+export default tseslint.config(
+    js.configs.recommended,
+    ...tseslint.configs.recommended,
+    {
+        plugins: {
+            security: security
+        },
+        languageOptions: {
+            ecmaVersion: 2020,
+            sourceType: 'module',
+            globals: {
+                // Browser globals
+                window: 'readonly',
+                document: 'readonly',
+                localStorage: 'readonly',
+                fetch: 'readonly',
+                AbortController: 'readonly',
+                AbortSignal: 'readonly',
+                FormData: 'readonly',
+                Blob: 'readonly',
+                URL: 'readonly',
+                URLSearchParams: 'readonly',
+                Headers: 'readonly',
+                Request: 'readonly',
+                Response: 'readonly',
+                Worker: 'readonly',
+                console: 'readonly',
+                setTimeout: 'readonly',
+                clearTimeout: 'readonly',
+                setInterval: 'readonly',
+                clearInterval: 'readonly',
+                requestAnimationFrame: 'readonly',
+                cancelAnimationFrame: 'readonly',
+                performance: 'readonly',
+                navigator: 'readonly',
+                Intl: 'readonly',
+                // Web Worker globals
+                self: 'readonly',
+                postMessage: 'readonly',
+                onmessage: 'writable',
+                importScripts: 'readonly'
+            }
+        },
+        rules: {
+            // TypeScript-specific rules
+            '@typescript-eslint/no-unused-vars': ['error', {
+                argsIgnorePattern: '^_',
+                varsIgnorePattern: '^_'
+            }],
+            '@typescript-eslint/explicit-function-return-type': 'off',
+            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/no-non-null-assertion': 'warn',
+
+            // Security rules
+            'security/detect-eval-with-expression': 'error',
+            'security/detect-non-literal-regexp': 'warn',
+            'security/detect-object-injection': 'off', // Too many false positives
+            'security/detect-possible-timing-attacks': 'warn',
+
+            // General best practices
+            'no-eval': 'error',
+            'no-implied-eval': 'error',
+            'no-new-func': 'error',
+            'no-script-url': 'error',
+            'no-console': ['warn', { allow: ['warn', 'error'] }],
+            'prefer-const': 'error',
+            'no-var': 'error',
+            'eqeqeq': ['error', 'always', { null: 'ignore' }],
+            'curly': ['error', 'multi-line'],
+            'no-throw-literal': 'error',
+            'prefer-promise-reject-errors': 'error'
+        }
+    },
+    {
+        // Test file specific rules
+        files: ['**/__tests__/**/*.{js,ts}', '**/*.test.{js,ts}', '**/__mocks__/**/*.{js,ts}'],
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            'no-console': 'off',
+            '@typescript-eslint/no-unused-vars': 'off'
+        }
+    },
+    {
+        // Ignore patterns
+        ignores: [
+            'node_modules/**',
+            'dist/**',
+            'coverage/**',
+            '*.min.js',
+            'build.js'
+        ]
+    }
+);

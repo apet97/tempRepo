@@ -5,31 +5,35 @@
  */
 
 import { store } from './state.js';
-import { Api } from './api.js?v=16';
-import { calculateAnalysis } from './calc.js?v=16';
+import { Api } from './api.js';
+import { calculateAnalysis } from './calc.js';
 import { downloadCsv } from './export.js';
-import * as UI from './ui.js';
+import * as UI from './ui/index.js';
 import { IsoUtils, debounce, parseIsoDuration } from './utils.js';
+import type { DateRange, TimeEntry, TokenClaims } from './types.js';
 
 // --- Initialization ---
 
 /**
  * Sets default date range (last 30 days) in the UI inputs on startup.
  */
-export function setDefaultDates() {
+export function setDefaultDates(): void {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 30);
 
-    document.getElementById('startDate').value = IsoUtils.toISODate(start);
-    document.getElementById('endDate').value = IsoUtils.toISODate(end);
+    const startEl = document.getElementById('startDate') as HTMLInputElement | null;
+    const endEl = document.getElementById('endDate') as HTMLInputElement | null;
+
+    if (startEl) startEl.value = IsoUtils.toISODate(start);
+    if (endEl) endEl.value = IsoUtils.toISODate(end);
 }
 
 /**
  * Main application initialization.
  * Parses auth token from URL, sets up state, and starts initial data load.
  */
-export function init() {
+export function init(): void {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('auth_token');
 
@@ -38,14 +42,15 @@ export function init() {
         UI.renderLoading(false);
         const emptyState = document.getElementById('emptyState');
         if (emptyState) {
-            emptyState.textContent = 'Error: No authentication token provided. Please access this addon through Clockify.';
+            emptyState.textContent =
+                'Error: No authentication token provided. Please access this addon through Clockify.';
             emptyState.classList.remove('hidden');
         }
         return;
     }
 
     try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const payload = JSON.parse(atob(token.split('.')[1])) as TokenClaims;
         if (!payload || !payload.workspaceId) {
             throw new Error('Invalid token payload');
         }
@@ -63,7 +68,8 @@ export function init() {
         UI.renderLoading(false);
         const emptyState = document.getElementById('emptyState');
         if (emptyState) {
-            emptyState.textContent = 'Error: Invalid authentication token. Please try accessing the addon again.';
+            emptyState.textContent =
+                'Error: Invalid authentication token. Please try accessing the addon again.';
             emptyState.classList.remove('hidden');
         }
     }
@@ -72,12 +78,15 @@ export function init() {
 /**
  * Loads initial metadata (users) and prepares the UI.
  */
-export async function loadInitialData() {
+export async function loadInitialData(): Promise<void> {
     // Initialize UI elements first (after DOM is ready)
     UI.initializeElements();
 
     UI.renderLoading(true);
     try {
+        if (!store.claims?.workspaceId) {
+            throw new Error('No workspace ID');
+        }
         store.users = await Api.fetchUsers(store.claims.workspaceId);
 
         // Validate that we have at least one user
@@ -85,20 +94,26 @@ export async function loadInitialData() {
             UI.renderLoading(false);
             UI.showError({
                 title: 'No Users Found',
-                message: 'No workspace members were found. Please check your permissions or try again.',
-                action: 'reload'
+                message:
+                    'No workspace members were found. Please check your permissions or try again.',
+                action: 'reload',
+                type: 'VALIDATION_ERROR',
+                timestamp: new Date().toISOString(),
             });
             return;
         }
 
         // Populate overrides controls only after we have an up-to-date user list
         UI.renderOverridesTable();
-    } catch (error) {
+    } catch {
         UI.renderLoading(false);
         UI.showError({
             title: 'Failed to Load Users',
-            message: 'Could not fetch workspace members. Please check your connection and try again.',
-            action: 'reload'
+            message:
+                'Could not fetch workspace members. Please check your connection and try again.',
+            action: 'reload',
+            type: 'API_ERROR',
+            timestamp: new Date().toISOString(),
         });
         return;
     }
@@ -107,45 +122,48 @@ export async function loadInitialData() {
     bindConfigEvents();
     UI.bindEvents({
         onGenerate: handleGenerateReport,
-        onOverrideChange: (userId, field, value) => {
+        onOverrideChange: (userId: string, field: string, value: string) => {
             store.updateOverride(userId, field, value);
             if (store.rawEntries) runCalculation();
         },
-        // NEW: Mode toggle handler
-        onOverrideModeChange: (userId, mode) => {
+        onOverrideModeChange: (userId: string, mode: string) => {
             store.setOverrideMode(userId, mode);
-            UI.renderOverridesTable();  // Re-render to show/hide per-day editor
+            UI.renderOverridesTable(); // Re-render to show/hide per-day editor
             if (store.rawEntries) runCalculation();
         },
-        // NEW: Per-day override handler
-        onPerDayOverrideChange: (userId, dateKey, field, value) => {
+        onPerDayOverrideChange: (
+            userId: string,
+            dateKey: string,
+            field: string,
+            value: string
+        ) => {
             store.updatePerDayOverride(userId, dateKey, field, value);
             if (store.rawEntries) runCalculation();
         },
-        // NEW: Copy from global button handler
-        onCopyFromGlobal: (userId) => {
-            const startInput = document.getElementById('startDate');
-            const endInput = document.getElementById('endDate');
+        onCopyFromGlobal: (userId: string) => {
+            const startInput = document.getElementById('startDate') as HTMLInputElement | null;
+            const endInput = document.getElementById('endDate') as HTMLInputElement | null;
             if (startInput?.value && endInput?.value) {
-                import('./utils.js').then(({ IsoUtils }) => {
-                    const dates = IsoUtils.generateDateRange(startInput.value, endInput.value);
-                    store.copyGlobalToPerDay(userId, dates);
-                    UI.renderOverridesTable();  // Re-render to show copied values
-                    if (store.rawEntries) runCalculation();
-                });
+                const dates = IsoUtils.generateDateRange(startInput.value, endInput.value);
+                store.copyGlobalToPerDay(userId, dates);
+                UI.renderOverridesTable(); // Re-render to show copied values
+                if (store.rawEntries) runCalculation();
             }
         },
-        // Weekly override handler
-        onWeeklyOverrideChange: (userId, weekday, field, value) => {
+        onWeeklyOverrideChange: (
+            userId: string,
+            weekday: string,
+            field: string,
+            value: string
+        ) => {
             store.setWeeklyOverride(userId, weekday, field, value);
             if (store.rawEntries) runCalculation();
         },
-        // Copy global to weekly button handler
-        onCopyGlobalToWeekly: (userId) => {
+        onCopyGlobalToWeekly: (userId: string) => {
             store.copyGlobalToWeekly(userId);
-            UI.renderOverridesTable();  // Re-render to show copied values
+            UI.renderOverridesTable(); // Re-render to show copied values
             if (store.rawEntries) runCalculation();
-        }
+        },
     });
 }
 
@@ -155,9 +173,9 @@ export async function loadInitialData() {
  * Updates the Daily Threshold input state based on Profile Capacity setting.
  * Disables the input and shows helper text when Profile Capacity is ON.
  */
-function updateDailyThresholdState() {
-    const dailyInput = document.getElementById('configDaily');
-    const helper = document.getElementById('dailyThresholdHelper');
+function updateDailyThresholdState(): void {
+    const dailyInput = document.getElementById('configDaily') as HTMLInputElement | null;
+    const helper = document.getElementById('dailyThresholdHelper') as HTMLElement | null;
     if (!dailyInput || !helper) return;
 
     const useProfile = store.config.useProfileCapacity;
@@ -174,16 +192,16 @@ function updateDailyThresholdState() {
     }
 }
 
-function hasCostRates(entries) {
-    // Determine whether any entry provides explicit cost/profit information so we can display those modes
+function hasCostRates(entries: TimeEntry[] | null): boolean {
+    // Determine whether any entry provides explicit cost/profit information
     if (!Array.isArray(entries) || entries.length === 0) return true;
-    return entries.some(entry => {
-        const rawCostRate = entry?.costRate?.amount ?? entry?.costRate;
+    return entries.some((entry) => {
+        const rawCostRate = (entry?.costRate as { amount?: number })?.amount ?? entry?.costRate;
         const costRate = Number(rawCostRate);
-        // Only treat as available when a non-zero cost rate exists; zero means "not configured" in Clockify
+        // Only treat as available when a non-zero cost rate exists
         if (Number.isFinite(costRate) && costRate !== 0) return true;
         const amounts = Array.isArray(entry?.amounts) ? entry.amounts : [];
-        return amounts.some(amount => {
+        return amounts.some((amount) => {
             const type = String(amount?.type || amount?.amountType || '').toUpperCase();
             if (type !== 'COST' && type !== 'PROFIT') return false;
             const value = Number(amount?.value ?? amount?.amount);
@@ -192,18 +210,21 @@ function hasCostRates(entries) {
     });
 }
 
-function syncAmountDisplayAvailability(entries) {
+function syncAmountDisplayAvailability(entries: TimeEntry[] | null): void {
     // Toggle extra amount display modes only when cost/profit data is present
     const costRatesAvailable = hasCostRates(entries);
     store.ui.hasCostRates = costRatesAvailable;
 
-    // The drop-down that lets users switch between earned/cost/profit views.
-    const amountDisplayEl = document.getElementById('amountDisplay');
+    const amountDisplayEl = document.getElementById('amountDisplay') as HTMLSelectElement | null;
     if (!amountDisplayEl) return;
 
     // Hide cost/profit options when data doesn't provide cost references
-    const costOption = amountDisplayEl.querySelector('option[value="cost"]');
-    const profitOption = amountDisplayEl.querySelector('option[value="profit"]');
+    const costOption = amountDisplayEl.querySelector(
+        'option[value="cost"]'
+    ) as HTMLOptionElement | null;
+    const profitOption = amountDisplayEl.querySelector(
+        'option[value="profit"]'
+    ) as HTMLOptionElement | null;
     if (costOption) {
         costOption.hidden = !costRatesAvailable;
         costOption.disabled = !costRatesAvailable;
@@ -221,7 +242,7 @@ function syncAmountDisplayAvailability(entries) {
     }
 
     if (store.config.amountDisplay !== nextDisplay) {
-        store.config.amountDisplay = nextDisplay;
+        store.config.amountDisplay = nextDisplay as 'earned' | 'cost' | 'profit';
         store.saveConfig();
     }
 
@@ -232,7 +253,7 @@ function syncAmountDisplayAvailability(entries) {
  * Binds event listeners to configuration controls (toggles, inputs).
  * Handles persistence to localStorage and auto-recalculation.
  */
-export function bindConfigEvents() {
+export function bindConfigEvents(): void {
     // Toggle mapping describing which DOM checkbox updates which config flag
     const configToggles = [
         { id: 'useProfileCapacity', key: 'useProfileCapacity' },
@@ -240,16 +261,16 @@ export function bindConfigEvents() {
         { id: 'applyHolidays', key: 'applyHolidays' },
         { id: 'applyTimeOff', key: 'applyTimeOff' },
         { id: 'showBillableBreakdown', key: 'showBillableBreakdown' },
-        { id: 'showDecimalTime', key: 'showDecimalTime' }
-    ];
+        { id: 'showDecimalTime', key: 'showDecimalTime' },
+    ] as const;
 
     // Wire up boolean toggles -> persisted config -> recalculation
     configToggles.forEach(({ id, key }) => {
-        const el = document.getElementById(id);
+        const el = document.getElementById(id) as HTMLInputElement | null;
         if (el) {
             el.checked = store.config[key];
             el.addEventListener('change', (e) => {
-                store.config[key] = e.target.checked;
+                store.config[key] = (e.target as HTMLInputElement).checked;
                 store.saveConfig();
 
                 // Update expand toggle visibility when billable breakdown changes
@@ -277,15 +298,17 @@ export function bindConfigEvents() {
         }
     });
 
-    const amountDisplayEl = document.getElementById('amountDisplay');
+    const amountDisplayEl = document.getElementById('amountDisplay') as HTMLSelectElement | null;
     if (amountDisplayEl) {
         const validDisplays = new Set(['earned', 'cost', 'profit']);
         const currentDisplay = String(store.config.amountDisplay || '').toLowerCase();
         amountDisplayEl.value = validDisplays.has(currentDisplay) ? currentDisplay : 'earned';
         amountDisplayEl.addEventListener('change', (e) => {
-            const nextValue = String(e.target.value || '').toLowerCase();
+            const nextValue = String((e.target as HTMLSelectElement).value || '').toLowerCase();
             const allowCost = store.ui.hasCostRates !== false;
-            let normalized = validDisplays.has(nextValue) ? nextValue : 'earned';
+            let normalized: 'earned' | 'cost' | 'profit' = validDisplays.has(nextValue)
+                ? (nextValue as 'earned' | 'cost' | 'profit')
+                : 'earned';
             if (!allowCost && (normalized === 'cost' || normalized === 'profit')) {
                 normalized = 'earned';
             }
@@ -296,44 +319,64 @@ export function bindConfigEvents() {
         });
     }
 
-    const dailyEl = document.getElementById('configDaily');
+    const dailyEl = document.getElementById('configDaily') as HTMLInputElement | null;
     if (dailyEl) {
-        dailyEl.value = store.calcParams.dailyThreshold;
-        dailyEl.addEventListener('input', debounce((e) => {
-            store.calcParams.dailyThreshold = parseFloat(e.target.value) || 8;
-            store.saveConfig();
-            if (store.rawEntries) runCalculation();
-        }, 300));
+        dailyEl.value = String(store.calcParams.dailyThreshold);
+        dailyEl.addEventListener(
+            'input',
+            debounce((e: Event) => {
+                store.calcParams.dailyThreshold =
+                    parseFloat((e.target as HTMLInputElement).value) || 8;
+                store.saveConfig();
+                if (store.rawEntries) runCalculation();
+            }, 300)
+        );
     }
 
-    const multEl = document.getElementById('configMultiplier');
+    const multEl = document.getElementById('configMultiplier') as HTMLInputElement | null;
     if (multEl) {
-        multEl.value = store.calcParams.overtimeMultiplier;
-        multEl.addEventListener('input', debounce((e) => {
-            store.calcParams.overtimeMultiplier = parseFloat(e.target.value) || 1.5;
-            store.saveConfig();
-            if (store.rawEntries) runCalculation();
-        }, 300));
+        multEl.value = String(store.calcParams.overtimeMultiplier);
+        multEl.addEventListener(
+            'input',
+            debounce((e: Event) => {
+                store.calcParams.overtimeMultiplier =
+                    parseFloat((e.target as HTMLInputElement).value) || 1.5;
+                store.saveConfig();
+                if (store.rawEntries) runCalculation();
+            }, 300)
+        );
     }
 
-    const tier2ThresholdEl = document.getElementById('configTier2Threshold');
+    const tier2ThresholdEl = document.getElementById(
+        'configTier2Threshold'
+    ) as HTMLInputElement | null;
     if (tier2ThresholdEl) {
-        tier2ThresholdEl.value = store.calcParams.tier2ThresholdHours || 0;
-        tier2ThresholdEl.addEventListener('input', debounce((e) => {
-            store.calcParams.tier2ThresholdHours = parseFloat(e.target.value) || 0;
-            store.saveConfig();
-            if (store.rawEntries) runCalculation();
-        }, 300));
+        tier2ThresholdEl.value = String(store.calcParams.tier2ThresholdHours || 0);
+        tier2ThresholdEl.addEventListener(
+            'input',
+            debounce((e: Event) => {
+                store.calcParams.tier2ThresholdHours =
+                    parseFloat((e.target as HTMLInputElement).value) || 0;
+                store.saveConfig();
+                if (store.rawEntries) runCalculation();
+            }, 300)
+        );
     }
 
-    const tier2MultiplierEl = document.getElementById('configTier2Multiplier');
+    const tier2MultiplierEl = document.getElementById(
+        'configTier2Multiplier'
+    ) as HTMLInputElement | null;
     if (tier2MultiplierEl) {
-        tier2MultiplierEl.value = store.calcParams.tier2Multiplier || 2.0;
-        tier2MultiplierEl.addEventListener('input', debounce((e) => {
-            store.calcParams.tier2Multiplier = parseFloat(e.target.value) || 2.0;
-            store.saveConfig();
-            if (store.rawEntries) runCalculation();
-        }, 300));
+        tier2MultiplierEl.value = String(store.calcParams.tier2Multiplier || 2.0);
+        tier2MultiplierEl.addEventListener(
+            'input',
+            debounce((e: Event) => {
+                store.calcParams.tier2Multiplier =
+                    parseFloat((e.target as HTMLInputElement).value) || 2.0;
+                store.saveConfig();
+                if (store.rawEntries) runCalculation();
+            }, 300)
+        );
     }
 
     // Initialize Daily Threshold state based on Profile Capacity
@@ -349,23 +392,25 @@ export function bindConfigEvents() {
         });
     }
 
-    // MEDIUM FIX #16: Tab navigation with ARIA support using event delegation to prevent listener accumulation
-    const tabNavCard = document.getElementById('tabNavCard');
+    // Tab navigation with ARIA support using event delegation
+    const tabNavCard = document.getElementById('tabNavCard') as HTMLElement | null;
     if (tabNavCard && !tabNavCard.dataset.listenerAttached) {
         tabNavCard.dataset.listenerAttached = 'true';
         tabNavCard.addEventListener('click', (e) => {
-            const btn = e.target.closest('.tab-btn');
+            const btn = (e.target as HTMLElement).closest('.tab-btn') as HTMLElement | null;
             if (!btn) return;
 
-            document.querySelectorAll('.tab-btn').forEach(b => {
+            document.querySelectorAll('.tab-btn').forEach((b) => {
                 b.classList.remove('active');
                 b.setAttribute('aria-selected', 'false');
             });
             btn.classList.add('active');
             btn.setAttribute('aria-selected', 'true');
             const tab = btn.dataset.tab;
-            document.getElementById('summaryCard').classList.toggle('hidden', tab !== 'summary');
-            document.getElementById('detailedCard').classList.toggle('hidden', tab !== 'detailed');
+            const summaryCard = document.getElementById('summaryCard');
+            const detailedCard = document.getElementById('detailedCard');
+            if (summaryCard) summaryCard.classList.toggle('hidden', tab !== 'summary');
+            if (detailedCard) detailedCard.classList.toggle('hidden', tab !== 'detailed');
         });
     }
 
@@ -380,15 +425,17 @@ export function bindConfigEvents() {
     }
 
     // Date Presets
-    const setDateRange = (start, end) => {
-        document.getElementById('startDate').value = IsoUtils.toISODate(start);
-        document.getElementById('endDate').value = IsoUtils.toISODate(end);
+    const setDateRange = (start: Date, end: Date) => {
+        const startEl = document.getElementById('startDate') as HTMLInputElement | null;
+        const endEl = document.getElementById('endDate') as HTMLInputElement | null;
+        if (startEl) startEl.value = IsoUtils.toISODate(start);
+        if (endEl) endEl.value = IsoUtils.toISODate(end);
     };
-    const startInput = document.getElementById('startDate');
-    const endInput = document.getElementById('endDate');
-    // Mirror native report UX: whenever dates change (manual or preset), queue a generate as soon as both dates are valid
-    // Debounce keeps rapid clicks (e.g., preset + manual tweak) from flooding the backend
-    // Auto-generate keeps the report data synchronized with the current date inputs without requiring manual clicks
+
+    const startInput = document.getElementById('startDate') as HTMLInputElement | null;
+    const endInput = document.getElementById('endDate') as HTMLInputElement | null;
+
+    // Auto-generate when dates change
     const queueAutoGenerate = debounce(() => {
         const startValue = startInput?.value;
         const endValue = endInput?.value;
@@ -406,10 +453,14 @@ export function bindConfigEvents() {
 
     document.getElementById('datePresetThisWeek')?.addEventListener('click', () => {
         const now = new Date();
-        const dayOfWeek = now.getUTCDay(); // 0 = Sunday
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday = start of week
-        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset));
-        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const dayOfWeek = now.getUTCDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const start = new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset)
+        );
+        const end = new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+        );
         setDateRange(start, end);
         queueAutoGenerate();
     });
@@ -419,16 +470,32 @@ export function bindConfigEvents() {
         const dayOfWeek = now.getUTCDay();
         const lastMondayOffset = dayOfWeek === 0 ? -13 : -6 - dayOfWeek;
         const lastSundayOffset = dayOfWeek === 0 ? -7 : -dayOfWeek;
-        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + lastMondayOffset));
-        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + lastSundayOffset));
+        const start = new Date(
+            Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate() + lastMondayOffset
+            )
+        );
+        const end = new Date(
+            Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate() + lastSundayOffset
+            )
+        );
         setDateRange(start, end);
         queueAutoGenerate();
     });
 
     document.getElementById('datePresetLast2Weeks')?.addEventListener('click', () => {
         const now = new Date();
-        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 13)); // 14 days including today
-        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const start = new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 13)
+        );
+        const end = new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+        );
         setDateRange(start, end);
         queueAutoGenerate();
     });
@@ -453,21 +520,23 @@ export function bindConfigEvents() {
     const filterContainer = document.getElementById('detailedFilters');
     if (filterContainer) {
         filterContainer.addEventListener('click', (e) => {
-            if (e.target.classList.contains('chip')) {
-                const filter = e.target.dataset.filter;
-                UI.renderDetailedTable(store.analysisResults, filter);
+            const target = e.target as HTMLElement;
+            if (target.classList.contains('chip')) {
+                const filter = target.dataset.filter;
+                if (filter && store.analysisResults) {
+                    UI.renderDetailedTable(store.analysisResults, filter);
+                }
             }
         });
     }
 
     // Summary Group By Selector
-    const groupBySelect = document.getElementById('groupBySelect');
+    const groupBySelect = document.getElementById('groupBySelect') as HTMLSelectElement | null;
     if (groupBySelect) {
-        // Initialize from stored state
         groupBySelect.value = store.ui.summaryGroupBy || 'user';
 
         groupBySelect.addEventListener('change', (e) => {
-            store.ui.summaryGroupBy = e.target.value;
+            store.ui.summaryGroupBy = (e.target as HTMLSelectElement).value as typeof store.ui.summaryGroupBy;
             store.saveUIState();
             if (store.analysisResults) {
                 UI.renderSummaryTable(store.analysisResults);
@@ -478,44 +547,46 @@ export function bindConfigEvents() {
     // Summary Expand/Collapse Toggle - use event delegation
     const summaryExpandToggleContainer = document.getElementById('summaryExpandToggleContainer');
     if (summaryExpandToggleContainer) {
-        // The expand/collapse toggle is only shown when billable breakdown is enabled
-        // Initialize button
         UI.renderSummaryExpandToggle();
 
-        // Event delegation for expand toggle (button may not exist initially)
         summaryExpandToggleContainer.addEventListener('click', (e) => {
-            const btn = e.target.closest('#summaryExpandToggle');
+            const btn = (e.target as HTMLElement).closest('#summaryExpandToggle');
             if (!btn) return;
 
             store.ui.summaryExpanded = !store.ui.summaryExpanded;
             store.saveUIState();
 
-            // Update button UI
             UI.renderSummaryExpandToggle();
 
-            // Re-render table with new state
             if (store.analysisResults) {
                 UI.renderSummaryTable(store.analysisResults);
             }
+        });
+    }
+
+    // Clear All Data button
+    const clearDataBtn = document.getElementById('clearAllDataBtn');
+    if (clearDataBtn) {
+        clearDataBtn.addEventListener('click', () => {
+            UI.showClearDataConfirmation(() => {
+                store.clearAllData();
+                location.reload();
+            });
         });
     }
 }
 
 // --- Report Logic ---
 
-/** HIGH FIX #8: Use request-scoped date range instead of global to prevent race conditions */
 /** Reference to the AbortController for the active report generation request. */
-let abortController = null;
-/** HIGH FIX #7: Request ID to detect stale responses from concurrent requests */
+let abortController: AbortController | null = null;
+/** Request ID to detect stale responses from concurrent requests */
 let currentRequestId = 0;
 
 /**
  * Orchestrates the full report generation process.
- * 1. Cancels any pending requests.
- * 2. Fetches time entries, profiles, holidays, and time-off in parallel.
- * 3. Updates state and triggers calculation.
  */
-export async function handleGenerateReport() {
+export async function handleGenerateReport(): Promise<void> {
     // Cancel previous request if running
     if (abortController) {
         abortController.abort();
@@ -523,16 +594,18 @@ export async function handleGenerateReport() {
     abortController = new AbortController();
     const { signal } = abortController;
 
-    // HIGH FIX #7: Increment request ID to detect stale responses
+    // Increment request ID to detect stale responses
     currentRequestId++;
     const thisRequestId = currentRequestId;
 
     UI.renderLoading(true);
     store.resetApiStatus();
-    store.clearFetchCache(); // Clear cached holidays/timeOff to prevent memory bloat
+    store.clearFetchCache();
 
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
+    const startDateEl = document.getElementById('startDate') as HTMLInputElement | null;
+    const endDateEl = document.getElementById('endDate') as HTMLInputElement | null;
+    const startDate = startDateEl?.value || '';
+    const endDate = endDateEl?.value || '';
 
     // Ensure both dates are selected before issuing API calls
     if (!startDate || !endDate) {
@@ -548,23 +621,28 @@ export async function handleGenerateReport() {
         return;
     }
 
-    // MEDIUM FIX #14: Validate date range
+    // Validate date range
     if (startDate > endDate) {
         UI.renderLoading(false);
         UI.showError({
             title: 'Invalid Date Range',
             message: 'Start date must be before or equal to end date.',
-            action: 'none'
+            action: 'none',
+            type: 'VALIDATION_ERROR',
+            timestamp: new Date().toISOString(),
         });
         return;
     }
 
-    // HIGH FIX #8: Use request-scoped date range
-    const requestDateRange = { start: startDate, end: endDate };
+    // Use request-scoped date range
+    const requestDateRange: DateRange = { start: startDate, end: endDate };
 
     try {
+        if (!store.claims?.workspaceId) {
+            throw new Error('No workspace ID');
+        }
+
         // Fetch via Detailed Report API (single request for ALL users).
-        // This comes first to allow downstream optional calls (profiles/holidays/time off) to decorate the same entry set.
         const entries = await Api.fetchDetailedReport(
             store.claims.workspaceId,
             `${startDate}T00:00:00Z`,
@@ -574,25 +652,24 @@ export async function handleGenerateReport() {
         store.rawEntries = entries;
 
         // Prepare optional fetch promises (these can fail gracefully)
-        // Optional metadata fetches enhance accuracy but are allowed to fail silently
-        // Optional metadata fetches (profiles/holidays/time-off) that can fail without blocking the report
-        const optionalPromises = [];
+        const optionalPromises: { name: string; promise: Promise<void> }[] = [];
 
         // 2. Fetch Profiles (Capacity/Working Days) - OPTIONAL
         if (store.config.useProfileCapacity || store.config.useProfileWorkingDays) {
-            const missingUsers = store.users.filter(u => !store.profiles.has(u.id));
+            const missingUsers = store.users.filter((u) => !store.profiles.has(u.id));
             if (missingUsers.length > 0) {
                 optionalPromises.push({
                     name: 'profiles',
-                    promise: Api.fetchAllProfiles(store.claims.workspaceId, missingUsers, { signal })
-                        .then(profiles => {
-                            profiles.forEach((profile, userId) => {
-                                store.profiles.set(userId, {
-                                    workCapacityHours: parseIsoDuration(profile.workCapacity),
-                                    workingDays: profile.workingDays
-                                });
+                    promise: Api.fetchAllProfiles(store.claims.workspaceId, missingUsers, {
+                        signal,
+                    }).then((profiles) => {
+                        profiles.forEach((profile, userId) => {
+                            store.profiles.set(userId, {
+                                workCapacityHours: parseIsoDuration(profile.workCapacity || ''),
+                                workingDays: profile.workingDays,
                             });
-                        })
+                        });
+                    }),
                 });
             }
         }
@@ -601,27 +678,32 @@ export async function handleGenerateReport() {
         if (store.config.applyHolidays) {
             optionalPromises.push({
                 name: 'holidays',
-                promise: Api.fetchAllHolidays(store.claims.workspaceId, store.users, startDate, endDate, { signal })
-                    .then(holidays => {
-                        holidays.forEach((hList, userId) => {
-                            const hMap = new Map();
-                            (hList || []).forEach(h => {
-                                const startKey = IsoUtils.extractDateKey(h.datePeriod?.startDate);
-                                const endKey = IsoUtils.extractDateKey(h.datePeriod?.endDate);
+                promise: Api.fetchAllHolidays(
+                    store.claims.workspaceId,
+                    store.users,
+                    startDate,
+                    endDate,
+                    { signal }
+                ).then((holidays) => {
+                    holidays.forEach((hList, userId) => {
+                        const hMap = new Map();
+                        (hList || []).forEach((h) => {
+                            const startKey = IsoUtils.extractDateKey(h.datePeriod?.startDate);
+                            const endKey = IsoUtils.extractDateKey(h.datePeriod?.endDate);
 
-                                if (startKey) {
-                                    if (!endKey || endKey === startKey) {
-                                        hMap.set(startKey, h);
-                                    } else {
-                                        // Expand multi-day holidays
-                                        const range = IsoUtils.generateDateRange(startKey, endKey);
-                                        range.forEach(date => hMap.set(date, h));
-                                    }
+                            if (startKey) {
+                                if (!endKey || endKey === startKey) {
+                                    hMap.set(startKey, h);
+                                } else {
+                                    // Expand multi-day holidays
+                                    const range = IsoUtils.generateDateRange(startKey, endKey);
+                                    range.forEach((date) => hMap.set(date, h));
                                 }
-                            });
-                            store.holidays.set(userId, hMap);
+                            }
                         });
-                    })
+                        store.holidays.set(userId, hMap);
+                    });
+                }),
             });
         }
 
@@ -629,49 +711,61 @@ export async function handleGenerateReport() {
         if (store.config.applyTimeOff) {
             optionalPromises.push({
                 name: 'timeOff',
-                promise: Api.fetchAllTimeOff(store.claims.workspaceId, store.users, startDate, endDate, { signal })
-                    .then(timeOff => {
-                        store.timeOff = timeOff;
-                    })
+                promise: Api.fetchAllTimeOff(
+                    store.claims.workspaceId,
+                    store.users,
+                    startDate,
+                    endDate,
+                    { signal }
+                ).then((timeOff) => {
+                    store.timeOff = timeOff;
+                }),
             });
         }
 
         // Wait for optional fetches with graceful failure handling
         if (optionalPromises.length > 0) {
-            const results = await Promise.allSettled(optionalPromises.map(p => p.promise));
+            const results = await Promise.allSettled(optionalPromises.map((p) => p.promise));
             results.forEach((result, index) => {
                 if (result.status === 'rejected') {
-                    // ONLY report failure if the error is NOT an AbortError
-                    if (result.reason?.name !== 'AbortError') {
+                    // Only report failure if the error is NOT an AbortError
+                    const reason = result.reason as Error;
+                    if (reason?.name !== 'AbortError') {
                         const name = optionalPromises[index].name;
-                        console.warn(`Optional fetch '${name}' failed:`, result.reason);
+                        console.warn(`Optional fetch '${name}' failed:`, reason);
                         // Track failures for UI status display
-                        if (name === 'profiles') store.apiStatus.profilesFailed = store.users.length;
-                        if (name === 'holidays') store.apiStatus.holidaysFailed = store.users.length;
-                        if (name === 'timeOff') store.apiStatus.timeOffFailed = store.users.length;
+                        if (name === 'profiles') {
+                            store.apiStatus.profilesFailed = store.users.length;
+                        }
+                        if (name === 'holidays') {
+                            store.apiStatus.holidaysFailed = store.users.length;
+                        }
+                        if (name === 'timeOff') {
+                            store.apiStatus.timeOffFailed = store.users.length;
+                        }
                     }
                 }
             });
         }
 
-        // HIGH FIX #7: Check if this request is still current before updating UI
+        // Check if this request is still current before updating UI
         if (thisRequestId !== currentRequestId) {
-            console.log('Stale request detected, discarding results');
             return;
         }
 
         runCalculation(requestDateRange);
-        document.getElementById('tabNavCard').style.display = 'block';
+        const tabNavCard = document.getElementById('tabNavCard');
+        if (tabNavCard) tabNavCard.style.display = 'block';
 
         // Enable Export button
-        const exportBtn = document.getElementById('exportBtn');
+        const exportBtn = document.getElementById('exportBtn') as HTMLButtonElement | null;
         if (exportBtn) exportBtn.disabled = false;
 
         UI.renderApiStatus();
     } catch (error) {
-        if (error.name === 'AbortError') {
-            console.log('Report generation cancelled');
-            // HIGH FIX #11: Clean up state on abort
+        const err = error as Error;
+        if (err.name === 'AbortError') {
+            // Clean up state on abort
             store.rawEntries = null;
             return;
         }
@@ -679,22 +773,23 @@ export async function handleGenerateReport() {
         UI.showError({
             title: 'Report Generation Failed',
             message: 'An error occurred while fetching time entries. Please try again.',
-            action: 'retry'
+            action: 'retry',
+            type: 'API_ERROR',
+            timestamp: new Date().toISOString(),
         });
     } finally {
         UI.renderLoading(false);
-        abortController = null; // Clean up controller reference
+        abortController = null;
     }
 }
 
 /**
  * Triggers the calculation engine and updates all UI views with results.
- * HIGH FIX #8: Accept dateRange as parameter instead of using global variable
- * @param {Object} [dateRange] - Optional date range. If not provided, uses stored analysis date range.
+ * @param dateRange - Optional date range. If not provided, uses stored analysis date range.
  */
-export function runCalculation(dateRange) {
+export function runCalculation(dateRange?: DateRange): void {
     // Use provided dateRange or fall back to stored date range for recalculations
-    const effectiveDateRange = dateRange || store.currentDateRange || { start: null, end: null };
+    const effectiveDateRange = dateRange || store.currentDateRange || { start: '', end: '' };
 
     // Store the date range for subsequent recalculations (e.g., config changes)
     if (dateRange) {

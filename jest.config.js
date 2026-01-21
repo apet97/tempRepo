@@ -1,13 +1,20 @@
 export default {
   testEnvironment: 'jsdom',
-  transform: {},
-  moduleNameMapper: {},
+  // Transform TypeScript files with ts-jest in ESM mode
+  transform: {
+    '\\.ts$': ['ts-jest', {
+      useESM: true
+    }]
+  },
+  // Use custom resolver to map .js to .ts for project files
+  resolver: './jest.resolver.cjs',
   testMatch: [
     '**/__tests__/**/*.test.js'
   ],
   collectCoverageFrom: [
-    'js/**/*.js',
-    '!js/**/*.backup.js'
+    'js/**/*.ts',
+    '!js/**/*.d.ts',
+    '!js/**/*.backup.ts'
   ],
   coverageThreshold: {
     global: {
@@ -19,13 +26,17 @@ export default {
   },
   coveragePathIgnorePatterns: [
     '/node_modules/',
-    'js/test-helpers.js'
+    'js/test-helpers.ts'
   ],
-  moduleFileExtensions: ['js'],
+  moduleFileExtensions: ['js', 'ts'],
   verbose: false,
   silent: true,
   clearMocks: true,
   fakeTimers: {
     enableGlobally: true
-  }
+  },
+  extensionsToTreatAsEsm: ['.ts'],
+  transformIgnorePatterns: [
+    '/node_modules/'
+  ]
 };
