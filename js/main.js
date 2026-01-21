@@ -237,6 +237,7 @@ export function bindConfigEvents() {
         { id: 'showDecimalTime', key: 'showDecimalTime' }
     ];
 
+    // Wire up boolean toggles -> persisted config -> recalculation
     configToggles.forEach(({ id, key }) => {
         const el = document.getElementById(id);
         if (el) {
@@ -380,6 +381,7 @@ export function bindConfigEvents() {
     const startInput = document.getElementById('startDate');
     const endInput = document.getElementById('endDate');
     // Mirror native report UX: whenever dates change (manual or preset), queue a generate as soon as both dates are valid
+    // Debounce keeps rapid clicks (e.g., preset + manual tweak) from flooding the backend
     const queueAutoGenerate = debounce(() => {
         const startValue = startInput?.value;
         const endValue = endInput?.value;
@@ -552,8 +554,8 @@ export async function handleGenerateReport() {
     const requestDateRange = { start: startDate, end: endDate };
 
     try {
-        // Fetch via Detailed Report API (single request for ALL users)
-        // Includes type field for HOLIDAY/TIME_OFF identification
+        // Fetch via Detailed Report API (single request for ALL users).
+        // This comes first to allow downstream optional calls (profiles/holidays/time off) to decorate the same entry set.
         const entries = await Api.fetchDetailedReport(
             store.claims.workspaceId,
             `${startDate}T00:00:00Z`,

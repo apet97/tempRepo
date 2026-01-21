@@ -248,8 +248,8 @@ export const Api = {
             const requestBody = {
                 dateRangeStart: startIso,
                 dateRangeEnd: endIso,
-                amountShown,
-                amounts: ['EARNED', 'COST', 'PROFIT'],
+                amountShown, // matches UI toggle (earned/cost/profit) for rate/amount fields
+                amounts: ['EARNED', 'COST', 'PROFIT'], // always request all amounts so profit mode can stack
                 detailedFilter: {
                     page: page,
                     pageSize: pageSize

@@ -45,7 +45,7 @@
       </div>
     </div>
 
-    <!-- Configuration Card -->
+    <!-- Configuration Card: core toggles and amount mode -->
     <div class="card">
       <div class="card-title">
         <button type="button" class="section-toggle-btn" id="configToggle" aria-expanded="true"
@@ -124,7 +124,7 @@
       <!-- Summary Strip -->
       <div class="summary-inline" id="summaryStrip"></div>
 
-      <!-- Tab Navigation -->
+      <!-- Tab Navigation between Summary and Detailed reports -->
       <div class="card tab-nav-card" id="tabNavCard" role="tablist" aria-label="Report views">
         <button type="button" class="btn-text btn-xs tab-btn active" data-tab="summary" role="tab" aria-selected="true"
           aria-controls="summaryCard" id="tab-summary">Summary</button>
@@ -132,7 +132,7 @@
           aria-controls="detailedCard" id="tab-detailed">Detailed</button>
       </div>
 
-      <!-- Summary Card -->
+      <!-- Summary Card: aggregated metrics grouped by selector -->
       <div class="card" id="summaryCard" role="tabpanel" aria-labelledby="tab-summary">
         <div class="summary-controls" style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
           <label for="groupBySelect" style="font-size: 13px; font-weight: 500;">Group by:</label>
@@ -158,6 +158,7 @@
         </div>
       </div>
 
+      <!-- Detailed Card: per-entry view with filters -->
       <div class="card hidden" id="detailedCard" role="tabpanel" aria-labelledby="tab-detailed">
         <div class="filter-chips" id="detailedFilters" role="group" aria-label="Filter entries">
           <button type="button" class="chip active" data-filter="all">All Entries</button>

@@ -99,6 +99,7 @@ function getCostRate(entry, durationHours) {
 function buildAmountBreakdown(rate, regular, overtime, multiplier, tier2EligibleHours, tier2Multiplier) {
     const safeMultiplier = multiplier > 0 ? multiplier : 1;
     const safeTier2Multiplier = tier2Multiplier > safeMultiplier ? tier2Multiplier : safeMultiplier;
+    // Base amounts (no OT premiums)
     const regularAmount = regular * rate;
     const overtimeAmountBase = overtime * rate;
     const baseAmount = regularAmount + overtimeAmountBase;
@@ -108,7 +109,9 @@ function buildAmountBreakdown(rate, regular, overtime, multiplier, tier2Eligible
     let overtimeRate = rate;
 
     if (overtime > 0) {
+        // Tier 1: multiplier applied to all OT hours
         tier1Premium = overtime * rate * (safeMultiplier - 1);
+        // Tier 2: additional premium only for hours beyond the configured threshold
         if (tier2EligibleHours > 0 && safeTier2Multiplier > safeMultiplier) {
             tier2Premium = tier2EligibleHours * rate * (safeTier2Multiplier - safeMultiplier);
         }
@@ -659,6 +662,7 @@ export function calculateAnalysis(entries, storeRef, dateRange) {
 
                 const earnedEffectiveRate = isBillable ? earnedRate : 0;
                 const costEffectiveRate = costRate;
+                // Build parallel money models: earned (billable), cost (labor), profit (delta)
                 const earnedAmounts = buildAmountBreakdown(
                     earnedEffectiveRate,
                     regular,
