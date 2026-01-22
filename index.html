@@ -35,7 +35,6 @@
           <button class="btn-primary btn-sm" id="generateBtn" aria-busy="false">Generate</button>
           <button class="btn-secondary btn-sm" id="refreshBtn" title="Bypass cache and fetch fresh data">&#8635; Refresh</button>
           <button class="btn-secondary btn-sm" id="exportBtn" disabled>Export CSV</button>
-          <button class="btn-secondary btn-sm" id="openOverridesBtn" title="Configure user overrides">&#9881; Overrides</button>
         </div>
       </div>
       <div class="filter-row">
@@ -59,12 +58,13 @@
 
     <!-- Configuration Card: core toggles and amount mode -->
     <div class="card">
-      <div class="card-title">
+      <div class="card-title config-title-row">
         <button type="button" class="section-toggle-btn" id="configToggle" aria-expanded="true"
           aria-controls="configContent">
           <span class="toggle-icon" aria-hidden="true">&#9660;</span>
           Configuration
         </button>
+        <button class="btn-secondary btn-sm" id="openOverridesBtn" title="Configure user overrides">&#9881; Overrides</button>
       </div>
       <div id="configContent" role="region" aria-labelledby="configToggle">
         <div class="config-toggle-grid">

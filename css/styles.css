@@ -1825,3 +1825,36 @@ body.density-spacious {
 .cl-theme-dark .overrides-intro {
   background: var(--bg-subtle);
 }
+
+/* Collapsible user cards */
+.override-user-card.collapsed .override-card-content {
+  display: none;
+}
+
+.override-user-card.collapsed .override-user-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.override-user-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.override-user-header .toggle-icon {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.override-user-card:not(.collapsed) .override-user-header .toggle-icon {
+  transform: rotate(90deg);
+}
+
+/* Config title row with Overrides button */
+.config-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

@@ -55,19 +55,28 @@ export function renderOverridesPage(): void {
         const mode = override.mode || 'global';
         const profile = store.profiles.get(user.id);
         const profileCapacity = profile?.workCapacityHours;
-        const hasCustom = override.capacity || override.multiplier || override.tier2Threshold || override.tier2Multiplier;
+        const hasCustom =
+            mode !== 'global' ||
+            override.capacity ||
+            override.multiplier ||
+            override.tier2Threshold ||
+            override.tier2Multiplier ||
+            (override.weeklyOverrides && Object.keys(override.weeklyOverrides).length > 0) ||
+            (override.perDayOverrides && Object.keys(override.perDayOverrides).length > 0);
         const placeholder = profileCapacity != null ? profileCapacity : store.calcParams.dailyThreshold;
 
         const card = document.createElement('div');
-        card.className = `card override-user-card${hasCustom ? ' has-custom' : ''}`;
+        card.className = `card override-user-card collapsed${hasCustom ? ' has-custom' : ''}`;
         card.dataset.userid = user.id;
 
         card.innerHTML = `
-            <div class="override-user-header">
+            <div class="override-user-header" role="button" tabindex="0" aria-expanded="false">
+                <span class="toggle-icon">&#9654;</span>
                 <span class="override-user-name">${escapeHtml(user.name)}</span>
                 ${hasCustom ? '<span class="override-badge">CUSTOM</span>' : ''}
                 ${profileCapacity != null ? `<span class="override-profile-hint">(${profileCapacity}h profile)</span>` : ''}
             </div>
+            <div class="override-card-content">
             <div class="override-fields-grid">
                 <div class="override-field">
                     <label>Mode</label>
@@ -126,6 +135,7 @@ export function renderOverridesPage(): void {
             </div>
             ${mode === 'perDay' ? `<div class="override-expanded-section">${renderPerDayInputs(user.id, override.perDayOverrides || {}, profileCapacity, placeholder)}</div>` : ''}
             ${mode === 'weekly' ? `<div class="override-expanded-section">${renderWeeklyInputs(user.id, override.weeklyOverrides || {}, profileCapacity, placeholder)}</div>` : ''}
+            </div>
         `;
 
         fragment.appendChild(card);

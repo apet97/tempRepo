@@ -142,6 +142,22 @@ export function bindEvents(callbacks: UICallbacks): void {
         Elements.overridesUserList.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
 
+            // Toggle collapsed state when clicking header
+            const header = target.closest('.override-user-header');
+            if (header) {
+                const card = header.closest('.override-user-card');
+                if (card) {
+                    card.classList.toggle('collapsed');
+                    const isExpanded = !card.classList.contains('collapsed');
+                    header.setAttribute('aria-expanded', String(isExpanded));
+                    const toggleIcon = header.querySelector('.toggle-icon');
+                    if (toggleIcon) {
+                        toggleIcon.innerHTML = isExpanded ? '&#9660;' : '&#9654;';
+                    }
+                }
+                return;
+            }
+
             // Copy from global button (per-day mode)
             if (target.matches('button.copy-from-global-btn')) {
                 const { userid } = target.dataset;
