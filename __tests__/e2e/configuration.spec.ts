@@ -35,7 +35,13 @@ test.describe('Configuration Panel', () => {
     });
 
     test('daily threshold input works', async ({ page }) => {
+        const profileCapacityToggle = page.locator('#useProfileCapacity');
         const dailyInput = page.locator('#configDaily');
+
+        // Profile capacity is checked by default, which disables daily threshold
+        // Uncheck it first to enable the input
+        await profileCapacityToggle.uncheck();
+        await expect(dailyInput).toBeEnabled();
 
         // Should have default value of 8
         await expect(dailyInput).toHaveValue('8');

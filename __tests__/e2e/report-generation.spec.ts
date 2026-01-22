@@ -151,22 +151,13 @@ test.describe('Report Generation - Error Handling', () => {
         await setupApiMocks(page, { shouldFailUsers: true });
         await navigateWithToken(page);
 
-        // Should show an error (implementation dependent)
-        // Wait for error state
-        await page.waitForTimeout(2000);
+        // Wait for error to appear - use Playwright's proper async waiting
+        // The error should appear in either the API status banner or empty state
+        const apiStatusBanner = page.locator('.api-status-banner:not(.hidden)');
+        const emptyStateWithError = page.locator('#emptyState').filter({ hasText: /error|fail/i });
 
-        // Check if any error element is displayed
-        // Check each element individually to avoid strict mode violation
-        const errorDialog = page.locator('.error-dialog');
-        const apiStatusBanner = page.locator('.api-status-banner');
-        const emptyState = page.locator('#emptyState');
-
-        const hasError =
-            (await errorDialog.count() > 0 && await errorDialog.isVisible()) ||
-            (await apiStatusBanner.count() > 0 && await apiStatusBanner.isVisible()) ||
-            (await emptyState.count() > 0 && await emptyState.isVisible());
-
-        expect(hasError).toBeTruthy();
+        // Wait for either error indicator to be visible with extended timeout
+        await expect(apiStatusBanner.or(emptyStateWithError)).toBeVisible({ timeout: 10000 });
     });
 
     test('shows error when report fetch fails', async ({ page }) => {

@@ -1,7 +1,41 @@
 /**
- * @fileoverview Main Entry Point / Controller
- * Orchestrates the application lifecycle, including initialization, event binding,
- * data fetching orchestration, and triggering calculations/renders.
+ * @fileoverview Main Entry Point and Application Controller
+ *
+ * This module orchestrates the entire OTPLUS application lifecycle, from initialization
+ * through report generation, calculation, and UI rendering. It acts as the central hub
+ * that coordinates interactions between the API layer, calculation engine, state management,
+ * and UI components.
+ *
+ * ## Module Responsibilities
+ *
+ * 1. **Initialization**: Parse JWT from URL, validate token claims, apply theme settings
+ * 2. **Data Orchestration**: Coordinate parallel fetches (entries, profiles, holidays, time-off)
+ * 3. **Configuration Management**: Bind config controls, persist settings, trigger recalculations
+ * 4. **Report Generation**: Main orchestrator that coordinates data fetch → calculation → render
+ * 5. **UI Event Binding**: Wire up user interactions (date pickers, filters, export, etc.)
+ * 6. **Abort/Cancellation**: Handle concurrent request cancellation (prevent stale response race)
+ *
+ * ## Dependencies
+ *
+ * **State Management**:
+ * - `store` (state.ts) - Centralized application state, config, persistence
+ *
+ * **Data Layer**:
+ * - `Api` (api.ts) - Clockify API client with rate limiting and pagination
+ *
+ * **Calculation**:
+ * - `calculateAnalysis()` (calc.ts) - Pure overtime/billable calculation engine
+ *
+ * **UI**:
+ * - `UI/*` (ui/*.ts) - Rendering modules for tables, summaries, dialogs
+ *
+ * **Export**:
+ * - `downloadCsv` (export.ts) - CSV generation with formula injection protection
+ *
+ * **Utilities**:
+ * - `IsoUtils, debounce, parseIsoDuration, getDateRangeDays` (utils.ts)
+ * - `initErrorReporting, reportError` (error-reporting.ts)
+ * - `SENTRY_DSN` (constants.ts)
  *
  * ## Data Flow Diagram
  *
@@ -28,7 +62,7 @@
  * ┌────────────────────────────────────────────────────────────────────────┐
  * │                          CALCULATION                                   │
  * │                                                                        │
- * │  workerManager.calculateAsync() OR calculateAnalysis() (fallback)     │
+ * │  runCalculation() calls calculateAnalysis()                            │
  * │                                                                        │
  * │  Input: entries, store (profiles, holidays, timeOff, config, params)  │
  * │  Output: UserAnalysis[] with daily OT breakdowns                       │
@@ -64,10 +98,52 @@
  * ```
  *
  * ## Key Functions
- * - `init()` - Entry point, parses JWT and starts data load
- * - `loadInitialData()` - Fetches users, triggers report generation
- * - `generateReport()` - Main orchestrator: fetch → calc → render
- * - `runCalculation()` - Delegates to worker or main thread
+ *
+ * - **init()** - Application entry point; parses auth token from URL, validates claims, applies theme
+ * - **loadInitialData()** - Fetches workspace users and initializes UI event bindings
+ * - **handleGenerateReport()** - Main orchestrator for report generation: validates dates, fetches data,
+ *   handles caching, triggers calculation, updates UI
+ * - **runCalculation()** - Delegates to calculation engine and renders all output tables
+ * - **bindConfigEvents()** - Wires up config controls (toggles, inputs, date pickers, tabs)
+ *
+ * ## Concurrency & Cancellation
+ *
+ * Multiple `handleGenerateReport()` calls can fire rapidly (e.g., date picker changes). To prevent
+ * race conditions where a newer request's calculation completes after an older one:
+ *
+ * 1. **AbortController**: Each request creates an AbortController and passes its signal to API calls.
+ *    If a new request starts before the old one finishes, `abortController.abort()` signals cancellation.
+ * 2. **Request ID**: Each request increments `currentRequestId`. Before updating UI, we check if the
+ *    response matches `thisRequestId === currentRequestId`. Stale responses are silently discarded.
+ * 3. **Graceful Degradation**: Optional fetches (profiles, holidays, time-off) use `Promise.allSettled()`
+ *    so a single failure doesn't block the report. Failures are tracked in `store.apiStatus` for UI display.
+ *
+ * ## Error Handling Strategy
+ *
+ * - **Auth errors**: Handled at init(); display error banner with retry prompt
+ * - **API errors**: Graceful degradation - optional data (profiles, holidays) can fail without blocking report
+ * - **Calculation errors**: Any calculation error stops the report (this should be rare with pure calc.ts)
+ * - **Sentry integration**: Error-reporting.ts captures exceptions with context metadata (module, operation, level)
+ *
+ * ## Performance Considerations
+ *
+ * - **Debouncing**: Config inputs (daily threshold, multiplier) use 300ms debounce to avoid redundant calculations
+ * - **Caching**: Detailed report results are cached in sessionStorage by date range, with user prompt for stale data
+ * - **Incremental rendering**: Each UI render function updates its own section independently
+ * - **Request cancellation**: New requests abort old ones to save bandwidth and prevent UI churn
+ *
+ * ## Security Notes
+ *
+ * - **No token logging**: Auth token is never logged or persisted (only set in store.token for API use)
+ * - **XSS prevention**: All user inputs and API-provided strings are escaped by UI modules (not here)
+ * - **Sentry privacy**: Error reports don't include PII (user names, workspace IDs not logged in errors)
+ *
+ * ## Related Documentation
+ *
+ * - `docs/prd.md` - Product requirements and feature specifications
+ * - `docs/spec.md` - Technical specification for calculation rules
+ * - `docs/guide.md` - Operational guide and API call reference
+ * - `CLAUDE.md` - Development guidelines and module responsibilities
  */
 
 import { store } from './state.js';
@@ -80,10 +156,27 @@ import { initErrorReporting, reportError } from './error-reporting.js';
 import { SENTRY_DSN } from './constants.js';
 import type { DateRange, TimeEntry, TokenClaims } from './types.js';
 
-// --- Initialization ---
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+// Application startup sequence: auth token validation, state setup, UI preparation.
+// ============================================================================
 
 /**
- * Sets default date range (last 30 days) in the UI inputs on startup.
+ * Sets default date range (last 30 days) in the UI date input controls.
+ *
+ * This function is called during application initialization to provide a reasonable
+ * default date range for report generation. The 30-day default is a common baseline
+ * for weekly/monthly overtime analysis.
+ *
+ * ## Edge Cases
+ * - If the date inputs don't exist in the DOM, this silently returns (no error thrown)
+ * - Uses local Date objects (not timezone-aware), so the date range reflects the browser's
+ *   local time zone, not UTC
+ * - Called before user can manually adjust dates, so it can be overridden immediately
+ *
+ * ## Related
+ * - Persistence: User's chosen date range is persisted via "change" listeners in `bindConfigEvents()`
  */
 export function setDefaultDates(): void {
     const end = new Date();
@@ -98,23 +191,66 @@ export function setDefaultDates(): void {
 }
 
 /**
- * Main application initialization.
- * Parses auth token from URL, sets up state, and starts initial data load.
+ * Main application initialization entry point.
+ *
+ * This function is the first to run (called at module load time if not in test mode).
+ * It orchestrates the authentication and setup sequence:
+ *
+ * 1. Initialize error reporting (Sentry) for crash capture
+ * 2. Extract JWT token from URL query parameter (`auth_token`)
+ * 3. Decode and validate JWT payload (must contain `workspaceId` claim)
+ * 4. Apply theme setting from JWT claim (Clockify can set DARK/LIGHT theme)
+ * 5. Store token in application state (via `store.setToken()`)
+ * 6. Set default date range (last 30 days)
+ * 7. Load initial data (fetch users, bind event handlers)
+ *
+ * ## Error Handling
+ *
+ * If any step fails, a user-friendly error message is displayed in the UI and an error
+ * is reported to Sentry (if configured). The user is prompted to reload or contact support.
+ * Execution stops and no further initialization occurs.
+ *
+ * ## Security Model
+ *
+ * - JWT is parsed from the URL (provided by Clockify iframe embed)
+ * - Token claims are validated immediately (must have workspaceId)
+ * - Token is stored in store.token for subsequent API calls (via X-Addon-Token header)
+ * - Token is never logged, persisted, or exposed in error messages
+ *
+ * ## JWT Claims Handled
+ *
+ * - `workspaceId` (required) - Clockify workspace identifier
+ * - `theme` (optional) - 'DARK' or 'LIGHT' to apply CSS class
+ * - Other claims are silently ignored
+ *
+ * ## Called At
+ *
+ * - Module load time (bottom of file): `if (process.env.NODE_ENV !== 'test') init()`
+ *
+ * @throws Does not throw; any error is caught and displayed to user
  */
 export function init(): void {
-    // Initialize error reporting (Sentry) early
+    // Initialize error reporting (Sentry) early for crash capture during initialization
+    // This must happen before any other async operations to catch initialization errors
     initErrorReporting({
         dsn: SENTRY_DSN,
         environment: typeof process !== 'undefined' && process.env.NODE_ENV === 'production' ? 'production' : 'development',
         release: `otplus@2.0.0`,
         sampleRate: 1.0,
     }).catch(() => {
-        // Silent fail - error reporting is optional
+        // Silent fail - error reporting is optional; don't break app if Sentry is down
     });
 
+    // Initialize DOM element references early so UI functions (like renderLoading) can work
+    // even in error paths before loadInitialData() is reached
+    UI.initializeElements();
+
+    // Extract JWT token from URL query parameter.
+    // Clockify provides this when embedding OTPLUS as an addon in an iframe.
     const params = new URLSearchParams(window.location.search);
     const token = params.get('auth_token');
 
+    // Validate that token exists before attempting to decode
     if (!token) {
         console.error('No auth token');
         reportError(new Error('No auth token provided'), {
@@ -133,18 +269,28 @@ export function init(): void {
     }
 
     try {
+        // Decode JWT: split on '.' to get payload (second part), then base64 decode
+        // Format: header.payload.signature, we need payload
         const payload = JSON.parse(atob(token.split('.')[1])) as TokenClaims;
+
+        // Validate that payload contains required claims
         if (!payload || !payload.workspaceId) {
-            throw new Error('Invalid token payload');
+            throw new Error('Invalid token payload: missing workspaceId');
         }
 
-        // Apply Theme based on JWT claim
+        // Apply dark theme CSS class if Clockify sent theme=DARK claim
+        // This ensures OTPLUS respects user's Clockify theme preference
         if (payload.theme === 'DARK') {
             document.body.classList.add('cl-theme-dark');
         }
 
+        // Store token and claims in centralized state (state.ts) for subsequent API calls
         store.setToken(token, payload);
+
+        // Initialize UI with sensible defaults (last 30 days)
         setDefaultDates();
+
+        // Proceed to data load and event binding
         loadInitialData();
     } catch (e) {
         console.error('Invalid token', e);
@@ -164,20 +310,64 @@ export function init(): void {
 }
 
 /**
- * Loads initial metadata (users) and prepares the UI.
+ * Loads initial workspace metadata and prepares the application UI.
+ *
+ * This function is called after successful authentication. It performs two main tasks:
+ *
+ * 1. **Fetch workspace users**: Retrieves the list of all users in the Clockify workspace.
+ *    This is required before generating reports (to know who to calculate OT for).
+ * 2. **Initialize UI controls**: Binds event listeners to config toggles, date pickers,
+ *    export button, and other interactive elements.
+ *
+ * ## Data Loaded
+ *
+ * - `store.users` - Array of workspace users, used as the basis for report generation.
+ *   Each user has `id`, `name`, and other profile metadata.
+ *
+ * ## Error Handling
+ *
+ * If fetching users fails (network error, permission error, etc.), an error dialog is shown
+ * and execution stops. The user is prompted to reload or check permissions.
+ *
+ * If no users are found in the workspace, an error is shown (likely a permission issue or
+ * the workspace is empty).
+ *
+ * ## Called By
+ *
+ * - `init()` - After successful JWT validation
+ *
+ * ## Sequence
+ *
+ * 1. Call `UI.initializeElements()` to set up DOM elements
+ * 2. Show "Loading" spinner
+ * 3. Fetch users from API
+ * 4. Validate that we got at least one user
+ * 5. Populate override controls with user list
+ * 6. Bind configuration event handlers
+ * 7. Bind report generation, export, and filter handlers
+ * 8. Hide "Loading" spinner
+ *
+ * @throws Does not throw; errors are caught and displayed to user
  */
 export async function loadInitialData(): Promise<void> {
-    // Initialize UI elements first (after DOM is ready)
+    // Initialize DOM elements that will be referenced throughout the app
+    // This includes the report table containers, config controls, event listener hooks, etc.
     UI.initializeElements();
 
+    // Show "Loading..." spinner while we fetch initial data
     UI.renderLoading(true);
     try {
+        // Verify that init() successfully set the workspace ID
         if (!store.claims?.workspaceId) {
             throw new Error('No workspace ID');
         }
+
+        // Fetch all workspace users from Clockify API
+        // This is essential - we need to know which users exist before generating reports
         store.users = await Api.fetchUsers(store.claims.workspaceId);
 
-        // Validate that we have at least one user
+        // Validate that we have at least one user to report on
+        // Empty user list likely means: permission denied, workspace is empty, or API error
         if (!store.users || store.users.length === 0) {
             UI.renderLoading(false);
             UI.showError({
@@ -191,9 +381,11 @@ export async function loadInitialData(): Promise<void> {
             return;
         }
 
-        // Populate overrides controls only after we have an up-to-date user list
+        // Populate the overrides table (user override controls) now that we know which users exist
+        // This must happen before bindConfigEvents() so the user list is ready
         UI.renderOverridesTable();
     } catch {
+        // Any error fetching users means we can't proceed with report generation
         UI.renderLoading(false);
         UI.showError({
             title: 'Failed to Load Users',
@@ -205,9 +397,16 @@ export async function loadInitialData(): Promise<void> {
         });
         return;
     }
+
+    // Hide "Loading..." spinner now that initial data is loaded
     UI.renderLoading(false);
 
+    // Bind event listeners to all configuration controls
+    // This includes date pickers, config toggles, export button, etc.
     bindConfigEvents();
+
+    // Bind event listeners for report generation, overrides, filters, and other interactive elements
+    // These handlers are triggered when the user interacts with the UI
     UI.bindEvents({
         onGenerate: handleGenerateReport,
         onOverrideChange: (userId: string, field: string, value: string) => {
@@ -255,22 +454,45 @@ export async function loadInitialData(): Promise<void> {
     });
 }
 
-// --- Configuration Wiring ---
+// ============================================================================
+// CONFIGURATION MANAGEMENT
+// ============================================================================
+// Event binding and state synchronization for application config controls.
+// Handles toggles, sliders, dropdowns, and date inputs; persists to localStorage.
+// ============================================================================
 
 /**
- * Updates the Daily Threshold input state based on Profile Capacity setting.
- * Disables the input and shows helper text when Profile Capacity is ON.
+ * Updates the visual state of the Daily Threshold input based on Profile Capacity setting.
+ *
+ * **Rationale**: When "Use Profile Capacity" is enabled, the Daily Threshold input becomes
+ * redundant (users' profile-defined capacities override the global threshold). This function
+ * disables the input and shows a helper message to clarify that the global threshold is ignored.
+ *
+ * ## Behavior
+ *
+ * - If `useProfileCapacity` is ON: disable input, reduce opacity, show helper text
+ * - If `useProfileCapacity` is OFF: enable input, full opacity, hide helper text
+ *
+ * ## Called By
+ *
+ * - `bindConfigEvents()` - During initialization
+ * - Config "useProfileCapacity" toggle handler - When user toggles the profile capacity setting
+ *
+ * @see CLAUDE.md "Capacity precedence (per user, per day)"
  */
 function updateDailyThresholdState(): void {
     const dailyInput = document.getElementById('configDaily') as HTMLInputElement | null;
     const helper = document.getElementById('dailyThresholdHelper') as HTMLElement | null;
     if (!dailyInput || !helper) return;
 
+    // Read the current config setting
     const useProfile = store.config.useProfileCapacity;
+
+    // Disable input when profile capacity is enabled (input becomes redundant)
     dailyInput.disabled = useProfile;
     helper.style.display = useProfile ? 'inline' : 'none';
 
-    // Visual feedback
+    // Visual feedback: reduce opacity and change cursor to indicate disabled state
     if (useProfile) {
         dailyInput.style.opacity = '0.5';
         dailyInput.style.cursor = 'not-allowed';
@@ -280,17 +502,51 @@ function updateDailyThresholdState(): void {
     }
 }
 
+/**
+ * Determines whether the current time entries include cost/profit rate information.
+ *
+ * **Rationale**: OTPLUS can display "Earned" (billable × rate), "Cost" (internal cost),
+ * or "Profit" (earned - cost). However, cost/profit data is optional in Clockify time entries.
+ * This function checks if entries actually have cost/profit rates before offering those display modes.
+ *
+ * ## Algorithm
+ *
+ * 1. If entries list is empty or null, return `true` (assume available, disable gracefully later)
+ * 2. Check if ANY entry has a non-zero `costRate` (direct cost field)
+ * 3. Check if ANY entry has `amounts[]` with COST or PROFIT type and non-zero value
+ * 4. Return `true` if either condition is met, `false` otherwise
+ *
+ * ## Edge Cases
+ *
+ * - Empty entries: returns `true` (assume available; gracefully disable if no data loaded)
+ * - Entries with zero cost: treated as unavailable (zero cost is not useful)
+ * - Mixed data: if ANY entry has cost/profit, all display modes are offered
+ *
+ * ## Called By
+ *
+ * - `syncAmountDisplayAvailability()` - To determine which dropdown options to show
+ *
+ * @param entries - Array of time entries from Clockify API (may be null)
+ * @returns `true` if cost/profit data appears to be available, `false` otherwise
+ */
 function hasCostRates(entries: TimeEntry[] | null): boolean {
-    // Determine whether any entry provides explicit cost/profit information
+    // Empty entries: optimistically return true (cost data might be added later)
     if (!Array.isArray(entries) || entries.length === 0) return true;
+
+    // Check if ANY entry has cost/profit data
     return entries.some((entry) => {
+        // Check direct costRate field (Clockify API property)
         const rawCostRate = (entry?.costRate as { amount?: number })?.amount ?? entry?.costRate;
         const costRate = Number(rawCostRate);
         // Only treat as available when a non-zero cost rate exists
+        // (zero cost is not useful for display)
         if (Number.isFinite(costRate) && costRate !== 0) return true;
+
+        // Check amounts array (alternative cost/profit fields)
         const amounts = Array.isArray(entry?.amounts) ? entry.amounts : [];
         return amounts.some((amount) => {
             const type = String(amount?.type || amount?.amountType || '').toUpperCase();
+            // Only interested in COST or PROFIT types
             if (type !== 'COST' && type !== 'PROFIT') return false;
             const value = Number(amount?.value ?? amount?.amount);
             return Number.isFinite(value) && value !== 0;
@@ -298,21 +554,54 @@ function hasCostRates(entries: TimeEntry[] | null): boolean {
     });
 }
 
+/**
+ * Synchronizes the "Amount Display" dropdown availability based on actual data.
+ *
+ * **Rationale**: The UI offers three display modes:
+ * - "Earned" (billable hours × hourly rate) - always available
+ * - "Cost" (internal cost per entry) - only available if cost data exists
+ * - "Profit" (earned - cost) - only available if cost data exists
+ *
+ * This function checks if the loaded time entries actually have cost/profit data,
+ * then updates the UI dropdown to hide/disable unavailable options.
+ *
+ * ## Algorithm
+ *
+ * 1. Check if current entries have cost rates (via `hasCostRates()`)
+ * 2. Hide/disable cost and profit options if data unavailable
+ * 3. If user's selected mode is now unavailable, switch to "earned"
+ * 4. Update dropdown to reflect available options
+ *
+ * ## Side Effects
+ *
+ * - Modifies `store.ui.hasCostRates` (tracks availability for UI layer)
+ * - Modifies `store.config.amountDisplay` if current selection is unavailable
+ * - Calls `store.saveConfig()` if config changes
+ *
+ * ## Called By
+ *
+ * - `runCalculation()` - Before rendering tables (ensures dropdown reflects current data)
+ *
+ * @param entries - Array of time entries from Clockify API
+ */
 function syncAmountDisplayAvailability(entries: TimeEntry[] | null): void {
-    // Toggle extra amount display modes only when cost/profit data is present
+    // Determine whether cost/profit data is present in entries
     const costRatesAvailable = hasCostRates(entries);
     store.ui.hasCostRates = costRatesAvailable;
 
     const amountDisplayEl = document.getElementById('amountDisplay') as HTMLSelectElement | null;
     if (!amountDisplayEl) return;
 
-    // Hide cost/profit options when data doesn't provide cost references
+    // Find cost and profit options in the dropdown
     const costOption = amountDisplayEl.querySelector(
         'option[value="cost"]'
     ) as HTMLOptionElement | null;
     const profitOption = amountDisplayEl.querySelector(
         'option[value="profit"]'
     ) as HTMLOptionElement | null;
+
+    // Hide and disable cost/profit options when data doesn't provide them
+    // (Users won't see these options; they can't select them)
     if (costOption) {
         costOption.hidden = !costRatesAvailable;
         costOption.disabled = !costRatesAvailable;
@@ -322,27 +611,69 @@ function syncAmountDisplayAvailability(entries: TimeEntry[] | null): void {
         profitOption.disabled = !costRatesAvailable;
     }
 
+    // Normalize current config: valid options are 'earned', 'cost', 'profit'
     const validDisplays = new Set(['earned', 'cost', 'profit']);
     let nextDisplay = String(store.config.amountDisplay || '').toLowerCase();
     if (!validDisplays.has(nextDisplay)) nextDisplay = 'earned';
+
+    // If cost/profit data is unavailable but user has cost/profit selected, switch to earned
     if (!costRatesAvailable && (nextDisplay === 'cost' || nextDisplay === 'profit')) {
         nextDisplay = 'earned';
     }
 
+    // Persist config change if display mode changed
     if (store.config.amountDisplay !== nextDisplay) {
         store.config.amountDisplay = nextDisplay as 'earned' | 'cost' | 'profit';
         store.saveConfig();
     }
 
+    // Update dropdown to reflect the current (possibly adjusted) selection
     amountDisplayEl.value = nextDisplay;
 }
 
 /**
- * Binds event listeners to configuration controls (toggles, inputs).
- * Handles persistence to localStorage and auto-recalculation.
+ * Binds event listeners to all configuration controls and UI interactive elements.
+ *
+ * This function wires up the entire application's interactive surface. It handles:
+ * - Configuration toggles (profile capacity, holidays, time-off, decimal display, etc.)
+ * - Numeric inputs (daily threshold, OT multiplier, tier 2 settings)
+ * - Date pickers and date preset buttons (this week, last week, etc.)
+ * - Export and refresh buttons
+ * - Tab navigation
+ * - Summary table grouping and expansion
+ * - Detailed report filters
+ * - Clear data confirmation
+ *
+ * ## Pattern: Config → Store → Persist → Recalculate
+ *
+ * For most config changes, the flow is:
+ * 1. User changes a control (toggle, slider, input)
+ * 2. Event handler updates `store.config` or `store.calcParams`
+ * 3. Call `store.saveConfig()` to persist to localStorage
+ * 4. If raw entries exist, trigger `runCalculation()` to recalculate analysis
+ * 5. UI tables automatically re-render with new results
+ *
+ * ## Debouncing
+ *
+ * Numeric inputs (daily threshold, multipliers) use 300ms debounce to avoid triggering
+ * calculations on every keystroke. This improves performance for rapid user input.
+ *
+ * ## Special Cases
+ *
+ * - **showDecimalTime**: Formatting-only change; re-renders tables without recalculation
+ * - **useProfileCapacity**: Updates Daily Threshold input state when toggled
+ * - **showBillableBreakdown**: Updates summary expand toggle visibility
+ * - **Date changes**: Auto-trigger report generation after 300ms debounce
+ *
+ * ## Called By
+ *
+ * - `loadInitialData()` - After fetching users, before any reports generated
+ *
+ * @see CLAUDE.md "Commands" and "Calculation rules" for config meaning
  */
 export function bindConfigEvents(): void {
-    // Toggle mapping describing which DOM checkbox updates which config flag
+    // ========== Boolean Configuration Toggles ==========
+    // Map of checkbox IDs to config keys for easy wiring of boolean toggles
     const configToggles = [
         { id: 'useProfileCapacity', key: 'useProfileCapacity' },
         { id: 'useProfileWorkingDays', key: 'useProfileWorkingDays' },
@@ -352,33 +683,45 @@ export function bindConfigEvents(): void {
         { id: 'showDecimalTime', key: 'showDecimalTime' },
     ] as const;
 
-    // Wire up boolean toggles -> persisted config -> recalculation
+    // Wire up each toggle: read current state, listen for changes, persist and recalculate
     configToggles.forEach(({ id, key }) => {
         const el = document.getElementById(id) as HTMLInputElement | null;
         if (el) {
+            // Initialize checkbox with current config value
             el.checked = store.config[key];
+
+            // Add change listener
             el.addEventListener('change', (e) => {
+                // Update config in memory
                 store.config[key] = (e.target as HTMLInputElement).checked;
+                // Persist to localStorage
                 store.saveConfig();
 
-                // Update expand toggle visibility when billable breakdown changes
+                // Handle side effects for specific toggles
+
+                // When billable breakdown toggle changes, show/hide the expand control
                 if (key === 'showBillableBreakdown') {
                     UI.renderSummaryExpandToggle();
                 }
 
-                // Update Daily Threshold state when Profile Capacity changes
+                // When profile capacity toggle changes, update the Daily Threshold input state
+                // (disabled/enabled, visible helper text)
                 if (key === 'useProfileCapacity') {
                     updateDailyThresholdState();
                 }
 
+                // Trigger recalculation if we have raw entries
+                // NOTE: showDecimalTime is special - it only affects formatting, not calculation
                 if (store.rawEntries) {
                     if (key === 'showDecimalTime') {
+                        // Formatting change: re-render without recalculation
                         if (store.analysisResults) {
                             UI.renderSummaryStrip(store.analysisResults);
                             UI.renderSummaryTable(store.analysisResults);
                             UI.renderDetailedTable(store.analysisResults);
                         }
                     } else {
+                        // Calculation change: full recalculation needed
                         runCalculation();
                     }
                 }
@@ -386,6 +729,9 @@ export function bindConfigEvents(): void {
         }
     });
 
+    // ========== Amount Display Mode Selector ==========
+    // Dropdown to choose between "Earned", "Cost", or "Profit" display modes
+    // (Availability depends on whether cost data exists in entries)
     const amountDisplayEl = document.getElementById('amountDisplay') as HTMLSelectElement | null;
     if (amountDisplayEl) {
         const validDisplays = new Set(['earned', 'cost', 'profit']);
@@ -394,25 +740,33 @@ export function bindConfigEvents(): void {
         amountDisplayEl.addEventListener('change', (e) => {
             const nextValue = String((e.target as HTMLSelectElement).value || '').toLowerCase();
             const allowCost = store.ui.hasCostRates !== false;
+            // Normalize to valid display mode
             let normalized: 'earned' | 'cost' | 'profit' = validDisplays.has(nextValue)
                 ? (nextValue as 'earned' | 'cost' | 'profit')
                 : 'earned';
+            // Fall back to earned if cost data unavailable
             if (!allowCost && (normalized === 'cost' || normalized === 'profit')) {
                 normalized = 'earned';
             }
             store.config.amountDisplay = normalized;
             store.saveConfig();
             amountDisplayEl.value = store.config.amountDisplay;
+            // Re-render tables with new amount display mode
             if (store.rawEntries) runCalculation();
         });
     }
 
+    // ========== Numeric Configuration Inputs ==========
+    // These use debouncing to avoid triggering recalculations on every keystroke
+
+    // Daily Threshold (default hours per day that don't count as OT)
     const dailyEl = document.getElementById('configDaily') as HTMLInputElement | null;
     if (dailyEl) {
         dailyEl.value = String(store.calcParams.dailyThreshold);
         dailyEl.addEventListener(
             'input',
             debounce((e: Event) => {
+                // Parse float; default to 8 if invalid
                 store.calcParams.dailyThreshold =
                     parseFloat((e.target as HTMLInputElement).value) || 8;
                 store.saveConfig();
@@ -421,12 +775,15 @@ export function bindConfigEvents(): void {
         );
     }
 
+    // Overtime Multiplier (1.5 = time-and-a-half)
+    // See CLAUDE.md "Cost Calculation" for how this is applied
     const multEl = document.getElementById('configMultiplier') as HTMLInputElement | null;
     if (multEl) {
         multEl.value = String(store.calcParams.overtimeMultiplier);
         multEl.addEventListener(
             'input',
             debounce((e: Event) => {
+                // Parse float; default to 1.5 if invalid
                 store.calcParams.overtimeMultiplier =
                     parseFloat((e.target as HTMLInputElement).value) || 1.5;
                 store.saveConfig();
@@ -435,6 +792,9 @@ export function bindConfigEvents(): void {
         );
     }
 
+    // Tier 2 Threshold (OT hours before switching to tier 2 multiplier)
+    // When tier2ThresholdHours = 40, first 40 OT hours use overtimeMultiplier,
+    // additional hours use tier2Multiplier (double overtime)
     const tier2ThresholdEl = document.getElementById(
         'configTier2Threshold'
     ) as HTMLInputElement | null;
@@ -451,6 +811,7 @@ export function bindConfigEvents(): void {
         );
     }
 
+    // Tier 2 Multiplier (e.g., 2.0 for double overtime after threshold)
     const tier2MultiplierEl = document.getElementById(
         'configTier2Multiplier'
     ) as HTMLInputElement | null;
@@ -467,10 +828,12 @@ export function bindConfigEvents(): void {
         );
     }
 
-    // Initialize Daily Threshold state based on Profile Capacity
+    // ========== Initialize Dependent UI States ==========
+    // Set up states that depend on multiple config values
     updateDailyThresholdState();
 
-    // Config toggle collapse
+    // ========== Config Panel Collapse Toggle ==========
+    // Allow users to collapse the config section to reduce screen clutter
     const configToggle = document.getElementById('configToggle');
     const configContent = document.getElementById('configContent');
     if (configToggle && configContent) {
@@ -480,20 +843,27 @@ export function bindConfigEvents(): void {
         });
     }
 
-    // Tab navigation with ARIA support using event delegation
+    // ========== Tab Navigation (Summary vs Detailed) ==========
+    // Allow users to switch between summary and detailed report views
+    // Uses event delegation for cleaner code (single listener on parent)
     const tabNavCard = document.getElementById('tabNavCard') as HTMLElement | null;
     if (tabNavCard && !tabNavCard.dataset.listenerAttached) {
+        // Mark that listener is attached to prevent duplicate listeners on rerenders
         tabNavCard.dataset.listenerAttached = 'true';
         tabNavCard.addEventListener('click', (e) => {
+            // Event delegation: find the tab button that was clicked
             const btn = (e.target as HTMLElement).closest('.tab-btn') as HTMLElement | null;
             if (!btn) return;
 
+            // Update tab button states (remove active from all, add to clicked)
             document.querySelectorAll('.tab-btn').forEach((b) => {
                 b.classList.remove('active');
                 b.setAttribute('aria-selected', 'false');
             });
             btn.classList.add('active');
             btn.setAttribute('aria-selected', 'true');
+
+            // Show/hide corresponding content panes
             const tab = btn.dataset.tab;
             const summaryCard = document.getElementById('summaryCard');
             const detailedCard = document.getElementById('detailedCard');
@@ -502,7 +872,9 @@ export function bindConfigEvents(): void {
         });
     }
 
-    // Export Button
+    // ========== Export Button ==========
+    // Generates and downloads a CSV file with analysis results
+    // CSV includes formula injection protection (see export.ts)
     const exportBtn = document.getElementById('exportBtn');
     if (exportBtn) {
         exportBtn.addEventListener('click', () => {
@@ -512,16 +884,24 @@ export function bindConfigEvents(): void {
         });
     }
 
-    // Refresh Button - bypass cache and fetch fresh data
+    // ========== Refresh Button ==========
+    // Force a fresh report generation, bypassing any caches
+    // Clears the report cache and calls handleGenerateReport with forceRefresh=true
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
+            // Clear cached report data
             store.clearReportCache();
+            // Fetch fresh data from Clockify API
             handleGenerateReport(true);
         });
     }
 
-    // Date Presets
+    // ========== Date Range Selection ==========
+    // Users can either manually pick dates or use preset buttons for quick selection
+    // Date selection is debounced to avoid multiple rapid report generations
+
+    // Helper function to update the date input values
     const setDateRange = (start: Date, end: Date) => {
         const startEl = document.getElementById('startDate') as HTMLInputElement | null;
         const endEl = document.getElementById('endDate') as HTMLInputElement | null;
@@ -532,15 +912,20 @@ export function bindConfigEvents(): void {
     const startInput = document.getElementById('startDate') as HTMLInputElement | null;
     const endInput = document.getElementById('endDate') as HTMLInputElement | null;
 
-    // Auto-generate when dates change
+    // Auto-generate report when dates change (debounced to 300ms)
+    // This allows smooth date picker interaction without multiple API calls
     const queueAutoGenerate = debounce(() => {
         const startValue = startInput?.value;
         const endValue = endInput?.value;
+        // Only proceed if both dates are set
         if (!startValue || !endValue) return;
+        // Only proceed if start <= end (validate date range)
         if (startValue > endValue) return;
+        // Trigger report generation
         handleGenerateReport();
     }, 300);
 
+    // Listen for changes to manual date inputs
     if (startInput) {
         startInput.addEventListener('change', queueAutoGenerate);
     }
@@ -548,9 +933,15 @@ export function bindConfigEvents(): void {
         endInput.addEventListener('change', queueAutoGenerate);
     }
 
+    // ========== Date Preset Buttons ==========
+    // Quick shortcuts for common date ranges (this week, last week, etc.)
+    // Each preset calculates the appropriate date range and triggers report generation
+
+    // "This Week" - Monday (start of week) to today
     document.getElementById('datePresetThisWeek')?.addEventListener('click', () => {
         const now = new Date();
         const dayOfWeek = now.getUTCDay();
+        // Calculate offset to Monday (ISO 8601: Monday = 1, Sunday = 0)
         const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
         const start = new Date(
             Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset)
@@ -562,9 +953,11 @@ export function bindConfigEvents(): void {
         queueAutoGenerate();
     });
 
+    // "Last Week" - Last Monday to last Sunday
     document.getElementById('datePresetLastWeek')?.addEventListener('click', () => {
         const now = new Date();
         const dayOfWeek = now.getUTCDay();
+        // Calculate offsets to last week's Monday and Sunday
         const lastMondayOffset = dayOfWeek === 0 ? -13 : -6 - dayOfWeek;
         const lastSundayOffset = dayOfWeek === 0 ? -7 : -dayOfWeek;
         const start = new Date(
@@ -585,6 +978,7 @@ export function bindConfigEvents(): void {
         queueAutoGenerate();
     });
 
+    // "Last 2 Weeks" - 14 days ago to today
     document.getElementById('datePresetLast2Weeks')?.addEventListener('click', () => {
         const now = new Date();
         const start = new Date(
@@ -597,29 +991,37 @@ export function bindConfigEvents(): void {
         queueAutoGenerate();
     });
 
+    // "Last Month" - First to last day of previous calendar month
     document.getElementById('datePresetLastMonth')?.addEventListener('click', () => {
         const now = new Date();
+        // Date.UTC(year, month, 0) gives the last day of the previous month
         const start = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
         const end = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 0));
         setDateRange(start, end);
         queueAutoGenerate();
     });
 
+    // "This Month" - First day to last day of current calendar month
     document.getElementById('datePresetThisMonth')?.addEventListener('click', () => {
         const now = new Date();
         const start = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+        // Date.UTC(year, month+1, 0) gives the last day of current month
         const end = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
         setDateRange(start, end);
         queueAutoGenerate();
     });
 
-    // Detailed Filter Chips
+    // ========== Detailed Report Filter Chips ==========
+    // Allow users to filter detailed table by user, project, client, task, or billability
+    // Uses event delegation for cleaner event binding
     const filterContainer = document.getElementById('detailedFilters');
     if (filterContainer) {
         filterContainer.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
+            // Check if the clicked element is a filter chip
             if (target.classList.contains('chip')) {
                 const filter = target.dataset.filter;
+                // Re-render detailed table with the selected filter applied
                 if (filter && store.analysisResults) {
                     UI.renderDetailedTable(store.analysisResults, filter);
                 }
@@ -627,44 +1029,60 @@ export function bindConfigEvents(): void {
         });
     }
 
-    // Summary Group By Selector
+    // ========== Summary Table Grouping Selector ==========
+    // Allow users to group summary results by: user, project, client, task, or week
+    // Grouping changes how the summary table is aggregated (see summary.ts)
     const groupBySelect = document.getElementById('groupBySelect') as HTMLSelectElement | null;
     if (groupBySelect) {
         groupBySelect.value = store.ui.summaryGroupBy || 'user';
 
         groupBySelect.addEventListener('change', (e) => {
+            // Update UI state with new grouping preference
             store.ui.summaryGroupBy = (e.target as HTMLSelectElement).value as typeof store.ui.summaryGroupBy;
+            // Persist grouping preference to localStorage
             store.saveUIState();
+            // Re-render summary table with new grouping
             if (store.analysisResults) {
                 UI.renderSummaryTable(store.analysisResults);
             }
         });
     }
 
-    // Summary Expand/Collapse Toggle - use event delegation
+    // ========== Summary Billable Breakdown Expansion Toggle ==========
+    // When "Show Billable Breakdown" is enabled, users can expand/collapse billable details
+    // This toggle is only visible when billable breakdown is enabled
     const summaryExpandToggleContainer = document.getElementById('summaryExpandToggleContainer');
     if (summaryExpandToggleContainer) {
+        // Render the toggle button (only visible if billable breakdown enabled)
         UI.renderSummaryExpandToggle();
 
+        // Listen for clicks on the toggle button using event delegation
         summaryExpandToggleContainer.addEventListener('click', (e) => {
             const btn = (e.target as HTMLElement).closest('#summaryExpandToggle');
             if (!btn) return;
 
+            // Toggle expanded state
             store.ui.summaryExpanded = !store.ui.summaryExpanded;
+            // Persist to localStorage
             store.saveUIState();
 
+            // Re-render the toggle button itself (to update visual state)
             UI.renderSummaryExpandToggle();
 
+            // Re-render the summary table with new expansion state
             if (store.analysisResults) {
                 UI.renderSummaryTable(store.analysisResults);
             }
         });
     }
 
-    // Clear All Data button
+    // ========== Clear All Data Button ==========
+    // Dangerous: removes all cached reports and configuration from localStorage
+    // Shows a confirmation dialog before proceeding
     const clearDataBtn = document.getElementById('clearAllDataBtn');
     if (clearDataBtn) {
         clearDataBtn.addEventListener('click', () => {
+            // Show confirmation dialog; if confirmed, clear all data and reload
             UI.showClearDataConfirmation(() => {
                 store.clearAllData();
                 location.reload();
@@ -673,35 +1091,134 @@ export function bindConfigEvents(): void {
     }
 }
 
-// --- Report Logic ---
+// ============================================================================
+// REPORT GENERATION & CALCULATION
+// ============================================================================
+// Main orchestration logic: validate dates, fetch data, calculate analysis, render UI.
+// Includes concurrency control (AbortController) and caching (sessionStorage).
+// ============================================================================
 
-/** Reference to the AbortController for the active report generation request. */
+/**
+ * Reference to the AbortController for the active report generation request.
+ * Used to cancel in-flight API calls if a new report generation starts.
+ * @see handleGenerateReport() for usage pattern
+ */
 let abortController: AbortController | null = null;
-/** Request ID to detect stale responses from concurrent requests */
+
+/**
+ * Request ID counter to detect stale responses from concurrent requests.
+ * Incremented on each new report generation request.
+ * Used to ensure only the most recent request updates the UI.
+ * @see handleGenerateReport() for usage pattern
+ */
 let currentRequestId = 0;
 
 /**
- * Orchestrates the full report generation process.
- * @param forceRefresh - If true, bypasses cache and fetches fresh data.
+ * Orchestrates the complete report generation workflow.
+ *
+ * This is the main orchestrator function that coordinates:
+ * 1. Date validation and range safeguards
+ * 2. Cache checks (reuse recent results if unchanged)
+ * 3. Data fetching (entries, profiles, holidays, time-off)
+ * 4. Graceful error handling (optional fetches can fail without blocking)
+ * 5. Calculation delegation
+ * 6. UI rendering
+ *
+ * ## Flow
+ *
+ * ```
+ * handleGenerateReport()
+ *  ├─ Cancel previous request (if any)
+ *  ├─ Validate dates
+ *  ├─ Check cache (reuse if exists and user agrees)
+ *  ├─ Show loading spinner
+ *  ├─ Fetch all data in parallel:
+ *  │  ├─ Detailed report (entries) [REQUIRED]
+ *  │  ├─ Profiles (capacity, working days) [OPTIONAL]
+ *  │  ├─ Holidays [OPTIONAL]
+ *  │  └─ Time off [OPTIONAL]
+ *  ├─ Check if this request is still current (detect stale responses)
+ *  ├─ Call runCalculation() to compute analysis
+ *  ├─ Render all UI tables
+ *  ├─ Show API status banner (if optional fetches failed)
+ *  └─ Hide loading spinner
+ * ```
+ *
+ * ## Concurrency Control
+ *
+ * When a user rapidly changes dates or clicks "Generate" multiple times, multiple
+ * report generation requests can be in flight. To prevent race conditions:
+ *
+ * 1. **AbortController**: New request calls `abortController.abort()` to cancel
+ *    the previous request's API calls (via AbortSignal).
+ * 2. **Request ID**: Each request increments `currentRequestId`. Before updating UI,
+ *    we check `thisRequestId === currentRequestId`. Stale responses are discarded.
+ *
+ * ## Caching Strategy
+ *
+ * Report results are cached in sessionStorage (browser session-scoped) by date range key.
+ * When generating a report with the same date range, the user is prompted:
+ * - "Use cached results?" → yes: reuse cached entries
+ * - "Use cached results?" → no: fetch fresh from API
+ * - Auto-caching: Results are automatically cached after successful fetch (not after user accepts)
+ *
+ * Cache is cleared on "Refresh" button click or explicit clear action.
+ *
+ * ## Date Validation & Safeguards
+ *
+ * - **Required**: Both start and end dates must be provided
+ * - **Order**: Start date must be ≤ end date
+ * - **Range limit**: Dates > 365 days apart trigger a confirmation warning
+ *   (large ranges increase API calls and calculation time)
+ *
+ * ## Optional Fetch Graceful Degradation
+ *
+ * Profiles, holidays, and time-off fetches are optional. If they fail:
+ * - Failure is logged but doesn't stop report generation
+ * - Failures are tracked in `store.apiStatus` for UI warning banner
+ * - Report still calculates with fallback defaults
+ *
+ * ## Error Handling
+ *
+ * - **Validation errors** (invalid dates): Show error banner, don't fetch
+ * - **Network errors**: Caught, reported to Sentry, user shown generic error message
+ * - **Abort errors** (request cancelled): Silently discarded (expected behavior)
+ *
+ * ## Called By
+ *
+ * - `loadInitialData()` - Indirectly via event binding
+ * - User date changes or "Generate" button click
+ * - "Refresh" button click
+ *
+ * @param forceRefresh - If true, bypasses cache and fetches fresh data from Clockify API
  */
 export async function handleGenerateReport(forceRefresh = false): Promise<void> {
-    // Cancel previous request if running
+    // ===== Concurrency Control =====
+    // Cancel the previous request if it's still in flight
+    // This prevents race conditions where old requests overwrite new results
     if (abortController) {
         abortController.abort();
     }
+
+    // Create a new AbortController for this request
+    // The signal will be passed to all API calls; if abort() is called, they all cancel
     abortController = new AbortController();
     const { signal } = abortController;
 
     // Increment request ID to detect stale responses
+    // Before updating UI, we check if thisRequestId === currentRequestId
+    // Stale responses (from a cancelled request that somehow completed) are ignored
     currentRequestId++;
     const thisRequestId = currentRequestId;
 
+    // ===== Extract and Validate Dates =====
     const startDateEl = document.getElementById('startDate') as HTMLInputElement | null;
     const endDateEl = document.getElementById('endDate') as HTMLInputElement | null;
     const startDate = startDateEl?.value || '';
     const endDate = endDateEl?.value || '';
 
-    // Ensure both dates are selected before issuing API calls
+    // Validate that both dates are selected
+    // Both dates are required; empty dates mean the user hasn't made a selection
     if (!startDate || !endDate) {
         UI.renderLoading(false);
         const emptyState = document.getElementById('emptyState');
@@ -709,13 +1226,14 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
             emptyState.textContent = 'Please select start and end dates to generate the report.';
             emptyState.classList.remove('hidden');
         }
+        // Auto-hide the message after 3 seconds (temporary notification)
         setTimeout(() => {
             if (emptyState) emptyState.classList.add('hidden');
         }, 3000);
         return;
     }
 
-    // Validate date range
+    // Validate that start date is not after end date (ISO string comparison works for this)
     if (startDate > endDate) {
         UI.renderLoading(false);
         UI.showError({
@@ -728,47 +1246,61 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
         return;
     }
 
-    // Date range safeguard: warn for large ranges (> 365 days)
+    // ===== Large Date Range Safeguard =====
+    // Date ranges > 365 days trigger a warning because:
+    // - More API calls needed (paginated through ~1000+ entries)
+    // - More calculation time (per-day breakdown for 365+ days)
+    // - Higher likelihood of hitting rate limits
+    // See CLAUDE.md "Performance budget" for performance targets
     const rangeDays = getDateRangeDays(startDate, endDate);
     if (rangeDays > 365) {
         const confirmed = await UI.showLargeDateRangeWarning(rangeDays);
         if (!confirmed) {
-            return; // User cancelled
+            return; // User cancelled large range
         }
     }
 
-    // Use request-scoped date range
+    // ===== Create Request-Scoped Date Range =====
+    // Store the date range for this request; will be passed to runCalculation()
     const requestDateRange: DateRange = { start: startDate, end: endDate };
 
-    // Check for cached report data (unless force refresh is requested)
+    // ===== Cache Checking =====
+    // Session storage cache avoids re-fetching entries if the same date range is requested
+    // This improves UX for rapid regenerations (e.g., config changes)
     const cacheKey = store.getReportCacheKey(startDate, endDate);
     let useCachedData = false;
     let cachedEntries: typeof store.rawEntries = null;
 
     if (cacheKey && !forceRefresh) {
+        // Check if we have a cached report for this date range
         cachedEntries = store.getCachedReport(cacheKey);
         if (cachedEntries) {
-            // Get cache age for display
+            // Found cached data; ask user if they want to use it
             const cacheData = sessionStorage.getItem('otplus_report_cache');
             if (cacheData) {
                 try {
                     const parsed = JSON.parse(cacheData) as { timestamp: number };
                     const cacheAgeSeconds = Math.round((Date.now() - parsed.timestamp) / 1000);
+                    // Show cache prompt with age information
                     const action = await UI.showCachePrompt(cacheAgeSeconds);
                     useCachedData = action === 'use';
                 } catch {
+                    // Malformed cache metadata; don't use cache
                     useCachedData = false;
                 }
             }
         }
     }
 
+    // ===== Prepare for Data Fetch =====
+    // Show loading spinner and reset status counters before starting fetch
     UI.renderLoading(true);
-    store.resetApiStatus();
-    store.resetThrottleStatus();
-    store.clearFetchCache();
+    store.resetApiStatus();     // Clear API failure counts from previous requests
+    store.resetThrottleStatus(); // Reset rate limit tracking
+    store.clearFetchCache();    // Clear per-fetch caches (used for user profile lookups)
 
     try {
+        // Verify that we have a workspace ID (should never fail after init())
         if (!store.claims?.workspaceId) {
             throw new Error('No workspace ID');
         }
@@ -776,36 +1308,59 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
         let entries: typeof store.rawEntries;
 
         if (useCachedData && cachedEntries) {
-            // Use cached data
+            // ===== Use Cached Data Path =====
+            // User chose to reuse cached results; skip API call
             entries = cachedEntries;
             UI.updateLoadingProgress(0, 'cached data');
         } else {
-            // Fetch via Detailed Report API (single request for ALL users).
+            // ===== Fetch Fresh Data Path =====
+            // Use the Detailed Report API (not the standard time entries API)
+            // The Detailed Report API returns enriched entries with billable flags, rates,
+            // project/client/task info, and allows pagination
+            // See docs/guide.md for full API reference
             entries = await Api.fetchDetailedReport(
                 store.claims.workspaceId,
                 `${startDate}T00:00:00Z`,
                 `${endDate}T23:59:59Z`,
                 {
-                    signal,
+                    signal,  // Pass AbortSignal for cancellation
                     onProgress: (page, phase) => {
+                        // Update UI with pagination progress (useful for large reports)
                         UI.updateLoadingProgress(page, phase);
                     },
                 }
             );
 
-            // Save to cache after successful fetch
+            // Cache the fetched entries for potential reuse
+            // Only cache if we got results (avoid caching empty responses)
             if (cacheKey && entries && entries.length > 0) {
                 store.setCachedReport(cacheKey, entries);
             }
         }
 
+        // Store raw entries in application state for subsequent calculations and exports
         store.rawEntries = entries;
 
-        // Prepare optional fetch promises (these can fail gracefully)
+        // ===== Optional Data Fetches =====
+        // These fetches are optional and can fail gracefully:
+        // - Profiles (capacity, working days)
+        // - Holidays
+        // - Time off
+        //
+        // If any fail, report the failure to `store.apiStatus` for UI display,
+        // but continue with report generation using available data (graceful degradation).
+        //
+        // Why optional? Per CLAUDE.md "Graceful degradation": missing data must not crash
+        // the report. Default capacity/holidays/timeOff are applied if unavailable.
+
         const optionalPromises: { name: string; promise: Promise<void> }[] = [];
 
-        // 2. Fetch Profiles (Capacity/Working Days) - OPTIONAL
+        // ===== 2. Fetch User Profiles (Capacity & Working Days) - OPTIONAL =====
+        // Profiles provide per-user working capacity (e.g., 8h default vs 6h for part-timers)
+        // and working day schedules (which days user works, e.g., Mon-Fri)
+        // Only fetch if enabled in config and not already cached
         if (store.config.useProfileCapacity || store.config.useProfileWorkingDays) {
+            // Filter to only fetch profiles we haven't cached yet
             const missingUsers = store.users.filter((u) => !store.profiles.has(u.id));
             if (missingUsers.length > 0) {
                 optionalPromises.push({
@@ -813,9 +1368,12 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
                     promise: Api.fetchAllProfiles(store.claims.workspaceId, missingUsers, {
                         signal,
                     }).then((profiles) => {
+                        // Store fetched profiles in memory cache
                         profiles.forEach((profile, userId) => {
                             store.profiles.set(userId, {
+                                // Convert ISO duration (e.g., "PT8H") to decimal hours
                                 workCapacityHours: parseIsoDuration(profile.workCapacity || ''),
+                                // Working day schedule (e.g., [1,2,3,4,5] for Mon-Fri)
                                 workingDays: profile.workingDays,
                             });
                         });
@@ -824,7 +1382,10 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
             }
         }
 
-        // 3. Fetch Holidays - OPTIONAL
+        // ===== 3. Fetch Holidays - OPTIONAL =====
+        // Holidays reduce effective capacity to zero (all work is OT that day)
+        // Only fetch if enabled in config
+        // See CLAUDE.md "Effective capacity adjustments" for how holidays are applied
         if (store.config.applyHolidays) {
             optionalPromises.push({
                 name: 'holidays',
@@ -835,6 +1396,8 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
                     endDate,
                     { signal }
                 ).then((holidays) => {
+                    // Convert holiday list to Map<userId, Map<dateKey, holiday>>
+                    // This allows O(1) lookup of "is this date a holiday for this user?"
                     holidays.forEach((hList, userId) => {
                         const hMap = new Map();
                         (hList || []).forEach((h) => {
@@ -843,9 +1406,11 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
 
                             if (startKey) {
                                 if (!endKey || endKey === startKey) {
+                                    // Single-day holiday
                                     hMap.set(startKey, h);
                                 } else {
-                                    // Expand multi-day holidays
+                                    // Multi-day holiday (e.g., company-wide closure Dec 20-Jan 2)
+                                    // Expand to individual days for efficient lookup
                                     const range = IsoUtils.generateDateRange(startKey, endKey);
                                     range.forEach((date) => hMap.set(date, h));
                                 }
@@ -857,7 +1422,10 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
             });
         }
 
-        // 4. Fetch Time Off - OPTIONAL
+        // ===== 4. Fetch Time Off - OPTIONAL =====
+        // Time off (PTO) reduces effective capacity by the hours taken off
+        // Only fetch if enabled in config
+        // See CLAUDE.md "Effective capacity adjustments" for how time-off is applied
         if (store.config.applyTimeOff) {
             optionalPromises.push({
                 name: 'timeOff',
@@ -868,22 +1436,27 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
                     endDate,
                     { signal }
                 ).then((timeOff) => {
+                    // Store time-off data in app state
+                    // Structure: Map<userId, Map<dateKey, hoursTaken>>
                     store.timeOff = timeOff;
                 }),
             });
         }
 
-        // Wait for optional fetches with graceful failure handling
+        // ===== Wait for Optional Fetches with Graceful Failure =====
+        // Use Promise.allSettled() so failures don't reject the entire chain
+        // Track failures for UI warning banner, but continue with report
         if (optionalPromises.length > 0) {
             const results = await Promise.allSettled(optionalPromises.map((p) => p.promise));
             results.forEach((result, index) => {
                 if (result.status === 'rejected') {
                     // Only report failure if the error is NOT an AbortError
+                    // (AbortError is expected when request is cancelled)
                     const reason = result.reason as Error;
                     if (reason?.name !== 'AbortError') {
                         const name = optionalPromises[index].name;
                         console.warn(`Optional fetch '${name}' failed:`, reason);
-                        // Track failures for UI status display
+                        // Track failures for UI status display (show warning banner)
                         if (name === 'profiles') {
                             store.apiStatus.profilesFailed = store.users.length;
                         }
@@ -898,29 +1471,42 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
             });
         }
 
-        // Check if this request is still current before updating UI
+        // ===== Stale Request Detection =====
+        // Before updating UI, check if this request is still the most recent one
+        // If a newer request started while we were fetching, discard this response
         if (thisRequestId !== currentRequestId) {
             return;
         }
 
+        // ===== Trigger Calculation & Rendering =====
+        // Pass the validated date range to calculation engine
         runCalculation(requestDateRange);
+
+        // Show the tab navigation (Summary/Detailed) now that we have results
         const tabNavCard = document.getElementById('tabNavCard');
         if (tabNavCard) tabNavCard.style.display = 'block';
 
-        // Enable Export button
+        // Enable Export button (disabled until we have analysis results)
         const exportBtn = document.getElementById('exportBtn') as HTMLButtonElement | null;
         if (exportBtn) exportBtn.disabled = false;
 
+        // Display API status banner (warnings for failed optional fetches)
         UI.renderApiStatus();
-        // Render throttle status if rate limiting was detected
+
+        // Display rate limit status if we hit throttling during fetch
         UI.renderThrottleStatus(store.throttleStatus.retryCount);
     } catch (error) {
+        // ===== Error Handling =====
         const err = error as Error;
+
+        // Abort errors are expected when a new request cancels an old one
+        // Silently ignore them (user sees continuous progress as UI refreshes)
         if (err.name === 'AbortError') {
-            // Clean up state on abort
             store.rawEntries = null;
             return;
         }
+
+        // Non-abort errors indicate real problems; log and show user error dialog
         console.error('Report generation failed:', error);
         reportError(err, {
             module: 'main',
@@ -938,6 +1524,8 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
             timestamp: new Date().toISOString(),
         });
     } finally {
+        // ===== Cleanup =====
+        // Always run, even if error occurred
         UI.clearLoadingProgress();
         UI.renderLoading(false);
         abortController = null;
@@ -945,28 +1533,99 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
 }
 
 /**
- * Triggers the calculation engine and updates all UI views with results.
- * @param dateRange - Optional date range. If not provided, uses stored analysis date range.
+ * Triggers the calculation engine and updates all UI views with analysis results.
+ *
+ * This function is the bridge between data fetching and UI rendering. It delegates
+ * the heavy computation to `calculateAnalysis()` (calc.ts) and then renders all output
+ * tables with the results.
+ *
+ * ## Responsibilities
+ *
+ * 1. Determine which date range to use (provided or stored from previous calculation)
+ * 2. Synchronize amount display mode based on data availability
+ * 3. Call calculation engine with current state
+ * 4. Store results in application state
+ * 5. Trigger UI rendering for all output tables
+ *
+ * ## Called By
+ *
+ * - `handleGenerateReport()` - After fetching all data successfully
+ * - Config change handlers - When user adjusts settings (e.g., daily threshold, multiplier)
+ * - Filter/grouping changes - When user regroups summary or filters detailed table
+ *
+ * ## Data Flow
+ *
+ * ```
+ * runCalculation(dateRange)
+ *  ├─ Determine effective date range
+ *  ├─ syncAmountDisplayAvailability(entries) - Check if cost data available
+ *  ├─ calculateAnalysis(entries, store, dateRange) - Run calculation engine
+ *  │  └─ Returns: UserAnalysis[] with daily OT breakdowns
+ *  ├─ store.analysisResults = analysis
+ *  ├─ UI.renderSummaryStrip(analysis)
+ *  ├─ UI.renderSummaryTable(analysis)
+ *  └─ UI.renderDetailedTable(analysis)
+ * ```
+ *
+ * ## Key Assumptions
+ *
+ * - `store.rawEntries` has been populated (from handleGenerateReport)
+ * - `store.profiles`, `store.holidays`, `store.timeOff` are populated (or empty with defaults)
+ * - `store.config` and `store.calcParams` reflect current user settings
+ * - All DOM elements (tables, containers) exist and are ready
+ *
+ * @param dateRange - Optional date range for calculation. If not provided, uses previously
+ *                   stored date range (for config-change recalculations where date range is unchanged)
+ *
+ * @see calculateAnalysis() in calc.ts - The core calculation engine
+ * @see UI rendering functions - Render the computed analysis results
  */
 export function runCalculation(dateRange?: DateRange): void {
-    // Use provided dateRange or fall back to stored date range for recalculations
+    // ===== Determine Effective Date Range =====
+    // Use provided dateRange if available (from handleGenerateReport)
+    // Otherwise use stored dateRange (e.g., when user changes config without changing dates)
+    // Fallback to empty range (will be ignored by calculation engine)
     const effectiveDateRange = dateRange || store.currentDateRange || { start: '', end: '' };
 
-    // Store the date range for subsequent recalculations (e.g., config changes)
+    // ===== Persist Date Range =====
+    // Store the date range for subsequent recalculations
+    // (If user changes daily threshold, we'll recalculate with the same date range)
     if (dateRange) {
         store.currentDateRange = dateRange;
     }
 
-    // Ensure the amount display select reflects the latest data (earned/cost/profit availability)
+    // ===== Sync Amount Display Availability =====
+    // Check if the loaded entries have cost/profit data
+    // If not, disable cost/profit display options in dropdown
     syncAmountDisplayAvailability(store.rawEntries);
+
+    // ===== Run Calculation Engine =====
+    // Pass all necessary state to the pure calculation function
+    // calc.ts handles all overtime/billable computation logic
+    // See CLAUDE.md "Calculation rules" for algorithm details
     const analysis = calculateAnalysis(store.rawEntries, store, effectiveDateRange);
+
+    // ===== Store Results =====
+    // Save analysis in application state so UI modules can reference it
     store.analysisResults = analysis;
-    UI.renderSummaryStrip(analysis);
-    UI.renderSummaryTable(analysis);
-    UI.renderDetailedTable(analysis);
+
+    // ===== Render All Output Tables =====
+    // Update the UI to display calculation results
+    // Each render function is responsible for its own DOM manipulation
+    UI.renderSummaryStrip(analysis);      // KPI strip (total hours, OT, cost, etc.)
+    UI.renderSummaryTable(analysis);      // Grouped summary (by user, project, week, etc.)
+    UI.renderDetailedTable(analysis);     // Per-entry breakdown (paginated if large)
 }
 
-// Start (auto-init only in non-test environments)
+// ============================================================================
+// APPLICATION ENTRY POINT
+// ============================================================================
+// Auto-initialize the application on module load (unless in test mode).
+// Tests import functions directly and call them manually.
+// ============================================================================
+
+// Initialize OTPLUS application when the module loads
+// (Skip init() in test environment; tests will call init() manually if needed)
 if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
     init();
 }

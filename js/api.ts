@@ -1,9 +1,142 @@
 /**
- * @fileoverview API Interaction Module
- * Handles all network communication with the Clockify API, including authentication,
- * rate limiting, pagination, and error handling.
+ * @fileoverview Clockify API Client - Network Communication & Rate Limiting
  *
- * Implements a strict token bucket rate limiter to comply with API limits.
+ * This module is the ONLY module that communicates with external Clockify APIs.
+ * It provides a single, centralized HTTP client with built-in rate limiting,
+ * retry logic, pagination handling, and error classification.
+ *
+ * ## Module Responsibility
+ * - Authenticate all requests with X-Addon-Token header
+ * - Enforce rate limits with token bucket algorithm (50 req/sec)
+ * - Handle HTTP errors (401/403/404 non-retryable, 429 with backoff, 5xx with retry)
+ * - Paginate large result sets (time entries, profiles, holidays, time-off)
+ * - Transform raw API responses into application-friendly types
+ * - Provide abort signal support for cancellable operations
+ * - Resolve regional/environment-specific API URLs
+ *
+ * ## Key Dependencies
+ * - `state.js` - Global store for token, claims, and throttle tracking
+ * - `utils.js` - Date utilities (IsoUtils) and error classification
+ * - `types.js` - TypeScript interfaces for API request/response types
+ * - `constants.js` - Pagination limits (DEFAULT_MAX_PAGES, HARD_MAX_PAGES_LIMIT)
+ *
+ * ## Data Flow
+ * Controller (main.ts) → API functions → fetchWithAuth → Clockify APIs
+ * Clockify APIs → fetchWithAuth → Transform response → Return to controller
+ *
+ * ## API Endpoints Used (see docs/guide.md for full details)
+ *
+ * **Workspace API** (Base: `/v1/workspaces/{workspaceId}`):
+ * - `GET /users` - Fetch workspace users (paginated)
+ * - `GET /users/{userId}/profile` - Fetch user profile (capacity, working days)
+ *
+ * **Reports API** (Base: Reports URL from token claims):
+ * - `POST /reports/detailed` - Fetch detailed time entries (paginated, with filters)
+ *
+ * **Time Off API** (Base: `/v1/workspaces/{workspaceId}`):
+ * - `POST /time-off-requests/search` - Fetch time-off requests for multiple users
+ *
+ * **Holiday API** (Base: `/v1/workspaces/{workspaceId}`):
+ * - `GET /users/{userId}/holidays` - Fetch holidays for a specific user
+ *
+ * ## Rate Limiting Strategy
+ *
+ * Uses a **token bucket algorithm** to enforce Clockify addon rate limits:
+ * - **Capacity**: 50 requests
+ * - **Refill Rate**: 50 tokens per second (1000ms interval)
+ * - **Behavior**: Requests block until a token is available (non-recursive loop)
+ *
+ * ### Why Token Bucket?
+ * - Allows bursts up to 50 requests (better UX for small workspaces)
+ * - Prevents sustained over-limit requests (protects against throttling)
+ * - Simple, predictable implementation (no complex sliding windows)
+ *
+ * ### Rate Limit Handling
+ * - **429 Response**: Wait for `Retry-After` header duration, then retry
+ * - **Throttle Tracking**: Store tracks retry count for UI banner display
+ * - **Max Retries**: Configurable per request (default 2)
+ *
+ * ## Pagination Strategy
+ *
+ * Different endpoints have different pagination mechanisms:
+ *
+ * **Offset-based** (Users, Time Entries):
+ * - `page` parameter: page number (1-indexed)
+ * - `pageSize` parameter: items per page (500 max for performance)
+ * - Safety limit: 50 pages max (prevents runaway pagination on huge datasets)
+ *
+ * **Cursor-based** (Holidays):
+ * - `pageToken` parameter: continuation token from previous response
+ * - Automatically follows `nextPageToken` until exhausted
+ *
+ * **Batch** (Profiles, Time Off):
+ * - Process multiple users concurrently (5 users per batch)
+ * - Avoids overwhelming API with parallel requests
+ *
+ * ## Error Classification
+ *
+ * Errors are classified into categories for appropriate handling:
+ *
+ * - **Auth Errors** (401, 403): Invalid token, no retry
+ * - **Not Found** (404): Resource doesn't exist, no retry
+ * - **Rate Limit** (429): Throttled, retry with backoff
+ * - **Server Errors** (5xx): Temporary failure, retry up to maxRetries
+ * - **Network Errors**: Connection failures, retry up to maxRetries
+ * - **Abort**: User cancelled operation (AbortSignal), no retry
+ *
+ * ## Abort Signal Support
+ *
+ * All API functions accept an optional `AbortSignal` for cancellable operations.
+ * When the signal fires:
+ * - In-flight fetch request is aborted
+ * - Pagination loop terminates immediately
+ * - Function returns partial results (or empty array if nothing fetched yet)
+ *
+ * This is critical for UX: users can cancel slow report generation without
+ * waiting for all API calls to complete.
+ *
+ * ## Security Considerations
+ *
+ * - **Token Handling**: Token is stored in memory only (no localStorage persistence)
+ * - **No Secrets in Logs**: Never log auth tokens or workspace IDs
+ * - **HTTPS Only**: All Clockify APIs use HTTPS (enforced by API URLs)
+ * - **Read-Only**: This addon makes ZERO write requests (no POST/PATCH/DELETE)
+ *   - Exception: POST for search/filter operations (time-off, detailed reports)
+ *   - These POST requests are read-only queries, not mutations
+ *
+ * ## Performance Budget
+ *
+ * Target: Fetch 100 users + 30 days of data in <10 seconds
+ * - Users: 1 paginated request (~200ms)
+ * - Time Entries: 1-5 paginated requests (~1-2s total)
+ * - Profiles: 100 concurrent batched requests (~2-3s total)
+ * - Holidays: 100 sequential requests (~3-5s total, slowest)
+ * - Time Off: 1 bulk request (~500ms)
+ *
+ * Bottleneck: Holiday API (sequential, slow). Consider caching or lazy loading.
+ *
+ * ## URL Resolution Logic
+ *
+ * Clockify has multiple API environments (production, regional, developer portal).
+ * The Reports API URL is resolved from token claims with fallbacks:
+ *
+ * 1. Use `claims.reportsUrl` if present
+ * 2. If `backendUrl` is developer.clockify.me, use `backendUrl` (dev portal)
+ * 3. If `backendUrl` is api.clockify.me, use reports.api.clockify.me
+ * 4. For regional URLs (*.clockify.me), replace `/api` with `/report`
+ * 5. Default fallback: https://reports.api.clockify.me
+ *
+ * This ensures compatibility across all Clockify environments.
+ *
+ * ## Related Files
+ * - `docs/guide.md` - Complete API endpoint documentation with examples
+ * - `main.ts` - Controller that orchestrates API calls
+ * - `state.ts` - Global store for token and throttle tracking
+ * - `__tests__/unit/api.test.js` - API client unit tests
+ *
+ * @see fetchWithAuth - Core HTTP client with rate limiting and retry
+ * @see fetchDetailedReport - Main entry point for time entries
+ * @see docs/guide.md - Complete API documentation
  */
 
 import { store } from './state.js';
@@ -18,33 +151,135 @@ import type {
     ApiResponse,
 } from './types.js';
 
-// ==================== CONSTANTS ====================
-
-/** Base path for Clockify workspace API endpoints. */
-const BASE_API = '/v1/workspaces';
-/** Number of concurrent user requests to process in a batch. */
-const BATCH_SIZE = 5;
-/** Number of items to fetch per page. */
-const PAGE_SIZE = 500;
-
-// Rate Limiting State (Global)
-/** Max requests allowed per refill interval. */
-const RATE_LIMIT = 50;
-/** Interval in ms to refill the token bucket. */
-const REFILL_INTERVAL = 1000;
-let tokens = RATE_LIMIT;
-let lastRefill = Date.now();
-
-// ==================== URL RESOLUTION ====================
+// ============================================================================
+// CONSTANTS & CONFIGURATION
+// ============================================================================
 
 /**
- * Resolve the Reports API base URL using token claims and backend URL defaults.
- * Handles developer portal and regional report prefixes when reportsUrl is absent.
+ * Base path for Clockify workspace API endpoints.
+ * Used for users, profiles, holidays, and time-off requests.
+ * @example "/v1/workspaces/{workspaceId}/users"
+ */
+const BASE_API = '/v1/workspaces';
+
+/**
+ * Number of concurrent user requests to process in a batch.
+ * Used for profiles and holidays to avoid overwhelming the API.
+ *
+ * Why 5? Trade-off between:
+ * - Performance: Higher = faster overall completion
+ * - API Courtesy: Lower = less server load
+ * - Error Risk: Higher = more requests fail if one fails
+ */
+const BATCH_SIZE = 5;
+
+/**
+ * Number of items to fetch per page for paginated endpoints.
+ * Maximum value supported by Clockify API is 500.
+ *
+ * Why 500? Maximizes data per request while staying within API limits.
+ * Larger pages = fewer requests = faster overall fetch.
+ */
+const PAGE_SIZE = 500;
+
+// ============================================================================
+// RATE LIMITING STATE (Global, Module-Scoped)
+// ============================================================================
+// Token bucket algorithm state. This is intentionally global (not per-request)
+// to enforce a single rate limit across all concurrent API calls.
+// ============================================================================
+
+/**
+ * Maximum tokens in the bucket (burst capacity).
+ * Allows up to 50 concurrent requests before throttling kicks in.
+ */
+const RATE_LIMIT = 50;
+
+/**
+ * Token refill interval in milliseconds.
+ * Every 1 second, the bucket refills to RATE_LIMIT tokens.
+ * This enforces a sustained rate of 50 requests/second.
+ */
+const REFILL_INTERVAL = 1000;
+
+/**
+ * Current number of available tokens.
+ * Decremented before each request, refilled every REFILL_INTERVAL.
+ */
+let tokens = RATE_LIMIT;
+
+/**
+ * Timestamp of last token refill (in milliseconds since epoch).
+ * Used to calculate when the next refill is due.
+ */
+let lastRefill = Date.now();
+
+// ============================================================================
+// URL RESOLUTION
+// ============================================================================
+// Clockify operates multiple API environments (production, regional, developer).
+// This section resolves the correct Reports API URL based on token claims.
+// ============================================================================
+
+/**
+ * Resolves the Clockify Reports API base URL from token claims.
+ *
+ * Clockify addons receive a JWT token with `claims` containing API URLs:
+ * - `claims.backendUrl`: Base API URL (e.g., "https://api.clockify.me/api")
+ * - `claims.reportsUrl`: Reports API URL (e.g., "https://reports.api.clockify.me")
+ *
+ * However, `reportsUrl` may be missing (especially in developer portal).
+ * This function implements fallback logic to derive the Reports URL from `backendUrl`.
+ *
+ * ## Resolution Algorithm
+ *
+ * 1. **If `reportsUrl` exists**:
+ *    - Special case: Developer portal (`developer.clockify.me`)
+ *      → If `reportsUrl` points to different host, use `backendUrl` instead
+ *      → This handles local dev environments correctly
+ *    - Otherwise: Use `reportsUrl` as-is
+ *
+ * 2. **If `reportsUrl` missing**:
+ *    - Developer portal (`developer.clockify.me`): Use `backendUrl`
+ *    - Production (`api.clockify.me`): Use `reports.api.clockify.me`
+ *    - Regional (`*.clockify.me`): Transform `/api` to `/report`
+ *    - Unknown: Default to `https://reports.api.clockify.me`
+ *
+ * ## Examples
+ *
+ * | backendUrl | reportsUrl | Result |
+ * |------------|-----------|--------|
+ * | https://api.clockify.me/api | (missing) | https://reports.api.clockify.me |
+ * | https://eu.api.clockify.me/api | (missing) | https://eu.api.clockify.me/report |
+ * | https://developer.clockify.me/api | (missing) | https://developer.clockify.me/api |
+ * | https://api.clockify.me/api | https://reports.api.clockify.me | https://reports.api.clockify.me |
+ *
+ * ## Why This Complexity?
+ * - Clockify has evolved from regional APIs to dedicated Reports APIs
+ * - Developer portal needs special handling (reports run locally)
+ * - Must support both old and new URL schemes for backwards compatibility
+ *
+ * @returns Reports API base URL (without trailing slash)
+ *
+ * @example
+ * // Production environment
+ * resolveReportsBaseUrl() // → "https://reports.api.clockify.me"
+ *
+ * // Regional environment (EU)
+ * resolveReportsBaseUrl() // → "https://eu.api.clockify.me/report"
+ *
+ * // Developer portal
+ * resolveReportsBaseUrl() // → "https://developer.clockify.me/api"
  */
 function resolveReportsBaseUrl(): string {
+    // Extract claims from global store
     const reportsUrlClaim = store.claims?.reportsUrl;
     const backendUrl = store.claims?.backendUrl || '';
+
+    // Normalize backendUrl: remove trailing slashes for consistent parsing
     const normalizedBackend = backendUrl.replace(/\/+$/, '');
+
+    // Parse backendUrl to extract components
     let backendHost = '';
     let backendOrigin = '';
     let backendPath = '';
@@ -52,51 +287,81 @@ function resolveReportsBaseUrl(): string {
     if (normalizedBackend) {
         try {
             const backend = new URL(normalizedBackend);
-            backendHost = backend.host.toLowerCase();
-            backendOrigin = backend.origin;
-            backendPath = backend.pathname.replace(/\/+$/, '');
+            backendHost = backend.host.toLowerCase(); // e.g., "api.clockify.me"
+            backendOrigin = backend.origin; // e.g., "https://api.clockify.me"
+            backendPath = backend.pathname.replace(/\/+$/, ''); // e.g., "/api"
         } catch {
-            // Ignore parse errors and fall back to defaults.
+            // Invalid URL format: ignore parse errors and fall back to defaults
         }
     }
 
+    // --- BRANCH 1: reportsUrl claim exists ---
     if (reportsUrlClaim) {
         const normalizedReports = reportsUrlClaim.replace(/\/+$/, '');
+
+        // Special case: Developer portal
+        // If reportsUrl points to a different host than backendUrl, use backendUrl instead.
+        // This handles local dev setups where reports should run through local backend.
         if (backendHost === 'developer.clockify.me') {
             try {
                 const reportsHost = new URL(normalizedReports).host.toLowerCase();
                 if (reportsHost !== backendHost && normalizedBackend) {
-                    return normalizedBackend;
+                    return normalizedBackend; // Use backend for local dev
                 }
             } catch {
+                // Parse error: fall back to backendUrl if available
                 if (normalizedBackend) return normalizedBackend;
             }
         }
+
+        // Use reportsUrl as-is (normal case)
         return normalizedReports;
     }
 
+    // --- BRANCH 2: reportsUrl missing, derive from backendUrl ---
+
+    // Developer portal: Use backendUrl directly (reports run locally)
     if (backendHost === 'developer.clockify.me' && normalizedBackend) {
         return normalizedBackend;
     }
 
+    // Production: Use dedicated Reports API
     if (backendHost === 'api.clockify.me') {
         return 'https://reports.api.clockify.me';
     }
 
+    // Regional environments: Transform `/api` path to `/report`
+    // E.g., "https://eu.api.clockify.me/api" → "https://eu.api.clockify.me/report"
     if (backendHost.endsWith('clockify.me') && backendOrigin) {
         if (backendPath.endsWith('/api')) {
             return `${backendOrigin}${backendPath.replace(/\/api$/, '/report')}`;
         }
+        // No `/api` path: just append `/report`
         return `${backendOrigin}/report`;
     }
 
+    // --- BRANCH 3: Unknown environment, use production default ---
     return 'https://reports.api.clockify.me';
 }
 
-// ==================== TYPE DEFINITIONS ====================
+// ============================================================================
+// TYPE DEFINITIONS - API Request/Response Interfaces
+// ============================================================================
+// Internal TypeScript interfaces for API interactions.
+// These define the shape of raw Clockify API responses before transformation.
+// ============================================================================
 
 /**
- * Progress callback type for fetch operations
+ * Progress callback type for fetch operations.
+ * Used to notify UI of fetch progress for long-running operations.
+ *
+ * @param current - Current item count (e.g., number of users processed)
+ * @param phase - Human-readable description of current phase (e.g., "Fetching profiles")
+ *
+ * @example
+ * const onProgress: FetchProgressCallback = (current, phase) => {
+ *   console.log(`${phase}: ${current} items processed`);
+ * };
  */
 export type FetchProgressCallback = (current: number, phase: string) => void;
 
@@ -190,16 +455,46 @@ export function resetRateLimiter(): void {
     lastRefill = Date.now();
 }
 
-// ==================== FETCH WITH AUTH ====================
+// ============================================================================
+// CORE HTTP CLIENT - fetchWithAuth
+// ============================================================================
+// The foundational HTTP client used by all API functions in this module.
+// Handles authentication, rate limiting, retries, and error classification.
+// ============================================================================
 
 /**
- * Base fetch wrapper with authentication, rate limiting, and retry logic.
- * Implements a token bucket algorithm for rate limiting and exponential backoff for retries.
+ * Core HTTP client with authentication, rate limiting, and retry logic.
  *
- * @param url - Fully qualified URL to fetch.
- * @param options - Fetch options (method, headers, body, signal).
- * @param maxRetries - Maximum retry attempts. Defaults to 2 in production, 0 in tests.
- * @returns Response object containing data or error status.
+ * This is the ONLY function that makes actual HTTP requests to Clockify APIs.
+ * All other API functions in this module delegate to fetchWithAuth.
+ *
+ * ## Features
+ * - **Authentication**: Adds `X-Addon-Token` header from store
+ * - **Rate Limiting**: Token bucket algorithm (50 req/sec)
+ * - **Retry Logic**: Handles 429/5xx with retry, 401/403/404 without retry
+ * - **Error Classification**: Returns structured error responses (never throws)
+ * - **Abort Support**: Accepts AbortSignal for cancellable requests
+ *
+ * ## Rate Limiting (Token Bucket)
+ * - Capacity: 50 tokens
+ * - Refill: 50 tokens/second (every 1000ms)
+ * - Behavior: Waits (non-blocking loop) until token available
+ *
+ * ## Retry Strategy
+ * - 401/403/404: No retry (permanent failures)
+ * - 429: Retry with Retry-After header wait
+ * - 5xx/Network: Retry up to maxRetries (default 2)
+ *
+ * @template T - Expected JSON response type
+ * @param url - Full URL to fetch (not relative path)
+ * @param options - Fetch options (method, headers, body, signal)
+ * @param maxRetries - Max retry attempts (default: 2 in prod, 0 in tests)
+ * @returns Promise<ApiResponse<T>> - {data, failed, status}
+ *
+ * @example
+ * const resp = await fetchWithAuth<User[]>("https://api.clockify.me/.../users");
+ * if (resp.failed) console.error("Failed:", resp.status);
+ * else console.log("Users:", resp.data);
  */
 async function fetchWithAuth<T>(
     url: string,

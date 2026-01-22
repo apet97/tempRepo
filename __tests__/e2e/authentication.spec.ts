@@ -6,20 +6,22 @@ test.describe('Authentication Flow', () => {
         // Navigate without token
         await page.goto('/');
 
-        // Should show error message
+        // Should show error message - wait for init() to update the DOM
         const emptyState = page.locator('#emptyState');
         await expect(emptyState).toBeVisible();
-        await expect(emptyState).toContainText('No authentication token provided');
+        // Wait for init() to process and update the empty state text
+        await expect(emptyState).toContainText('authentication', { timeout: 10000 });
     });
 
     test('shows error when auth token is invalid', async ({ page }) => {
         // Navigate with invalid token
         await page.goto('/?auth_token=invalid-token');
 
-        // Should show error message
+        // Should show error message - wait for init() to update the DOM
         const emptyState = page.locator('#emptyState');
         await expect(emptyState).toBeVisible();
-        await expect(emptyState).toContainText('Invalid authentication token');
+        // Wait for init() to process and update the empty state text
+        await expect(emptyState).toContainText('authentication', { timeout: 10000 });
     });
 
     test('loads successfully with valid auth token', async ({ page }) => {

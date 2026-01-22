@@ -1,8 +1,83 @@
 /**
- * @fileoverview State Management Module
- * Implements a centralized Store class acting as the single source of truth for the application.
- * Manages API data, configuration, user overrides, and UI state.
- * Implements a simple Publisher/Subscriber pattern for reactivity.
+ * @fileoverview Centralized State Management System
+ *
+ * This module implements the Store, a single source of truth for all application state.
+ * It manages:
+ * - **API data**: Users, raw entries, analysis results
+ * - **Configuration**: Feature flags (useProfileCapacity, applyHolidays, etc.) and numeric params
+ * - **User overrides**: Global, weekly, and per-day capacity/multiplier overrides
+ * - **Cache data**: Profiles, holidays, time-off (fetched from API)
+ * - **UI state**: Selected tab, summary grouping, pagination, collapse states
+ * - **Diagnostics**: API failure tracking, rate limit tracking
+ *
+ * ## Persistence Strategy
+ *
+ * The Store is initialized in memory but persists the following to localStorage:
+ * - **Config & CalcParams** → `otplus_config` (toggles, thresholds, multipliers)
+ * - **User Overrides** → `otplus_overrides_${workspaceId}` (per-workspace bucket)
+ * - **UI State** → `otplus_ui_state` (summary expansion, grouping, pagination)
+ *
+ * Report data is cached in sessionStorage (temporary, expires on browser close):
+ * - **Report Cache** → `otplus_report_cache` (TTL: 5 minutes)
+ *
+ * ## Lifecycle
+ *
+ * 1. **Initialization** (constructor)
+ *    - Load persisted config from localStorage
+ *    - Load persisted UI state
+ *    - Initialize empty maps for profiles, holidays, time-off
+ *
+ * 2. **Authentication** (setToken)
+ *    - Store JWT token and decoded claims (workspaceId, theme)
+ *    - Clear caches if workspace changed (prevent data leak)
+ *    - Load workspace-scoped overrides
+ *
+ * 3. **Report Generation** (populate rawEntries, profiles, holidays, timeOff)
+ *    - API layers fetch data and call store setters
+ *    - Store accumulates all data for calculation
+ *
+ * 4. **Calculation** (populate analysisResults)
+ *    - calc.ts reads all maps and generates UserAnalysis[]
+ *    - Results stored in analysisResults
+ *
+ * 5. **UI Rendering** (update ui state)
+ *    - UI modules read from analysisResults
+ *    - User interactions update ui.* properties
+ *    - saveUIState() persists changes
+ *
+ * ## Data Ownership
+ *
+ * **Read-only from calc.ts**: profiles, holidays, timeOff, rawEntries, config, calcParams, overrides
+ * **Read-only from UI**: analysisResults, users, config, ui.*
+ * **Written by main.ts**: token, claims, users, rawEntries, analysisResults, currentDateRange
+ * **Written by api.ts**: profiles, holidays, timeOff (appended)
+ * **Written by User**: config, calcParams, overrides, ui.* (via event handlers)
+ *
+ * ## Validation
+ *
+ * All numeric user inputs are validated:
+ * - Capacity: non-negative
+ * - Multiplier: >= 1 (premium multipliers only)
+ * - Tier2 threshold: non-negative
+ * - Tier2 multiplier: >= 1
+ * - Invalid values are rejected and logged
+ *
+ * All persisted data is parsed with `safeJSONParse()` to prevent crashes from corrupted storage.
+ *
+ * ## Reactivity (Optional Publisher/Subscriber)
+ *
+ * The Store provides a `subscribe()/notify()` pattern for components that need to react
+ * to state changes. However, current implementation uses direct property access and manual
+ * render triggers. The subscriber system is available but not actively used.
+ *
+ * ## Related Files
+ *
+ * - `main.ts` - Orchestrates data loading and calls store setters
+ * - `api.ts` - Fetches data from Clockify and updates store caches
+ * - `calc.ts` - Reads from store (immutably) to compute analysis
+ * - `ui/*.ts` - Read analysisResults and config, trigger saveUIState()
+ * - `constants.ts` - STORAGE_KEYS, DEFAULT_MAX_PAGES, REPORT_CACHE_TTL
+ * - `types.ts` - Type definitions for all state properties
  */
 
 import { safeJSONParse } from './utils.js';
@@ -24,24 +99,75 @@ import type {
 } from './types.js';
 
 /**
- * Cache entry for report data stored in sessionStorage
+ * Cache entry for report data stored in sessionStorage.
+ *
+ * Used to store fetched time entries temporarily so repeated report generations
+ * with the same date range don't require re-fetching from the API.
+ *
+ * @interface ReportCache
+ * @property key - Cache key: `${workspaceId}-${start}-${end}` (uniquely identifies the cached data)
+ * @property timestamp - When the cache was created (used to check TTL expiration)
+ * @property entries - The cached time entry array from Clockify API
  */
 interface ReportCache {
     /** Cache key: `${workspaceId}-${start}-${end}` */
     key: string;
-    /** Timestamp when cache was created */
+    /** Timestamp when cache was created (ms since epoch) */
     timestamp: number;
-    /** Cached time entries */
+    /** Cached time entries from Detailed Report API */
     entries: TimeEntry[];
 }
 
 /**
- * Listener function type
+ * Listener function type for Publisher/Subscriber pattern.
+ *
+ * Called whenever `store.notify()` is invoked. Receives the store instance and
+ * optional event metadata describing what changed.
+ *
+ * @param store - The Store instance
+ * @param event - Optional metadata about the change (not actively used, available for future use)
  */
 type StoreListener = (store: Store, event?: Record<string, unknown>) => void;
 
 /**
- * Central state store for the application.
+ * Central state store for the entire OTPLUS application.
+ *
+ * This is the single source of truth. All modules read from and write to this store.
+ * The Store manages:
+ * - Authentication (token, workspace ID)
+ * - Workspace data (users, entries)
+ * - Computation inputs (profiles, holidays, time-off)
+ * - Results (analysis)
+ * - Configuration (feature flags, numeric parameters)
+ * - User overrides (capacity, multiplier adjustments)
+ * - UI state (selected tab, grouping, pagination)
+ * - Diagnostics (API errors, rate limiting)
+ *
+ * ## Properties Overview
+ *
+ * **Authentication**: token, claims (workspace ID and user identity)
+ * **Data**: users, rawEntries, analysisResults, currentDateRange
+ * **Caches**: profiles, holidays, timeOff (Maps for fast lookup)
+ * **Config**: config (toggles), calcParams (numeric thresholds)
+ * **Overrides**: overrides (per-user adjustments)
+ * **Status**: apiStatus (error tracking), throttleStatus (rate limiting)
+ * **UI**: ui (tab selection, grouping, pagination states)
+ * **Reactivity**: listeners (subscriber pattern, optional)
+ *
+ * ## Synchronous Operations
+ *
+ * All Store operations are synchronous (no async methods). Data fetching is done by api.ts,
+ * which then calls store methods to update state.
+ *
+ * ## Key Design Decisions
+ *
+ * 1. **Immutable reads**: Calculation engine (calc.ts) reads from store but never modifies it
+ * 2. **Validation on write**: All user-provided numeric values are validated before storage
+ * 3. **Workspace isolation**: Overrides are per-workspace to prevent data leakage
+ * 4. **Graceful degradation**: Missing data (profiles, holidays) doesn't crash calculations
+ * 5. **Session-scoped cache**: Report results cached in sessionStorage, not localStorage
+ *
+ * @class Store
  */
 class Store {
     /** Authentication token. */
@@ -133,17 +259,57 @@ class Store {
 
     /**
      * Initializes the store with default configuration and empty data structures.
+     *
+     * Called once when the module loads. This constructor:
+     * 1. Sets default values for all state properties
+     * 2. Loads persisted configuration from localStorage
+     * 3. Loads persisted UI state from localStorage
+     * 4. Initializes empty Maps for profiles, holidays, time-off caches
+     *
+     * Note: Overrides and profiles are loaded later in `setToken()` after we know
+     * the workspace ID (to load workspace-scoped data).
+     *
+     * ## Defaults
+     *
+     * - useProfileCapacity: true (use per-user capacity from profile)
+     * - applyHolidays: true (adjust capacity for holidays)
+     * - applyTimeOff: true (reduce capacity for time-off)
+     * - dailyThreshold: 8 hours
+     * - overtimeMultiplier: 1.5 (time-and-a-half)
+     *
+     * ## Side Effects
+     *
+     * Reads from localStorage (non-blocking; synchronous)
      */
     constructor() {
-        // Load persisted config from LocalStorage
+        // Load previously persisted configuration (user settings from prior sessions)
         this._loadConfig();
+        // Load previously persisted UI state (tab selection, pagination, etc.)
         this._loadUIState();
     }
 
     /**
      * Subscribes a listener function to state changes.
-     * @param listener - Function to call on notify.
-     * @returns Unsubscribe function.
+     *
+     * The listener will be called with `notify()` whenever any state change occurs.
+     * This implements a simple Publisher/Subscriber pattern for reactive updates.
+     *
+     * Note: This is available but not currently actively used in the application.
+     * UI updates are triggered directly by event handlers (see main.ts).
+     *
+     * ## Example
+     *
+     * ```typescript
+     * const unsubscribe = store.subscribe((store, event) => {
+     *   console.log('State changed:', event);
+     *   ui.render();
+     * });
+     * // Later:
+     * unsubscribe();
+     * ```
+     *
+     * @param listener - Function to call when notify() is triggered
+     * @returns Unsubscribe function to remove the listener
      */
     subscribe(listener: StoreListener): () => void {
         this.listeners.add(listener);
@@ -152,44 +318,80 @@ class Store {
 
     /**
      * Notifies all subscribers of a state change.
-     * @param event - Optional event data describing the change.
+     *
+     * Calls all registered listener functions with this store instance and optional
+     * event metadata. This is available for components that want reactive updates,
+     * but the current implementation uses direct event handlers instead.
+     *
+     * @param event - Optional event metadata describing the change
      */
     notify(event: Record<string, unknown> = {}): void {
         this.listeners.forEach((listener) => listener(this, event));
     }
 
     /**
-     * Loads configuration from LocalStorage.
-     * Uses safeJSONParse to prevent crashes from malformed data.
+     * Loads persisted configuration from localStorage.
+     *
+     * This is called during Store construction to restore user settings from
+     * previous sessions. It uses `safeJSONParse()` to handle corrupted or invalid
+     * JSON gracefully (doesn't crash; just uses defaults).
+     *
+     * ## Loaded Data
+     *
+     * - **config**: Feature toggles (useProfileCapacity, applyHolidays, showBillableBreakdown, etc.)
+     * - **calcParams**: Numeric parameters (dailyThreshold, overtimeMultiplier, etc.)
+     *
+     * ## Validation
+     *
+     * Each numeric parameter is validated:
+     * - dailyThreshold: >= 0
+     * - overtimeMultiplier: >= 1
+     * - amountDisplay: 'earned' | 'cost' | 'profit' (defaults to 'earned' if invalid)
+     * - maxPages: >= 0
+     *
+     * Invalid values are ignored; defaults are used instead.
+     *
+     * ## Side Effects
+     *
+     * Modifies: this.config, this.calcParams
+     * Reads: localStorage (key: 'otplus_config')
+     *
      * @private
      */
     private _loadConfig(): void {
-        // Load persisted configuration blob (calc params + toggles)
+        // Try to load the configuration blob from localStorage
         const savedConfig = localStorage.getItem('otplus_config');
         if (savedConfig) {
+            // Parse carefully - corrupted data shouldn't crash the app
             const parsed = safeJSONParse<{
                 config?: Partial<OvertimeConfig>;
                 calcParams?: Partial<CalculationParams>;
             } | null>(savedConfig, null);
+
             if (parsed && typeof parsed === 'object') {
-                // Merge config with validation
+                // Merge loaded config with defaults (only override valid values)
                 if (parsed.config && typeof parsed.config === 'object') {
                     this.config = { ...this.config, ...parsed.config };
                 }
+
+                // Validate amountDisplay mode
                 const amountDisplay = String(this.config.amountDisplay || '').toLowerCase();
                 const validAmountDisplays = new Set(['earned', 'cost', 'profit']);
-                // Coerce amount display to a supported mode to keep the dropdown in sync
+                // Coerce to valid mode; default to 'earned' if invalid
                 this.config.amountDisplay = validAmountDisplays.has(amountDisplay)
                     ? (amountDisplay as 'earned' | 'cost' | 'profit')
                     : 'earned';
+
                 // Validate and set maxPages
                 const configMaxPages = parsed.config?.maxPages;
                 if (typeof configMaxPages === 'number' && configMaxPages >= 0) {
                     this.config.maxPages = configMaxPages;
                 }
+
                 // Merge calcParams with validation
                 if (parsed.calcParams && typeof parsed.calcParams === 'object') {
                     const cp = parsed.calcParams;
+                    // Validate each numeric param with appropriate constraints
                     if (typeof cp.dailyThreshold === 'number' && cp.dailyThreshold >= 0) {
                         this.calcParams.dailyThreshold = cp.dailyThreshold;
                     }
@@ -214,10 +416,28 @@ class Store {
     }
 
     /**
-     * Persists current configuration to LocalStorage.
+     * Persists current configuration to localStorage.
+     *
+     * Called whenever the user modifies a config toggle or numeric parameter.
+     * Saves both the feature flag config and calculation parameters in a single
+     * JSON blob for efficient retrieval on next load.
+     *
+     * ## Saved Data
+     *
+     * - **config**: All feature toggles and display settings
+     * - **calcParams**: Threshold values, multipliers, tier 2 settings
+     *
+     * ## Side Effects
+     *
+     * Writes to localStorage (key: 'otplus_config'). Synchronous operation.
+     * If localStorage quota exceeded, this may throw (should be caught by caller).
+     *
+     * ## Called By
+     *
+     * - Configuration change handlers in main.ts
      */
     saveConfig(): void {
-        // Persist both config toggles and numeric parameters in one JSON blob for easy retrieval
+        // Persist config and calcParams together for efficient load/save
         localStorage.setItem(
             'otplus_config',
             JSON.stringify({
@@ -228,22 +448,62 @@ class Store {
     }
 
     /**
-     * Sets authentication token and loads relevant persistent data.
-     * Clears caches if switching workspaces to prevent data leak/corruption.
+     * Sets the authentication token and initializes workspace-scoped state.
      *
-     * @param token - The raw JWT token.
-     * @param claims - Decoded payload of the token.
+     * This is called during application initialization (main.ts:init()) after
+     * successfully decoding the JWT token. It establishes the workspace context
+     * and loads any previously saved user overrides for this workspace.
+     *
+     * ## Responsibilities
+     *
+     * 1. Store the raw JWT token (used for subsequent API calls)
+     * 2. Store decoded claims (workspaceId, userId, theme, etc.)
+     * 3. Detect workspace switches (different user accessing addon)
+     * 4. Clear caches if workspace changed (prevent data leak to new user)
+     * 5. Load workspace-scoped overrides from localStorage
+     *
+     * ## Workspace Switching
+     *
+     * If `this.claims.workspaceId !== claims.workspaceId`:
+     * - Clears profiles, holidays, timeOff maps
+     * - Existing config/calcParams are NOT cleared (they're workspace-independent)
+     * - New workspace's overrides are loaded (or empty if none saved)
+     *
+     * This prevents a user from seeing previous user's data if the addon
+     * is accessed by a different user in a different workspace.
+     *
+     * ## Security
+     *
+     * - Token is stored in memory only (never persisted to localStorage)
+     * - Token is never logged in error messages
+     * - Claims are extracted but token itself is not validated again
+     *   (validation happened in main.ts before calling this)
+     *
+     * ## Called By
+     *
+     * - main.ts:init() - After JWT validation
+     *
+     * @param token - The raw JWT token (format: header.payload.signature)
+     * @param claims - Decoded payload {workspaceId, userId, theme, ...}
+     *
+     * @see _loadOverrides() - Loads workspace-scoped user overrides
      */
     setToken(token: string, claims: TokenClaims): void {
-        // Clear cache if workspace changes to prevent stale profile data
+        // Detect workspace switch
+        // If a different workspace is being accessed, clear cached data to prevent leakage
         if (this.claims && this.claims.workspaceId !== claims.workspaceId) {
+            // Clear all cached API data
             this.profiles.clear();
             this.holidays.clear();
             this.timeOff.clear();
+            // Note: config/calcParams are preserved (not workspace-specific)
         }
 
+        // Store token and claims
         this.token = token;
         this.claims = claims;
+
+        // Load overrides for the new workspace (or empty if none saved)
         this._loadOverrides();
     }
 
@@ -292,25 +552,56 @@ class Store {
     }
 
     /**
-     * Updates a specific override field for a user.
-     * Removes the key if value is empty/null.
-     * Validates numeric values to prevent NaN propagation.
+     * Updates a global override field for a user.
      *
-     * @param userId - User ID.
-     * @param field - Field to update (capacity/multiplier).
-     * @param value - New value.
-     * @returns True if update was successful, false if validation failed.
+     * Global overrides apply to all days for a user (unless per-day or weekly overrides
+     * are also set). This method is used in the "Global" override mode.
+     *
+     * ## Behavior
+     *
+     * - If value is null/empty, the field is deleted (reverts to default)
+     * - If no fields remain after deletion, the user's override record is deleted
+     * - Numeric values are parsed and validated before storage
+     * - Invalid values are rejected and logged; method returns false
+     *
+     * ## Validation Rules
+     *
+     * - **capacity**: Must be non-negative (0 = full OT day)
+     * - **multiplier**: Must be >= 1 (premium OT rates)
+     * - **tier2Threshold**: Must be non-negative
+     * - **tier2Multiplier**: Must be >= 1
+     *
+     * ## Persistence
+     *
+     * After a successful update, `saveOverrides()` is called to persist to localStorage.
+     *
+     * ## Called By
+     *
+     * - main.ts event handlers - When user edits global override fields
+     * - UI override controls
+     *
+     * @param userId - Clockify user ID
+     * @param field - Field to update: 'capacity' | 'multiplier' | 'tier2Threshold' | 'tier2Multiplier'
+     * @param value - New value (parsed as number) or null to delete
+     * @returns true if update succeeded, false if validation failed
+     *
+     * @see setOverrideMode() - To switch between override modes
+     * @see updatePerDayOverride() - For per-day overrides
+     * @see setWeeklyOverride() - For weekly overrides
      */
     updateOverride(userId: string, field: string, value: string | number | null): boolean {
+        // Initialize user override record if not exists
         if (!this.overrides[userId]) this.overrides[userId] = {};
 
         if (value === null || value === '') {
+            // Delete the field (revert to default for that field)
             delete (this.overrides[userId] as Record<string, unknown>)[field];
+            // Clean up empty user record
             if (Object.keys(this.overrides[userId]).length === 0) {
                 delete this.overrides[userId];
             }
         } else {
-            // Validate numeric value before persisting to avoid NaN propagation
+            // Parse and validate numeric value
             const numValue = parseFloat(String(value));
             if (isNaN(numValue)) {
                 console.warn(`Invalid override value for ${field}: ${value}`);
@@ -318,6 +609,7 @@ class Store {
             }
 
             // Validate field-specific constraints
+            // See CLAUDE.md "Capacity precedence" and "Cost Calculation"
             if (field === 'capacity' && numValue < 0) {
                 console.warn(`Capacity cannot be negative: ${value}`);
                 return false;
@@ -335,38 +627,89 @@ class Store {
                 return false;
             }
 
+            // Store the validated value
             (this.overrides[userId] as Record<string, unknown>)[field] = value;
         }
+
+        // Persist to localStorage
         this.saveOverrides();
         return true;
     }
 
     /**
-     * Sets the override mode for a user (global, weekly, or perDay).
-     * @param userId - User ID.
-     * @param mode - Override mode.
-     * @returns True if successful, false if invalid mode.
+     * Sets the override mode for a user: 'global', 'weekly', or 'perDay'.
+     *
+     * The override mode determines how the user's capacity and multiplier overrides
+     * are applied during calculation:
+     * - **'global'**: Single values apply to all days
+     * - **'weekly'**: Different values for each day of the week (Mon-Sun)
+     * - **'perDay'**: Unique values for each date in the report range
+     *
+     * ## Mode Definitions
+     *
+     * | Mode | Usage | Override Structure |
+     * |------|-------|-------------------|
+     * | 'global' | Flat rate for all days | `{ capacity, multiplier, ... }` |
+     * | 'weekly' | Different rate per weekday | `{ MONDAY: {...}, TUESDAY: {...}, ... }` |
+     * | 'perDay' | Unique rate per date | `{ '2025-01-20': {...}, '2025-01-21': {...}, ... }` |
+     *
+     * ## Behavior
+     *
+     * 1. Validates that mode is one of the three allowed values
+     * 2. Creates user override record if not exists
+     * 3. Sets the mode flag
+     * 4. Initializes empty Map for per-day or weekly overrides if switching modes
+     * 5. Persists to localStorage
+     *
+     * ## Side Effects
+     *
+     * - Initializes empty `perDayOverrides` Map if mode='perDay'
+     * - Initializes empty `weeklyOverrides` Map if mode='weekly'
+     * - Calls `saveOverrides()` to persist
+     *
+     * ## UI Updates
+     *
+     * After this call, the UI override editor should re-render to show the
+     * appropriate input fields for the new mode (main.ts handles this).
+     *
+     * ## Called By
+     *
+     * - main.ts event handlers - When user selects a different override mode
+     *
+     * @param userId - Clockify user ID
+     * @param mode - Override mode: 'global' | 'weekly' | 'perDay'
+     * @returns true if mode was valid and set, false otherwise
+     *
+     * @see updateOverride() - For global overrides
+     * @see setWeeklyOverride() - For weekly overrides
+     * @see updatePerDayOverride() - For per-day overrides
      */
     setOverrideMode(userId: string, mode: string): boolean {
+        // Validate mode
         if (!['global', 'weekly', 'perDay'].includes(mode)) {
             console.warn(`Invalid override mode: ${mode}`);
             return false;
         }
+
+        // Create or update user override record
         if (!this.overrides[userId]) {
             this.overrides[userId] = { mode: mode as 'global' | 'weekly' | 'perDay' };
         } else {
             this.overrides[userId].mode = mode as 'global' | 'weekly' | 'perDay';
         }
 
-        // Initialize perDayOverrides if switching to perDay mode
+        // Initialize data structure for the new mode
+        // Per-day mode needs a Map to store overrides by date
         if (mode === 'perDay' && !this.overrides[userId].perDayOverrides) {
             this.overrides[userId].perDayOverrides = {};
         }
-        // Initialize weeklyOverrides if switching to weekly mode
+
+        // Weekly mode needs a Map to store overrides by weekday
         if (mode === 'weekly' && !this.overrides[userId].weeklyOverrides) {
             this.overrides[userId].weeklyOverrides = {};
         }
 
+        // Persist the mode change
         this.saveOverrides();
         return true;
     }
@@ -654,43 +997,110 @@ class Store {
     }
 
     /**
-     * Generates a cache key for report data.
-     * @param start - Start date (YYYY-MM-DD).
-     * @param end - End date (YYYY-MM-DD).
-     * @returns Cache key string or null if no workspace.
+     * Generates a cache key for report data based on workspace and date range.
+     *
+     * Cache keys are unique per workspace and date range, allowing multiple
+     * date ranges to be cached independently. If a new report is generated with
+     * the same date range, the cached data can be reused.
+     *
+     * ## Format
+     *
+     * `${workspaceId}-${start}-${end}` (e.g., `abc123-2025-01-01-2025-01-31`)
+     *
+     * ## Caching Strategy
+     *
+     * Report caching is optional. Users can choose to reuse cached data or fetch
+     * fresh data from the API. This improves UX for rapid iterations (config changes,
+     * re-exports) but doesn't replace real-time data.
+     *
+     * ## Called By
+     *
+     * - main.ts:handleGenerateReport() - To check and store cache
+     *
+     * @param start - Start date in YYYY-MM-DD format
+     * @param end - End date in YYYY-MM-DD format
+     * @returns Cache key string, or null if no workspace ID set
+     *
+     * @see getCachedReport() - Retrieve cached data using this key
+     * @see setCachedReport() - Store data in cache
      */
     getReportCacheKey(start: string, end: string): string | null {
+        // Can't cache without workspace ID
         if (!this.claims?.workspaceId) return null;
+        // Build key from workspace and date range
         return `${this.claims.workspaceId}-${start}-${end}`;
     }
 
     /**
-     * Gets cached report data if it exists and is not expired.
-     * @param key - Cache key.
-     * @returns Cached entries or null if not found or expired.
+     * Retrieves cached report data if it exists and hasn't expired.
+     *
+     * Used by main.ts during report generation to check if we can reuse a
+     * previously fetched report for the same date range. The user is prompted
+     * whether to use the cached data or fetch fresh from the API.
+     *
+     * ## Expiration
+     *
+     * Cache expires after REPORT_CACHE_TTL (5 minutes). Older caches are treated
+     * as stale and not returned.
+     *
+     * ## Error Handling
+     *
+     * If sessionStorage is corrupted or inaccessible, this returns null gracefully.
+     * No exception is thrown; the app falls back to fetching fresh data.
+     *
+     * @param key - Cache key from `getReportCacheKey()`
+     * @returns Array of time entries, or null if not found/expired/error
+     *
+     * @see setCachedReport() - Store data in cache
+     * @see REPORT_CACHE_TTL in constants.ts - Cache expiration time
      */
     getCachedReport(key: string): TimeEntry[] | null {
         try {
             const cached = sessionStorage.getItem(STORAGE_KEYS.REPORT_CACHE);
             if (!cached) return null;
 
+            // Parse cached data; return null if corrupted
             const cache = safeJSONParse<ReportCache | null>(cached, null);
             if (!cache) return null;
 
-            // Check if cache matches the key and is not expired
+            // Check if cache matches the requested key
             if (cache.key !== key) return null;
+
+            // Check if cache has expired
             if (Date.now() - cache.timestamp > REPORT_CACHE_TTL) return null;
 
+            // Cache is valid; return the cached entries
             return cache.entries;
         } catch {
+            // Swallow any errors; treat as cache miss
             return null;
         }
     }
 
     /**
-     * Saves report data to cache.
-     * @param key - Cache key.
-     * @param entries - Time entries to cache.
+     * Stores report data in sessionStorage cache.
+     *
+     * Called after successfully fetching data from the API. The cached data can
+     * be reused for subsequent report generations with the same date range.
+     *
+     * Caching is automatic; the user can opt in to using the cached data via
+     * the "Use cached results?" prompt.
+     *
+     * ## Storage
+     *
+     * Uses sessionStorage (not localStorage) to keep cache temporary and session-scoped.
+     * Cache is automatically cleared when the browser tab is closed.
+     *
+     * ## Error Handling
+     *
+     * If sessionStorage quota is exceeded or unavailable, the operation fails silently
+     * (logs a warning but doesn't crash). The report proceeds without caching.
+     *
+     * @param key - Cache key from `getReportCacheKey()`
+     * @param entries - Array of time entries to cache
+     *
+     * @see getCachedReport() - Retrieve cached data
+     * @see REPORT_CACHE_TTL in constants.ts - Cache expiration time
      */
     setCachedReport(key: string, entries: TimeEntry[]): void {
         try {
@@ -699,42 +1109,107 @@ class Store {
                 timestamp: Date.now(),
                 entries,
             };
+            // Store cache in sessionStorage (temporary, session-scoped)
             sessionStorage.setItem(STORAGE_KEYS.REPORT_CACHE, JSON.stringify(cache));
         } catch (e) {
-            // Silently fail if sessionStorage quota exceeded
+            // Silently fail if quota exceeded; report still works, just without cache
             console.warn('Failed to cache report data:', e);
         }
     }
 
     /**
-     * Clears the report cache.
+     * Clears the report cache from sessionStorage.
+     *
+     * Called when the user clicks the "Refresh" button to force a fresh fetch
+     * from the API, or when clearing all data.
+     *
+     * ## Side Effects
+     *
+     * Removes the cached report data from sessionStorage. Subsequent report
+     * generations will fetch fresh data from Clockify API.
      */
     clearReportCache(): void {
         try {
             sessionStorage.removeItem(STORAGE_KEYS.REPORT_CACHE);
         } catch {
-            // Silently ignore
+            // Ignore errors (storage may be unavailable)
         }
     }
 
     /**
-     * Clears all persisted data from localStorage.
-     * Useful for privacy/security features.
+     * Clears all persisted and in-memory application data.
+     *
+     * This is a destructive operation that removes:
+     * - All configuration and calculation parameters (resets to defaults)
+     * - All user overrides (per-workspace)
+     * - All cached API data (profiles, holidays, time-off)
+     * - All persisted UI state
+     * - All in-memory results and state
+     *
+     * After this call, the application is essentially reset to initial state
+     * (but authentication token is NOT cleared; the user stays logged in).
+     *
+     * ## Use Cases
+     *
+     * - **Privacy/security**: User wants to delete all local data before leaving
+     * - **Fresh start**: User wants to reset all customizations
+     * - **Troubleshooting**: Force reload all data from API
+     *
+     * ## What's Cleared
+     *
+     * **From localStorage**:
+     * - 'otplus_config' - Feature toggles and calculation parameters
+     * - 'otplus_ui_state' - Selected tab, grouping, pagination
+     * - 'otplus_overrides_${workspaceId}' - Per-workspace user overrides
+     * - All keys matching prefix OVERRIDES_PREFIX
+     *
+     * **From memory**:
+     * - All Maps: profiles, holidays, timeOff
+     * - Data: rawEntries, analysisResults, currentDateRange
+     * - State: config, calcParams, ui, overrides
+     *
+     * **NOT cleared**:
+     * - Authentication: token, claims (user remains logged in)
+     * - Users list (workspace members)
+     * - SessionStorage (report cache) - separate concerns
+     *
+     * ## Side Effects
+     *
+     * 1. Removes multiple localStorage keys (synchronous)
+     * 2. Resets all in-memory state to defaults
+     * 3. Does NOT reload the page (caller should handle navigation)
+     *
+     * ## Called By
+     *
+     * - main.ts event handler - "Clear All Data" button with confirmation dialog
+     * - Usually followed by `location.reload()` to reset the UI
+     *
+     * ## Security Notes
+     *
+     * This is a **destructive operation** and should only be called after explicit
+     * user confirmation. Consider the impact on the user's workflow.
+     *
+     * Note: Token is NOT cleared, so the user can continue using the addon
+     * after clearing data (application re-initializes).
+     *
+     * @see clearReportCache() - To clear just the temporary report cache
+     * @see saveConfig() - To persist only config changes
      */
     clearAllData(): void {
-        // Clear config
+        // ===== Clear localStorage =====
+        // Remove persisted configuration
         localStorage.removeItem('otplus_config');
 
-        // Clear UI state
+        // Remove persisted UI state
         localStorage.removeItem(STORAGE_KEYS.UI_STATE);
 
-        // Clear overrides for this workspace
+        // Remove workspace-scoped overrides for current workspace
         const overrideKey = this._getOverrideKey();
         if (overrideKey) {
             localStorage.removeItem(overrideKey);
         }
 
-        // Clear all workspace-prefixed keys
+        // Remove all other workspace-scoped overrides (in case user accessed multiple workspaces)
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
@@ -744,16 +1219,20 @@ class Store {
         }
         keysToRemove.forEach((key) => localStorage.removeItem(key));
 
-        // Reset in-memory state
+        // ===== Reset In-Memory State =====
+        // Clear cached data Maps
         this.overrides = {};
         this.profiles.clear();
         this.holidays.clear();
         this.timeOff.clear();
+
+        // Clear current report data
         this.rawEntries = null;
         this.analysisResults = null;
         this.currentDateRange = null;
 
-        // Reset config to defaults
+        // ===== Reset Configuration to Defaults =====
+        // Feature flags
         this.config = {
             useProfileCapacity: true,
             useProfileWorkingDays: true,
@@ -766,6 +1245,7 @@ class Store {
             maxPages: DEFAULT_MAX_PAGES,
         };
 
+        // Calculation parameters
         this.calcParams = {
             dailyThreshold: 8,
             weeklyThreshold: 40,
@@ -774,6 +1254,7 @@ class Store {
             tier2Multiplier: 2.0,
         };
 
+        // UI state
         this.ui = {
             isLoading: false,
             summaryExpanded: false,
@@ -785,6 +1266,8 @@ class Store {
             activeDetailedFilter: 'all',
             hasCostRates: true,
         };
+
+        // Note: token and claims are NOT cleared, so user remains authenticated
     }
 }
 

@@ -31,7 +31,7 @@ test.describe('CSV Export', () => {
 
         // Verify download filename
         const filename = download.suggestedFilename();
-        expect(filename).toMatch(/overtime.*\.csv$/i);
+        expect(filename).toBe('otplus-report.csv');
     });
 
     test('CSV contains expected headers', async ({ page }) => {
