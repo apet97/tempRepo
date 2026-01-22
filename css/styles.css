@@ -986,6 +986,22 @@ body.density-spacious {
   padding-right: 6px;
 }
 
+#detailedCard.amount-profit.narrow-headers .report-table th:nth-child(1),
+#detailedCard.amount-profit.narrow-headers .report-table th:nth-child(2),
+#detailedCard.amount-profit.narrow-headers .report-table th:nth-child(3),
+#detailedCard.amount-profit.narrow-headers .report-table th:nth-child(4),
+#detailedCard.amount-profit.narrow-headers .report-table th:nth-child(5),
+#detailedCard.amount-profit.narrow-headers .report-table th:nth-child(6),
+#detailedCard.amount-profit.narrow-headers .report-table th:nth-child(7) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
 #detailedCard.amount-profit .report-table th:nth-child(8),
 #detailedCard.amount-profit .report-table td:nth-child(8) {
   width: 10%;

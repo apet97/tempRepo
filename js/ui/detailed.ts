@@ -21,6 +21,37 @@ interface DetailedEntry extends TimeEntry {
     dayMeta: DayMeta;
 }
 
+const NARROW_HEADER_WIDTH = 900;
+let detailedHeaderObserver: ResizeObserver | null = null;
+let observedDetailedCard: HTMLElement | null = null;
+
+function updateDetailedHeaderLayout(card: HTMLElement): void {
+    const isProfitMode = card.classList.contains('amount-profit');
+    const width = card.getBoundingClientRect().width;
+    card.classList.toggle('narrow-headers', isProfitMode && width < NARROW_HEADER_WIDTH);
+}
+
+function ensureDetailedHeaderObserver(card: HTMLElement): void {
+    updateDetailedHeaderLayout(card);
+    if (typeof ResizeObserver === 'undefined') return;
+    if (!detailedHeaderObserver) {
+        detailedHeaderObserver = new ResizeObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.target instanceof HTMLElement) {
+                    updateDetailedHeaderLayout(entry.target);
+                }
+            });
+        });
+    }
+    if (observedDetailedCard !== card) {
+        if (observedDetailedCard) {
+            detailedHeaderObserver.unobserve(observedDetailedCard);
+        }
+        observedDetailedCard = card;
+        detailedHeaderObserver.observe(card);
+    }
+}
+
 /**
  * Renders the Detailed Table (granular entries).
  * Supports client-side filtering and pagination.
@@ -41,6 +72,7 @@ export function renderDetailedTable(
     if (detailedCard) {
         detailedCard.classList.toggle('billable-off', !showBillable);
         detailedCard.classList.toggle('amount-profit', isProfitMode);
+        ensureDetailedHeaderObserver(detailedCard);
     }
 
     // Use stored filter if not provided, otherwise update store
@@ -129,12 +161,12 @@ export function renderDetailedTable(
           <th>Start</th>
           <th>End</th>
           <th>User</th>
-          <th class="text-right">Regular</th>
-          <th class="text-right">Overtime</th>
-          <th class="text-right">Billable</th>
+          <th class="text-right"><span class="header-label">Reg<wbr>ular</span></th>
+          <th class="text-right"><span class="header-label">Over<wbr>time</span></th>
+          <th class="text-right"><span class="header-label">Bill<wbr>able</span></th>
           <th class="text-right amount-cell">${detailedRateLabel}${amountHeaderNote}</th>
-          <th class="text-right amount-cell">Regular $${amountHeaderNote}</th>
-          <th class="text-right amount-cell">OT $${amountHeaderNote}</th>
+          <th class="text-right amount-cell"><span class="header-label">Reg<wbr>ular</span> $${amountHeaderNote}</th>
+          <th class="text-right amount-cell"><span class="header-label">Over<wbr>time</span> $${amountHeaderNote}</th>
           <th class="text-right amount-cell">T2 $${amountHeaderNote}</th>
           <th class="text-right amount-cell">Total $${amountHeaderNote}</th>
           <th class="text-right">Status</th>
