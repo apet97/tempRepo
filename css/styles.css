@@ -940,22 +940,22 @@ body.density-spacious {
 /* Must override width (not just min-width) because table-layout: fixed */
 #detailedCard.amount-profit .report-table th:nth-child(1),
 #detailedCard.amount-profit .report-table td:nth-child(1) {
-  width: 5%;
-  min-width: 55px;
+  width: 6%;
+  min-width: 70px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(2),
 #detailedCard.amount-profit .report-table td:nth-child(2),
 #detailedCard.amount-profit .report-table th:nth-child(3),
 #detailedCard.amount-profit .report-table td:nth-child(3) {
-  width: 4%;
-  min-width: 40px;
+  width: 5%;
+  min-width: 55px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(4),
 #detailedCard.amount-profit .report-table td:nth-child(4) {
-  width: 8%;
-  min-width: 65px;
+  width: 9%;
+  min-width: 80px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(5),
@@ -965,7 +965,7 @@ body.density-spacious {
 #detailedCard.amount-profit .report-table th:nth-child(7),
 #detailedCard.amount-profit .report-table td:nth-child(7) {
   width: 6%;
-  min-width: 70px;
+  min-width: 65px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(1),
@@ -1018,33 +1018,34 @@ body.density-spacious {
 
 #detailedCard.amount-profit .report-table th:nth-child(8),
 #detailedCard.amount-profit .report-table td:nth-child(8) {
-  width: 10%;
+  width: 9%;
   min-width: 100px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(9),
 #detailedCard.amount-profit .report-table td:nth-child(9) {
-  width: 11%;
-  min-width: 120px;
+  width: 10%;
+  min-width: 115px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(10),
 #detailedCard.amount-profit .report-table td:nth-child(10),
 #detailedCard.amount-profit .report-table th:nth-child(11),
 #detailedCard.amount-profit .report-table td:nth-child(11) {
-  width: 11%;
+  width: 10%;
   min-width: 110px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(12),
 #detailedCard.amount-profit .report-table td:nth-child(12) {
-  width: 10%;
-  min-width: 130px;
+  width: 11%;
+  min-width: 120px;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(13),
 #detailedCard.amount-profit .report-table td:nth-child(13) {
-  width: 8%;
+  width: 7%;
+  min-width: 90px;
 }
 
 .amount-stack {
