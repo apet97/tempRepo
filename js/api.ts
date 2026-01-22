@@ -421,11 +421,56 @@ export const Api = {
             }
             return 0;
         };
+        const normalizeTimestamp = (value: unknown): string => {
+            if (value == null) return '';
+            const trimmed = String(value).trim();
+            if (!trimmed) return '';
+            if (trimmed.includes('T')) return trimmed;
+            const spacedMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})\s+(.+)$/);
+            if (spacedMatch) {
+                return `${spacedMatch[1]}T${spacedMatch[2]}`;
+            }
+            const compactMatch = trimmed.match(
+                /^(\d{4}-\d{2}-\d{2})(\d{2}:\d{2}(?::\d{2})?.*)$/
+            );
+            if (compactMatch) {
+                return `${compactMatch[1]}T${compactMatch[2]}`;
+            }
+            return trimmed;
+        };
+        const pickRateValue = (...values: unknown[]): number => {
+            for (const value of values) {
+                const resolved = resolveRateValue(value);
+                if (resolved > 0) return resolved;
+            }
+            for (const value of values) {
+                const resolved = resolveRateValue(value);
+                if (Number.isFinite(resolved)) return resolved;
+            }
+            return 0;
+        };
+        const ensureShownAmount = (
+            items: Array<{ type?: string; amountType?: string; value?: number; amount?: number }>,
+            fallbackAmount: number | null
+        ): Array<{ type?: string; amountType?: string; value?: number; amount?: number }> => {
+            if (fallbackAmount == null || !Number.isFinite(fallbackAmount) || fallbackAmount === 0) {
+                return items;
+            }
+            const shownType = amountShown.toUpperCase();
+            const shownTotal = items.reduce((total, item) => {
+                const type = String(item?.type || item?.amountType || '').toUpperCase();
+                if (type !== shownType) return total;
+                const value = Number(item?.value ?? item?.amount);
+                return Number.isFinite(value) ? total + value : total;
+            }, 0);
+            if (shownTotal !== 0) return items;
+            return [...items, { type: shownType, value: fallbackAmount }];
+        };
         const normalizeAmounts = (
             raw: DetailedReportEntry['amounts'] | Record<string, unknown> | null | undefined,
             fallbackAmount: number | null
         ): Array<{ type?: string; amountType?: string; value?: number; amount?: number }> => {
-            if (Array.isArray(raw)) return raw;
+            if (Array.isArray(raw)) return ensureShownAmount(raw, fallbackAmount);
             if (raw && typeof raw === 'object') {
                 if (
                     'type' in raw ||
@@ -433,7 +478,10 @@ export const Api = {
                     'value' in raw ||
                     'amount' in raw
                 ) {
-                    return [raw as { type?: string; amountType?: string; value?: number; amount?: number }];
+                    return ensureShownAmount(
+                        [raw as { type?: string; amountType?: string; value?: number; amount?: number }],
+                        fallbackAmount
+                    );
                 }
                 const mapped = Object.entries(raw).reduce<
                     Array<{ type?: string; amountType?: string; value?: number; amount?: number }>
@@ -444,7 +492,7 @@ export const Api = {
                     }
                     return acc;
                 }, []);
-                if (mapped.length) return mapped;
+                if (mapped.length) return ensureShownAmount(mapped, fallbackAmount);
             }
             if (fallbackAmount != null) {
                 return [{ type: amountShown, value: fallbackAmount }];
@@ -487,8 +535,17 @@ export const Api = {
 
             // Transform the detailed report payload into the legacy time entry shape that downstream logic expects so calc.js stays unchanged
             const transformed: TimeEntry[] = entries.map((e) => {
-                const hourlyRateField = e.earnedRate ?? e.rate ?? e.hourlyRate;
-                const resolvedHourlyRate = resolveRateValue(hourlyRateField);
+                const resolvedHourlyRate = pickRateValue(
+                    e.earnedRate,
+                    e.rate,
+                    e.hourlyRate,
+                    e.hourlyRate && typeof e.hourlyRate === 'object'
+                        ? (e.hourlyRate as { amount?: number }).amount
+                        : undefined
+                );
+                const resolvedEarnedRate = resolveRateValue(e.earnedRate);
+                const resolvedCostRate = resolveRateValue(e.costRate);
+                const isBillable = e.billable !== false;
                 const hourlyRateCurrency =
                     typeof e.hourlyRate === 'object' &&
                     e.hourlyRate &&
@@ -515,8 +572,8 @@ export const Api = {
                     taskName: e.taskName,
                     type: e.type || 'REGULAR',
                     timeInterval: {
-                        start: e.timeInterval?.start || '',
-                        end: e.timeInterval?.end || '',
+                        start: normalizeTimestamp(e.timeInterval?.start),
+                        end: normalizeTimestamp(e.timeInterval?.end),
                         // Duration from Reports API is in SECONDS (integer), convert to ISO format
                         duration:
                             e.timeInterval?.duration != null
@@ -525,8 +582,12 @@ export const Api = {
                     },
                     // Rate from Reports API is direct field in cents (e.g., 15300 = $153.00)
                     hourlyRate: { amount: resolvedHourlyRate, currency: hourlyRateCurrency },
-                    earnedRate: e.earnedRate ?? resolvedHourlyRate,
-                    costRate: e.costRate,
+                    earnedRate: isBillable
+                        ? resolvedEarnedRate > 0
+                            ? resolvedEarnedRate
+                            : resolvedHourlyRate
+                        : 0,
+                    costRate: resolvedCostRate || e.costRate,
                     amounts: normalizedAmounts,
                     tags: e.tags || [],
                 };

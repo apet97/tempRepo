@@ -252,6 +252,128 @@ describe('API Module', () => {
     });
   });
 
+  describe('fetchDetailedReport', () => {
+    it('should prefer developer backend when reportsUrl differs', async () => {
+      store.claims = {
+        workspaceId: 'ws_dev',
+        backendUrl: 'https://developer.clockify.me/api',
+        reportsUrl: 'https://reports.api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ timeentries: [] })
+      });
+
+      await Api.fetchDetailedReport(
+        'ws_dev',
+        '2025-01-01T00:00:00Z',
+        '2025-01-02T00:00:00Z'
+      );
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://developer.clockify.me/api/v1/workspaces/ws_dev/reports/detailed',
+        expect.any(Object)
+      );
+    });
+
+    it('should derive report base from regional backend', async () => {
+      store.claims = {
+        workspaceId: 'ws_region',
+        backendUrl: 'https://use2.clockify.me/api'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ timeentries: [] })
+      });
+
+      await Api.fetchDetailedReport(
+        'ws_region',
+        '2025-01-01T00:00:00Z',
+        '2025-01-02T00:00:00Z'
+      );
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://use2.clockify.me/report/v1/workspaces/ws_region/reports/detailed',
+        expect.any(Object)
+      );
+    });
+
+    it('should normalize detailed report rates and amounts', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_array',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-01T09:00:00Z',
+                end: '2025-01-01T11:00:00Z',
+                duration: 7200
+              },
+              rate: { amount: 6000 },
+              hourlyRate: { amount: 5000, currency: 'EUR' },
+              earnedRate: 0,
+              amount: 120,
+              amounts: [{ type: 'COST', value: 50 }],
+              tags: []
+            },
+            {
+              _id: 'entry_object',
+              userId: 'user_2',
+              userName: 'User 2',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-0209:00:00Z',
+                end: '2025-01-0210:00:00Z',
+                duration: 3600
+              },
+              hourlyRate: 4500,
+              amounts: {
+                earned: 80,
+                profit: 60
+              }
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-01T00:00:00Z',
+        '2025-01-03T00:00:00Z'
+      );
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0].hourlyRate.amount).toBe(6000);
+      expect(entries[0].hourlyRate.currency).toBe('EUR');
+      expect(entries[0].earnedRate).toBe(6000);
+      const earnedFromArray = entries[0].amounts.find(
+        (amount) => String(amount?.type || amount?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earnedFromArray?.value).toBe(120);
+
+      const earnedFromObject = entries[1].amounts.find(
+        (amount) => String(amount?.type || amount?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earnedFromObject?.value).toBe(80);
+      expect(entries[1].timeInterval.start).toBe('2025-01-02T09:00:00Z');
+      expect(entries[1].timeInterval.end).toBe('2025-01-02T10:00:00Z');
+    });
+  });
+
   describe('fetchUserProfile', () => {
     it('should fetch single user profile', async () => {
       const mockProfile = {
