@@ -1000,6 +1000,20 @@ body.density-spacious {
   overflow-wrap: anywhere;
   font-size: 10px;
   line-height: 1.15;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+#detailedCard .header-label-short {
+  display: none;
+}
+
+#detailedCard.amount-profit.narrow-headers .header-label-long {
+  display: none;
+}
+
+#detailedCard.amount-profit.narrow-headers .header-label-short {
+  display: inline;
 }
 
 #detailedCard.amount-profit .report-table th:nth-child(8),
@@ -1390,6 +1404,14 @@ body.density-spacious {
     text-overflow: clip;
     word-break: break-word;
     overflow-wrap: anywhere;
+  }
+
+  #detailedCard.amount-profit .header-label-long {
+    display: none;
+  }
+
+  #detailedCard.amount-profit .header-label-short {
+    display: inline;
   }
 }
 

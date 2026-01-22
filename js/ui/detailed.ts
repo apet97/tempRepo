@@ -151,22 +151,26 @@ export function renderDetailedTable(
         ? '<div class="amount-header-sub">Amt / Cost / Profit</div>'
         : '';
     const detailedRateLabel = amountDisplay === 'cost' ? 'Rate (Cost)' : 'Rate';
+    const headerLabel = (long: string, short?: string): string =>
+        short
+            ? `<span class="header-label header-label-long">${long}</span><span class="header-label header-label-short">${short}</span>`
+            : long;
 
     let html = `
   <div class="table-scroll" style="margin-top: 10px;">
     <table class="report-table">
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Start</th>
-          <th>End</th>
-          <th>User</th>
-          <th class="text-right"><span class="header-label">Reg<wbr>ular</span></th>
-          <th class="text-right"><span class="header-label">Over<wbr>time</span></th>
-          <th class="text-right"><span class="header-label">Bill<wbr>able</span></th>
+          <th>${headerLabel('Date')}</th>
+          <th>${headerLabel('Start', 'St')}</th>
+          <th>${headerLabel('End', 'En')}</th>
+          <th>${headerLabel('User')}</th>
+          <th class="text-right">${headerLabel('Regular', 'Reg')}</th>
+          <th class="text-right">${headerLabel('Overtime', 'OT')}</th>
+          <th class="text-right">${headerLabel('Billable', 'Bill')}</th>
           <th class="text-right amount-cell">${detailedRateLabel}${amountHeaderNote}</th>
-          <th class="text-right amount-cell"><span class="header-label">Reg<wbr>ular</span> $${amountHeaderNote}</th>
-          <th class="text-right amount-cell"><span class="header-label">Over<wbr>time</span> $${amountHeaderNote}</th>
+          <th class="text-right amount-cell">${headerLabel('Regular', 'Reg')} $${amountHeaderNote}</th>
+          <th class="text-right amount-cell">${headerLabel('Overtime', 'OT')} $${amountHeaderNote}</th>
           <th class="text-right amount-cell">T2 $${amountHeaderNote}</th>
           <th class="text-right amount-cell">Total $${amountHeaderNote}</th>
           <th class="text-right">Status</th>
