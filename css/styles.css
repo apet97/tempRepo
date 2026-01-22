@@ -1011,10 +1011,17 @@ body.density-spacious {
   padding-right: 8px;
 }
 
-#detailedCard.amount-profit:not(.narrow-headers) .report-table td:nth-child(1),
-#detailedCard.amount-profit:not(.narrow-headers) .report-table td:nth-child(2),
-#detailedCard.amount-profit:not(.narrow-headers) .report-table td:nth-child(3) {
+#detailedCard .report-table td:nth-child(1) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#detailedCard .report-table td:nth-child(2),
+#detailedCard .report-table td:nth-child(3) {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 #detailedCard .header-label-short {

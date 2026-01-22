@@ -157,9 +157,11 @@ interface DetailedReportEntry {
         end?: string;
         duration?: number;
     };
-    rate?: number;
+    rate?: number | { amount?: number };
+    hourlyRate?: number | { amount?: number; currency?: string };
     earnedRate?: number;
     costRate?: number;
+    amount?: number;
     amounts?: Array<{ type?: string; amountType?: string; value?: number; amount?: number }>;
     tags?: Array<{ id?: string; name?: string }>;
 }
@@ -410,6 +412,45 @@ export const Api = {
         let hasMore = true;
         // Always request earned amounts for stable rates; cost/profit uses the amounts array.
         const amountShown = 'EARNED';
+        const resolveRateValue = (value: unknown): number => {
+            if (value == null) return 0;
+            if (typeof value === 'number') return value;
+            if (typeof value === 'object' && 'amount' in (value as { amount?: number })) {
+                const amount = Number((value as { amount?: number }).amount);
+                return Number.isFinite(amount) ? amount : 0;
+            }
+            return 0;
+        };
+        const normalizeAmounts = (
+            raw: DetailedReportEntry['amounts'] | Record<string, unknown> | null | undefined,
+            fallbackAmount: number | null
+        ): Array<{ type?: string; amountType?: string; value?: number; amount?: number }> => {
+            if (Array.isArray(raw)) return raw;
+            if (raw && typeof raw === 'object') {
+                if (
+                    'type' in raw ||
+                    'amountType' in raw ||
+                    'value' in raw ||
+                    'amount' in raw
+                ) {
+                    return [raw as { type?: string; amountType?: string; value?: number; amount?: number }];
+                }
+                const mapped = Object.entries(raw).reduce<
+                    Array<{ type?: string; amountType?: string; value?: number; amount?: number }>
+                >((acc, [key, value]) => {
+                    const numericValue = Number(value);
+                    if (Number.isFinite(numericValue)) {
+                        acc.push({ type: key.toUpperCase(), value: numericValue });
+                    }
+                    return acc;
+                }, []);
+                if (mapped.length) return mapped;
+            }
+            if (fallbackAmount != null) {
+                return [{ type: amountShown, value: fallbackAmount }];
+            }
+            return [];
+        };
 
         // Iterate through paginated report response until the API signals the final page
         while (hasMore) {
@@ -445,35 +486,51 @@ export const Api = {
             const entries = data.timeentries || data.timeEntries || [];
 
             // Transform the detailed report payload into the legacy time entry shape that downstream logic expects so calc.js stays unchanged
-            const transformed: TimeEntry[] = entries.map((e) => ({
-                id: e._id || e.id || '',
-                description: e.description,
-                userId: e.userId || '',
-                userName: e.userName || '',
-                billable: e.billable,
-                projectId: e.projectId,
-                projectName: e.projectName,
-                clientId: e.clientId || null,
-                clientName: e.clientName || null,
-                taskId: e.taskId,
-                taskName: e.taskName,
-                type: e.type || 'REGULAR',
-                timeInterval: {
-                    start: e.timeInterval?.start || '',
-                    end: e.timeInterval?.end || '',
-                    // Duration from Reports API is in SECONDS (integer), convert to ISO format
-                    duration:
-                        e.timeInterval?.duration != null
-                            ? `PT${e.timeInterval.duration}S`
-                            : null,
-                },
-                // Rate from Reports API is direct field in cents (e.g., 15300 = $153.00)
-                hourlyRate: { amount: e.earnedRate ?? e.rate ?? 0, currency: 'USD' },
-                earnedRate: e.earnedRate,
-                costRate: e.costRate,
-                amounts: Array.isArray(e.amounts) ? e.amounts : [],
-                tags: e.tags || [],
-            }));
+            const transformed: TimeEntry[] = entries.map((e) => {
+                const hourlyRateField = e.earnedRate ?? e.rate ?? e.hourlyRate;
+                const resolvedHourlyRate = resolveRateValue(hourlyRateField);
+                const hourlyRateCurrency =
+                    typeof e.hourlyRate === 'object' &&
+                    e.hourlyRate &&
+                    'currency' in e.hourlyRate
+                        ? String((e.hourlyRate as { currency?: string }).currency || 'USD')
+                        : 'USD';
+                const fallbackAmount = Number((e as { amount?: number }).amount);
+                const normalizedAmounts = normalizeAmounts(
+                    e.amounts as DetailedReportEntry['amounts'] | Record<string, unknown> | null | undefined,
+                    Number.isFinite(fallbackAmount) ? fallbackAmount : null
+                );
+
+                return {
+                    id: e._id || e.id || '',
+                    description: e.description,
+                    userId: e.userId || '',
+                    userName: e.userName || '',
+                    billable: e.billable,
+                    projectId: e.projectId,
+                    projectName: e.projectName,
+                    clientId: e.clientId || null,
+                    clientName: e.clientName || null,
+                    taskId: e.taskId,
+                    taskName: e.taskName,
+                    type: e.type || 'REGULAR',
+                    timeInterval: {
+                        start: e.timeInterval?.start || '',
+                        end: e.timeInterval?.end || '',
+                        // Duration from Reports API is in SECONDS (integer), convert to ISO format
+                        duration:
+                            e.timeInterval?.duration != null
+                                ? `PT${e.timeInterval.duration}S`
+                                : null,
+                    },
+                    // Rate from Reports API is direct field in cents (e.g., 15300 = $153.00)
+                    hourlyRate: { amount: resolvedHourlyRate, currency: hourlyRateCurrency },
+                    earnedRate: e.earnedRate ?? resolvedHourlyRate,
+                    costRate: e.costRate,
+                    amounts: normalizedAmounts,
+                    tags: e.tags || [],
+                };
+            });
 
             allEntries.push(...transformed);
 
