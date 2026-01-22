@@ -492,6 +492,282 @@ describe('State Module - Store Class', () => {
         expect(parsed.user1.perDayOverrides['2025-01-15'].capacity).toBe(8);
         expect(parsed.user1.perDayOverrides['2025-01-16'].capacity).toBe(8);
       });
+
+      it('should copy tier2Threshold to date range', () => {
+        store.updateOverride('user4', 'tier2Threshold', 4);
+        store.setOverrideMode('user4', 'perDay');
+        const dates = ['2025-01-15', '2025-01-16'];
+        store.copyGlobalToPerDay('user4', dates);
+
+        expect(store.overrides.user4.perDayOverrides['2025-01-15'].tier2Threshold).toBe(4);
+        expect(store.overrides.user4.perDayOverrides['2025-01-16'].tier2Threshold).toBe(4);
+      });
+
+      it('should copy tier2Multiplier to date range', () => {
+        store.updateOverride('user5', 'tier2Multiplier', 2.5);
+        store.setOverrideMode('user5', 'perDay');
+        const dates = ['2025-01-15'];
+        store.copyGlobalToPerDay('user5', dates);
+
+        expect(store.overrides.user5.perDayOverrides['2025-01-15'].tier2Multiplier).toBe(2.5);
+      });
+
+      it('should handle mixed undefined/empty global values', () => {
+        // User has capacity but no multiplier
+        store.updateOverride('user6', 'capacity', 6);
+        store.setOverrideMode('user6', 'perDay');
+        const dates = ['2025-01-15'];
+        store.copyGlobalToPerDay('user6', dates);
+
+        expect(store.overrides.user6.perDayOverrides['2025-01-15'].capacity).toBe(6);
+        expect(store.overrides.user6.perDayOverrides['2025-01-15'].multiplier).toBeUndefined();
+      });
+    });
+
+    describe('setWeeklyOverride', () => {
+      beforeEach(() => {
+        store.setOverrideMode('user1', 'weekly');
+      });
+
+      it('should set capacity for a weekday', () => {
+        const result = store.setWeeklyOverride('user1', 'MONDAY', 'capacity', 6);
+
+        expect(result).toBe(true);
+        expect(store.overrides.user1.weeklyOverrides.MONDAY.capacity).toBe(6);
+      });
+
+      it('should set multiplier for a weekday', () => {
+        const result = store.setWeeklyOverride('user1', 'TUESDAY', 'multiplier', 2);
+
+        expect(result).toBe(true);
+        expect(store.overrides.user1.weeklyOverrides.TUESDAY.multiplier).toBe(2);
+      });
+
+      it('should set tier2Threshold for a weekday', () => {
+        const result = store.setWeeklyOverride('user1', 'WEDNESDAY', 'tier2Threshold', 4);
+
+        expect(result).toBe(true);
+        expect(store.overrides.user1.weeklyOverrides.WEDNESDAY.tier2Threshold).toBe(4);
+      });
+
+      it('should set tier2Multiplier for a weekday', () => {
+        const result = store.setWeeklyOverride('user1', 'THURSDAY', 'tier2Multiplier', 2.5);
+
+        expect(result).toBe(true);
+        expect(store.overrides.user1.weeklyOverrides.THURSDAY.tier2Multiplier).toBe(2.5);
+      });
+
+      it('should initialize user structure if missing', () => {
+        const result = store.setWeeklyOverride('newUser', 'FRIDAY', 'capacity', 4);
+
+        expect(result).toBe(true);
+        expect(store.overrides.newUser).toBeDefined();
+        expect(store.overrides.newUser.weeklyOverrides.FRIDAY.capacity).toBe(4);
+      });
+
+      it('should persist to localStorage', () => {
+        store.setWeeklyOverride('user1', 'MONDAY', 'capacity', 5);
+
+        const saved = localStorage.getItem(
+          `${STORAGE_KEYS.OVERRIDES_PREFIX}workspace_123`
+        );
+        const parsed = JSON.parse(saved);
+
+        expect(parsed.user1.weeklyOverrides.MONDAY.capacity).toBe(5);
+      });
+
+      it('should reject negative capacity', () => {
+        const result = store.setWeeklyOverride('user1', 'MONDAY', 'capacity', -5);
+
+        expect(result).toBe(false);
+        expect(store.overrides.user1.weeklyOverrides?.MONDAY?.capacity).toBeUndefined();
+      });
+
+      it('should reject multiplier less than 1', () => {
+        const result = store.setWeeklyOverride('user1', 'MONDAY', 'multiplier', 0.5);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject tier2Threshold less than 0', () => {
+        const result = store.setWeeklyOverride('user1', 'MONDAY', 'tier2Threshold', -1);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject tier2Multiplier less than 1', () => {
+        const result = store.setWeeklyOverride('user1', 'MONDAY', 'tier2Multiplier', 0.8);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject NaN values', () => {
+        const result = store.setWeeklyOverride('user1', 'MONDAY', 'capacity', 'invalid');
+
+        expect(result).toBe(false);
+      });
+
+      it('should remove override when set to null', () => {
+        store.setWeeklyOverride('user1', 'MONDAY', 'capacity', 6);
+        expect(store.overrides.user1.weeklyOverrides.MONDAY.capacity).toBe(6);
+
+        store.setWeeklyOverride('user1', 'MONDAY', 'capacity', null);
+
+        expect(store.overrides.user1.weeklyOverrides.MONDAY).toBeUndefined();
+      });
+
+      it('should remove override when set to empty string', () => {
+        store.setWeeklyOverride('user1', 'TUESDAY', 'multiplier', 1.5);
+        expect(store.overrides.user1.weeklyOverrides.TUESDAY.multiplier).toBe(1.5);
+
+        store.setWeeklyOverride('user1', 'TUESDAY', 'multiplier', '');
+
+        expect(store.overrides.user1.weeklyOverrides.TUESDAY).toBeUndefined();
+      });
+
+      it('should cleanup empty weekday entries', () => {
+        store.setWeeklyOverride('user1', 'WEDNESDAY', 'capacity', 8);
+        store.setWeeklyOverride('user1', 'WEDNESDAY', 'multiplier', 1.5);
+
+        store.setWeeklyOverride('user1', 'WEDNESDAY', 'capacity', null);
+        store.setWeeklyOverride('user1', 'WEDNESDAY', 'multiplier', '');
+
+        expect(store.overrides.user1.weeklyOverrides.WEDNESDAY).toBeUndefined();
+      });
+
+      it('should set multiple fields for same weekday', () => {
+        store.setWeeklyOverride('user1', 'FRIDAY', 'capacity', 6);
+        store.setWeeklyOverride('user1', 'FRIDAY', 'multiplier', 2);
+
+        expect(store.overrides.user1.weeklyOverrides.FRIDAY).toEqual({
+          capacity: 6,
+          multiplier: 2
+        });
+      });
+
+      it('should handle all 7 weekdays', () => {
+        const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+
+        weekdays.forEach((day, index) => {
+          store.setWeeklyOverride('user1', day, 'capacity', index + 1);
+        });
+
+        weekdays.forEach((day, index) => {
+          expect(store.overrides.user1.weeklyOverrides[day].capacity).toBe(index + 1);
+        });
+      });
+    });
+
+    describe('copyGlobalToWeekly', () => {
+      beforeEach(() => {
+        store.updateOverride('user1', 'capacity', 8);
+        store.updateOverride('user1', 'multiplier', 1.5);
+        store.setOverrideMode('user1', 'weekly');
+      });
+
+      it('should copy capacity to all 7 weekdays', () => {
+        store.copyGlobalToWeekly('user1');
+
+        const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+        weekdays.forEach(day => {
+          expect(store.overrides.user1.weeklyOverrides[day].capacity).toBe(8);
+        });
+      });
+
+      it('should copy multiplier to all weekdays', () => {
+        store.copyGlobalToWeekly('user1');
+
+        const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+        weekdays.forEach(day => {
+          expect(store.overrides.user1.weeklyOverrides[day].multiplier).toBe(1.5);
+        });
+      });
+
+      it('should copy tier2Threshold to all weekdays', () => {
+        store.updateOverride('user2', 'tier2Threshold', 4);
+        store.setOverrideMode('user2', 'weekly');
+
+        store.copyGlobalToWeekly('user2');
+
+        expect(store.overrides.user2.weeklyOverrides.MONDAY.tier2Threshold).toBe(4);
+        expect(store.overrides.user2.weeklyOverrides.SUNDAY.tier2Threshold).toBe(4);
+      });
+
+      it('should copy tier2Multiplier to all weekdays', () => {
+        store.updateOverride('user3', 'tier2Multiplier', 2.5);
+        store.setOverrideMode('user3', 'weekly');
+
+        store.copyGlobalToWeekly('user3');
+
+        expect(store.overrides.user3.weeklyOverrides.FRIDAY.tier2Multiplier).toBe(2.5);
+      });
+
+      it('should return false when not in weekly mode', () => {
+        store.setOverrideMode('user4', 'global');
+
+        const result = store.copyGlobalToWeekly('user4');
+
+        expect(result).toBe(false);
+      });
+
+      it('should return false when user has no override', () => {
+        const result = store.copyGlobalToWeekly('nonExistentUser');
+
+        expect(result).toBe(false);
+      });
+
+      it('should return true on success', () => {
+        const result = store.copyGlobalToWeekly('user1');
+
+        expect(result).toBe(true);
+      });
+
+      it('should skip undefined global values', () => {
+        // User only has capacity set
+        store.updateOverride('user5', 'capacity', 6);
+        store.setOverrideMode('user5', 'weekly');
+
+        store.copyGlobalToWeekly('user5');
+
+        expect(store.overrides.user5.weeklyOverrides.MONDAY.capacity).toBe(6);
+        expect(store.overrides.user5.weeklyOverrides.MONDAY.multiplier).toBeUndefined();
+      });
+
+      it('should skip empty string global values', () => {
+        // Set then clear multiplier
+        store.updateOverride('user6', 'capacity', 7);
+        store.updateOverride('user6', 'multiplier', 1.5);
+        store.updateOverride('user6', 'multiplier', '');
+        store.setOverrideMode('user6', 'weekly');
+
+        store.copyGlobalToWeekly('user6');
+
+        expect(store.overrides.user6.weeklyOverrides.TUESDAY.capacity).toBe(7);
+        // Multiplier was removed, so shouldn't be copied
+        expect(store.overrides.user6.weeklyOverrides.TUESDAY.multiplier).toBeUndefined();
+      });
+
+      it('should persist to localStorage', () => {
+        store.copyGlobalToWeekly('user1');
+
+        const saved = localStorage.getItem(
+          `${STORAGE_KEYS.OVERRIDES_PREFIX}workspace_123`
+        );
+        const parsed = JSON.parse(saved);
+
+        expect(parsed.user1.weeklyOverrides.MONDAY.capacity).toBe(8);
+        expect(parsed.user1.weeklyOverrides.SUNDAY.multiplier).toBe(1.5);
+      });
+
+      it('should initialize weeklyOverrides if not present', () => {
+        // Remove weeklyOverrides
+        delete store.overrides.user1.weeklyOverrides;
+
+        store.copyGlobalToWeekly('user1');
+
+        expect(store.overrides.user1.weeklyOverrides).toBeDefined();
+        expect(store.overrides.user1.weeklyOverrides.MONDAY.capacity).toBe(8);
+      });
     });
   });
 });

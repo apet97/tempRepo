@@ -15,14 +15,15 @@ Maintain and improve OTPLUS: a read-only Clockify addon that generates accurate 
 - **Calculation invariants are tests**: if results change, update tests or revert.
 
 ## Repo shape (modules you must respect)
-- `js/main.js` — controller/orchestrator (fetch -> compute -> render)
-- `js/api.js` — Clockify API client (pagination, concurrency, retries, rate limiting)
-- `js/state.js` — centralized Store + persistence (localStorage, UI state, diagnostics)
-- `js/calc.js` — pure calculation engine (no DOM, no fetch)
-- `js/export.js` — CSV export + sanitization
-- `js/ui.js` — rendering (DocumentFragment, incremental updates for big datasets)
-- `js/utils.js` — date keys, parsing (ISO duration), rounding, escaping
-- `js/constants.js` — shared constants/flags/defaults
+- `js/main.ts` — controller/orchestrator (fetch -> compute -> render)
+- `js/api.ts` — Clockify API client (pagination, concurrency, retries, rate limiting)
+- `js/state.ts` — centralized Store + persistence (localStorage, UI state, diagnostics)
+- `js/calc.ts` — pure calculation engine (no DOM, no fetch)
+- `js/export.ts` — CSV export + sanitization
+- `js/ui/` — rendering modules (detailed.ts, summary.ts, overrides.ts, shared.ts, dialogs.ts)
+- `js/utils.ts` — date keys, parsing (ISO duration), rounding, escaping
+- `js/constants.ts` — shared constants/flags/defaults
+- `js/worker-manager.ts` — Web Worker lifecycle management
 - `index.html`, `css/styles.css`, `manifest.json`
 
 ## UI conventions (current)
@@ -37,6 +38,10 @@ Maintain and improve OTPLUS: a read-only Clockify addon that generates accurate 
 - Run tests matching pattern: `npm test -- --testNamePattern="overtime"`
 - Watch mode: `npm run test:watch`
 - Coverage report: `npm run test:coverage` (enforces 80% threshold)
+- E2E tests: `npm run test:e2e` (requires Playwright browsers)
+- Lint: `npm run lint`
+- Type check: `npm run typecheck`
+- Build: `npm run build:prod`
 
 If adding new tooling (lint/e2e), add it as an npm script and document here.
 

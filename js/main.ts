@@ -1,7 +1,73 @@
 /**
- * @fileoverview Main Entry Point
+ * @fileoverview Main Entry Point / Controller
  * Orchestrates the application lifecycle, including initialization, event binding,
  * data fetching orchestration, and triggering calculations/renders.
+ *
+ * ## Data Flow Diagram
+ *
+ * ```
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │                           INITIALIZATION                               │
+ * │  URL params ──► JWT decode ──► store.setToken() ──► loadInitialData() │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *                                     │
+ *                                     ▼
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │                         DATA FETCHING (Parallel)                       │
+ * │                                                                        │
+ * │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐ │
+ * │  │ fetchEntries │  │fetchProfiles │  │fetchHolidays │  │fetchTimeOff│ │
+ * │  │ (Reports API)│  │  (per user)  │  │  (per user)  │  │ (per user) │ │
+ * │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘ │
+ * │         │                 │                 │                │        │
+ * │         ▼                 ▼                 ▼                ▼        │
+ * │  store.rawEntries    store.profiles    store.holidays   store.timeOff │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *                                     │
+ *                                     ▼
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │                          CALCULATION                                   │
+ * │                                                                        │
+ * │  workerManager.calculateAsync() OR calculateAnalysis() (fallback)     │
+ * │                                                                        │
+ * │  Input: entries, store (profiles, holidays, timeOff, config, params)  │
+ * │  Output: UserAnalysis[] with daily OT breakdowns                       │
+ * │                                                                        │
+ * │  ┌─────────────────────────────────────────────────────────────────┐  │
+ * │  │ For each user:                                                   │  │
+ * │  │   1. Group entries by dateKey                                    │  │
+ * │  │   2. Determine effective capacity (overrides > profile > global) │  │
+ * │  │   3. Apply holiday/time-off/non-working day adjustments          │  │
+ * │  │   4. Tail attribution: sort by start, assign OT to tail          │  │
+ * │  │   5. Split billable/non-billable, apply tiered multipliers       │  │
+ * │  └─────────────────────────────────────────────────────────────────┘  │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *                                     │
+ *                                     ▼
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │                           RENDERING                                    │
+ * │                                                                        │
+ * │  store.analysisResults ──► UI.renderSummaryStrip()                    │
+ * │                        ──► UI.renderSummaryTable()                     │
+ * │                        ──► UI.renderDetailedTable() (paginated)        │
+ * │                        ──► UI.renderOverridesTable()                   │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *                                     │
+ *                                     ▼
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │                            EXPORT                                      │
+ * │                                                                        │
+ * │  User clicks Export ──► downloadCsv(analysisResults)                  │
+ * │                         - Formula injection protection                 │
+ * │                         - Decimal hours column                         │
+ * └────────────────────────────────────────────────────────────────────────┘
+ * ```
+ *
+ * ## Key Functions
+ * - `init()` - Entry point, parses JWT and starts data load
+ * - `loadInitialData()` - Fetches users, triggers report generation
+ * - `generateReport()` - Main orchestrator: fetch → calc → render
+ * - `runCalculation()` - Delegates to worker or main thread
  */
 
 import { store } from './state.js';

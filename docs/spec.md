@@ -153,7 +153,7 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 - The new `docs/guide.md` summarizes how each module (state, calc, UI) consumes these APIs, plus the storage schema and override workflow.
 - Use the guide as a quick reference when triaging bugs or onboarding new team members—its API catalog explicitly states headers (`X-Addon-Token`), rate limiting expectations (token bucket), and abort handling via `AbortController`.
 
-## 8. Persistence Schema (localStorage)
+## 9. Persistence Schema (localStorage)
 
 | Key | Value |
 |-----|-------|
@@ -164,7 +164,7 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 
 --- 
 
-## 9. Known Technical Constraints
+## 10. Known Technical Constraints
 - **Memory Management:** Analysis results are kept in memory. Extremely large date ranges (>1 year) for large teams may exceed memory limits on low-end devices.
 - **Clockify API Limits:** While we throttle to 50 req/s, concurrent usage of multiple addons or browser tabs by the same user might still trigger a server-side 429.
 - **Midnight Attribution:** Entries are attributed to the day they *started*. A shift from 10 PM to 2 AM will count as 4 hours on Day 1.

@@ -5,7 +5,7 @@ All notable changes to OTPLUS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.1.0] - 2026-01-22
 
 ### Added
 - TypeScript support with full type definitions
@@ -20,12 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD workflow with GitHub Actions
 - Performance benchmarks
 - Comprehensive integration tests
+- E2E tests integrated into CI pipeline
 
 ### Changed
 - Migrated all JavaScript files to TypeScript
 - Split `ui.js` into modular sub-components
 - Improved build process with production optimizations
 - Enhanced error handling and diagnostics
+
+### Fixed
+- Resolved 8 ESLint warnings (non-null assertions in calc.ts, summary.ts, worker-manager.ts)
+- Test coverage improved to 80%+ (added 31 new tests for state.ts)
 
 ### Security
 - Added CSP meta tag to prevent XSS attacks

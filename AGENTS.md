@@ -16,15 +16,22 @@ Primary objectives:
 - If you change calculation logic, add/adjust a unit test.
 
 ## Repo map (key files)
-- `main.js`: entry point / wiring
-- `ui.js`: renders Summary strip, Summary table, Detailed table, config UI
-- `styles.css`: addon styling (must remain Clockify-like)
-- `state.js`: config + overrides persistence (LocalStorage)
-- `api.js`: Clockify API calls (prefer Detailed Report aggregation for entries)
-- `calc.js`: core calculations (regular/overtime split, premiums, aggregation/grouping)
-- `utils.js`: formatting helpers (durations, money, dates)
-- `export.js`: CSV export
-- `docs/guide.md`: explains the addon’s dependencies, persistence schema, and the exact API calls it makes.
+- `js/main.ts`: entry point / wiring / orchestration
+- `js/ui/`: UI module directory containing:
+  - `index.ts`: UI exports and coordination
+  - `summary.ts`: Summary strip and Summary table rendering
+  - `detailed.ts`: Detailed table with pagination
+  - `overrides.ts`: Override mode UI and controls
+  - `config.ts`: Configuration panel UI
+- `css/styles.css`: addon styling (must remain Clockify-like)
+- `js/state.ts`: config + overrides persistence (LocalStorage)
+- `js/api.ts`: Clockify API calls (prefer Detailed Report aggregation for entries)
+- `js/calc.ts`: core calculations (regular/overtime split, premiums, aggregation/grouping)
+- `js/utils.ts`: formatting helpers (durations, money, dates)
+- `js/export.ts`: CSV export
+- `js/worker-manager.ts`: Web Worker lifecycle management for calculations
+- `js/constants.ts`: shared constants, flags, and defaults
+- `docs/guide.md`: explains the addon's dependencies, persistence schema, and the exact API calls it makes.
 
 ## Data and API assumptions (Detailed Report)
 Entries are expected to contain:

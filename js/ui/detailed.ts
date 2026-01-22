@@ -25,6 +25,13 @@ const NARROW_HEADER_WIDTH = 900;
 let detailedHeaderObserver: ResizeObserver | null = null;
 let observedDetailedCard: HTMLElement | null = null;
 
+/**
+ * Updates the detailed table header layout based on container width.
+ * Switches to compact headers in profit mode when the container is narrow
+ * or when header cells overflow their bounds.
+ *
+ * @param card - The detailed card container element.
+ */
 function updateDetailedHeaderLayout(card: HTMLElement): void {
     const isProfitMode = card.classList.contains('amount-profit');
     const width = card.getBoundingClientRect().width;
@@ -44,6 +51,13 @@ function updateDetailedHeaderLayout(card: HTMLElement): void {
     card.classList.toggle('narrow-headers', useCompactHeaders);
 }
 
+/**
+ * Ensures a ResizeObserver is attached to the detailed card for responsive header updates.
+ * Creates the observer if it doesn't exist, and manages observation of the current card.
+ * When the card resizes, triggers header layout recalculation via updateDetailedHeaderLayout.
+ *
+ * @param card - The detailed card container element to observe.
+ */
 function ensureDetailedHeaderObserver(card: HTMLElement): void {
     updateDetailedHeaderLayout(card);
     if (typeof ResizeObserver === 'undefined') return;

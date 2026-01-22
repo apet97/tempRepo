@@ -3,7 +3,7 @@
 Date: 2026-01-18
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Overtime is computed by day and sometimes by week. If we bucket time incorrectly (timezone drift, DST, midnight crossing),
@@ -20,10 +20,11 @@ we miscompute capacity and overtime. Current behavior must be deterministic.
    - Implementation may use Temporal if available; otherwise use Intl.DateTimeFormat with an explicit `timeZone`.
 
 3) Midnight-spanning entries:
-   - Any time interval that crosses a local midnight boundary MUST be split into per-day segments BEFORE bucketing.
-   - Segments keep a pointer to original entry id, and carry the original billable flag and metadata.
+   - Entries are attributed entirely to the day they *started* (no splitting across dates).
+   - A shift from 10 PM to 2 AM counts as 4 hours on Day 1.
+   - This simplifies implementation and matches Clockify's native reporting behavior.
 
 ## Consequences
-- Daily capacity and holiday/non-working rules apply correctly on boundary days.
 - Reports become stable across DST transitions.
-- Implementation complexity increases slightly due to splitting logic.
+- Midnight-spanning entries may attribute all hours (including OT) to the start day.
+- Users should be aware that late-night work crossing midnight will show on the day it began.

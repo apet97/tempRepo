@@ -429,7 +429,7 @@ function createDayMeta(
 function calculateAmounts(
     regularHours: number,
     overtimeHours: number,
-    _tier1Hours: number, // eslint-disable-line @typescript-eslint/no-unused-vars
+    _tier1Hours: number,
     tier2Hours: number,
     rates: RatesConfig,
     multiplier: number,
@@ -503,7 +503,10 @@ export function calculateAnalysis(
         if (!entriesByUser.has(userId)) {
             entriesByUser.set(userId, []);
         }
-        entriesByUser.get(userId)!.push(entry);
+        const userEntries = entriesByUser.get(userId);
+        if (userEntries) {
+            userEntries.push(entry);
+        }
 
         // Track date bounds from entries for fallback
         const entryDateKey = IsoUtils.extractDateKey(entry.timeInterval?.start);
@@ -565,7 +568,10 @@ export function calculateAnalysis(
             if (!entriesByDate.has(dateKey)) {
                 entriesByDate.set(dateKey, []);
             }
-            entriesByDate.get(dateKey)!.push(entry);
+            const dateEntries = entriesByDate.get(dateKey);
+            if (dateEntries) {
+                dateEntries.push(entry);
+            }
         }
 
         // Track user-level accumulators

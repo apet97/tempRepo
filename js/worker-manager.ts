@@ -1,7 +1,44 @@
 /**
- * @fileoverview Worker Manager
- * Manages the lifecycle of the calculation Web Worker.
- * Provides an async wrapper for running calculations in a separate thread.
+ * @fileoverview Worker Manager Module
+ * Manages the lifecycle of the calculation Web Worker for offloading heavy
+ * overtime calculations to a separate thread, keeping the main thread responsive.
+ *
+ * ## Worker Lifecycle
+ *
+ * ```
+ * ┌─────────────────┐
+ * │   init()        │──► Creates Worker from calc.worker.js
+ * └────────┬────────┘    Waits for 'ready' message (5s timeout)
+ *          │
+ *          ▼
+ * ┌─────────────────┐
+ * │   isReady=true  │──► Worker ready to accept calculations
+ * └────────┬────────┘
+ *          │
+ *          ▼
+ * ┌─────────────────┐    Serializes store data (Maps → Arrays)
+ * │ calculateAsync()│──► Posts message to worker
+ * └────────┬────────┘    Returns Promise awaiting result
+ *          │
+ *          ▼
+ * ┌─────────────────┐
+ * │ handleMessage() │──► Reconstructs Maps from serialized data
+ * └────────┬────────┘    Resolves pending Promise
+ *          │
+ *          ▼
+ * ┌─────────────────┐
+ * │  terminate()    │──► Cleans up worker on page unload
+ * └─────────────────┘
+ * ```
+ *
+ * ## Fallback Behavior
+ * If Web Workers are unavailable or initialization fails, calculations
+ * run synchronously on the main thread using calculateAnalysis() directly.
+ *
+ * ## Data Serialization
+ * Store contains Map objects which cannot be transferred to workers directly.
+ * The manager serializes Maps to arrays before posting and reconstructs
+ * them from the response.
  */
 
 import { calculateAnalysis } from './calc.js';
@@ -28,7 +65,20 @@ interface WorkerResponse {
 }
 
 /**
- * Worker manager class
+ * Manages Web Worker lifecycle for calculation offloading.
+ *
+ * Responsibilities:
+ * - Creates and initializes the calculation worker
+ * - Handles worker ready state and error conditions
+ * - Serializes/deserializes data for worker communication
+ * - Provides fallback to main-thread calculation if worker unavailable
+ * - Manages pending calculation promises
+ *
+ * Usage:
+ * ```typescript
+ * await workerManager.init();
+ * const results = await workerManager.calculateAsync(entries, store, dateRange);
+ * ```
  */
 class WorkerManager {
     private worker: Worker | null = null;
@@ -37,7 +87,11 @@ class WorkerManager {
     private pendingReject: ((error: Error) => void) | null = null;
 
     /**
-     * Initialize the Web Worker
+     * Initialize the Web Worker.
+     * Creates worker from calc.worker.js and waits for ready confirmation.
+     * Fails gracefully if Workers are unsupported or initialization times out.
+     *
+     * @throws Never - errors are caught and logged, falling back to main thread.
      */
     async init(): Promise<void> {
         if (this.worker) return;
@@ -71,16 +125,22 @@ class WorkerManager {
 
             // Wait for worker to be ready
             await new Promise<void>((resolve, reject) => {
+                const worker = this.worker;
+                if (!worker) {
+                    reject(new Error('Worker not available'));
+                    return;
+                }
+
                 const timeout = setTimeout(() => {
                     reject(new Error('Worker initialization timeout'));
                 }, 5000);
 
-                const originalHandler = this.worker!.onmessage;
-                this.worker!.onmessage = (event: MessageEvent<WorkerResponse>) => {
+                const originalHandler = worker.onmessage;
+                worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
                     if (event.data.type === 'ready') {
                         clearTimeout(timeout);
                         this.isReady = true;
-                        this.worker!.onmessage = originalHandler;
+                        worker.onmessage = originalHandler;
                         resolve();
                     }
                 };
@@ -92,7 +152,11 @@ class WorkerManager {
     }
 
     /**
-     * Handle messages from the worker
+     * Handle messages from the worker.
+     * Processes 'result' messages by reconstructing Maps and resolving promises.
+     * Processes 'error' messages by rejecting pending promises.
+     *
+     * @param data - Response from worker containing type and payload.
      */
     private handleMessage(data: WorkerResponse): void {
         if (data.type === 'result' && this.pendingResolve && data.payload) {
@@ -112,8 +176,16 @@ class WorkerManager {
     }
 
     /**
-     * Run calculation asynchronously using the Web Worker
-     * Falls back to synchronous calculation if worker is unavailable
+     * Run calculation asynchronously using the Web Worker.
+     * Falls back to synchronous calculation on main thread if:
+     * - Worker not initialized or not ready
+     * - Entries or date range are null
+     * - Worker initialization previously failed
+     *
+     * @param entries - Time entries to analyze (null triggers fallback).
+     * @param store - Application store with config, profiles, holidays, etc.
+     * @param dateRange - Date range for analysis (null triggers fallback).
+     * @returns Promise resolving to array of UserAnalysis results.
      */
     async calculateAsync(
         entries: TimeEntry[] | null,
@@ -122,6 +194,11 @@ class WorkerManager {
     ): Promise<UserAnalysis[]> {
         // Fallback to synchronous calculation if worker not available
         if (!this.worker || !this.isReady || !entries || !dateRange) {
+            return calculateAnalysis(entries, store, dateRange);
+        }
+
+        const worker = this.worker;
+        if (!worker) {
             return calculateAnalysis(entries, store, dateRange);
         }
 
@@ -146,7 +223,7 @@ class WorkerManager {
                 calcParams: store.calcParams,
             };
 
-            this.worker!.postMessage({
+            worker.postMessage({
                 type: 'calculate',
                 payload: {
                     entries,
@@ -158,7 +235,9 @@ class WorkerManager {
     }
 
     /**
-     * Terminate the worker
+     * Terminate the worker and clean up resources.
+     * Should be called on page unload or when worker is no longer needed.
+     * After termination, init() must be called again to use the worker.
      */
     terminate(): void {
         if (this.worker) {

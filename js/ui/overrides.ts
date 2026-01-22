@@ -189,6 +189,31 @@ function renderWeeklyInputs(
 
 /**
  * Renders the User Overrides table (configuration inputs per user).
+ *
+ * Override Mode Logic:
+ * -------------------
+ * Users can have one of three override modes:
+ *
+ * 1. **Global Mode** (default): Single capacity/multiplier applies to all days.
+ *    - Uses: override.capacity, override.multiplier
+ *    - UI: Simple input fields in main row
+ *
+ * 2. **Weekly Mode**: Different overrides for each weekday (Mon-Sun).
+ *    - Uses: override.weeklyOverrides[WEEKDAY].capacity/multiplier
+ *    - UI: Expanded row with 7-day table
+ *    - Useful for: Part-time schedules, different Friday hours, etc.
+ *
+ * 3. **Per-Day Mode**: Granular overrides for specific dates.
+ *    - Uses: override.perDayOverrides[dateKey].capacity/multiplier
+ *    - UI: Expanded row with calendar-based inputs
+ *    - Useful for: Vacation adjustments, special project days
+ *
+ * Capacity Resolution Precedence (in calc.ts):
+ * 1. Per-day override (if mode=perDay and date has value)
+ * 2. Weekly override (if mode=weekly and weekday has value)
+ * 3. Global override (if set)
+ * 4. Profile capacity (if useProfileCapacity enabled)
+ * 5. Global daily threshold (calcParams.dailyThreshold)
  */
 export function renderOverridesTable(): void {
     const Elements = getElements();

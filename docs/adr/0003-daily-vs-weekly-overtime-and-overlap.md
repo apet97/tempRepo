@@ -3,7 +3,7 @@
 Date: 2026-01-18
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Some organizations use daily overtime rules, others weekly, and some need both reported.

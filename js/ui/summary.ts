@@ -220,10 +220,20 @@ export function renderSummaryExpandToggle(): void {
 
 /**
  * Computes summary rows grouped by the specified criterion.
+ * Iterates through all entries across all users and aggregates metrics
+ * (regular, overtime, breaks, billable, amounts) into groups.
  *
- * @param analysisUsers - List of user analysis objects.
+ * Grouping logic:
+ * - 'user': Groups by userId, uses userName as label
+ * - 'project': Groups by projectId, uses projectName as label
+ * - 'client': Groups by clientId, uses clientName as label
+ * - 'task': Groups by taskId, uses taskName as label
+ * - 'date': Groups by dateKey (YYYY-MM-DD), formats as readable date
+ * - 'week': Groups by week key (YYYY-Wnn), formats as week range
+ *
+ * @param analysisUsers - List of user analysis objects containing day-level entries.
  * @param groupBy - Grouping criterion ('user', 'project', 'client', 'task', 'date', 'week').
- * @returns Array of grouped summary rows.
+ * @returns Array of grouped summary rows sorted alphabetically by group name.
  */
 function computeSummaryRows(
     analysisUsers: UserAnalysis[],
@@ -290,7 +300,8 @@ function computeSummaryRows(
                     });
                 }
 
-                const group = groups.get(groupKey)!;
+                const group = groups.get(groupKey);
+                if (!group) continue;
                 // Fallback to zero if duration metadata is missing
                 const duration = parseIsoDuration(entry.timeInterval?.duration || 'PT0H');
 
@@ -364,6 +375,15 @@ function computeSummaryRows(
 
 /**
  * Renders summary table headers based on grouping and expanded state.
+ * Dynamically adjusts columns shown:
+ * - Capacity column only shown for user grouping
+ * - Billable breakdown columns (Bill. Worked, Bill. OT, Non-Bill OT) shown when expanded
+ * - Profit mode shows separate Amount/Cost/Profit columns vs single Amount column
+ *
+ * @param groupBy - Current grouping criterion (determines first column label).
+ * @param expanded - Whether billable breakdown is expanded.
+ * @param showBillable - Whether billable breakdown feature is enabled.
+ * @returns HTML string for table header row.
  */
 function renderSummaryHeaders(
     groupBy: string,
@@ -423,7 +443,16 @@ function renderSummaryHeaders(
 }
 
 /**
- * Renders a single summary table row.
+ * Renders a single summary table row with all metrics.
+ * Handles user grouping specially (shows avatar swatch).
+ * Highlights overtime values in danger color when > 0.
+ * Adapts columns based on grouping, expansion, and billable settings.
+ *
+ * @param row - Summary row data containing aggregated metrics.
+ * @param groupBy - Current grouping criterion (affects first column rendering).
+ * @param expanded - Whether billable breakdown columns are shown.
+ * @param showBillable - Whether billable breakdown feature is enabled.
+ * @returns HTML string for table row (without wrapping <tr> tags).
  */
 function renderSummaryRow(
     row: SummaryRow,

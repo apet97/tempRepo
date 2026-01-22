@@ -3,7 +3,7 @@
 Date: 2026-01-18
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Large workspaces (100+ members) need fast report generation. Clockify API calls have rate limits.
