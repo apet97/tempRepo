@@ -49,7 +49,8 @@ describe('State Module - Store Class', () => {
         showBillableBreakdown: true,
         showDecimalTime: false,
         amountDisplay: 'earned',
-        overtimeBasis: 'daily'
+        overtimeBasis: 'daily',
+        maxPages: 50
       });
     });
 

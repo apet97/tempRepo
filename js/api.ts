@@ -8,6 +8,7 @@
 
 import { store } from './state.js';
 import { IsoUtils, classifyError } from './utils.js';
+import { DEFAULT_MAX_PAGES, HARD_MAX_PAGES_LIMIT } from './constants.js';
 import type {
     TimeEntry,
     User,
@@ -25,8 +26,6 @@ const BASE_API = '/v1/workspaces';
 const BATCH_SIZE = 5;
 /** Number of items to fetch per page. */
 const PAGE_SIZE = 500;
-/** Hard limit on pages to prevent infinite loops on massive datasets. */
-const MAX_PAGES = 100;
 
 // Rate Limiting State (Global)
 /** Max requests allowed per refill interval. */
@@ -344,8 +343,12 @@ async function fetchUserEntriesPaginated(
 ): Promise<TimeEntry[]> {
     const allEntries: TimeEntry[] = [];
     let page = 1;
+    const configuredMaxPages = store.config.maxPages ?? DEFAULT_MAX_PAGES;
+    const effectiveMaxPages = configuredMaxPages === 0
+        ? HARD_MAX_PAGES_LIMIT
+        : Math.min(configuredMaxPages, HARD_MAX_PAGES_LIMIT);
 
-    while (page <= MAX_PAGES) {
+    while (page <= effectiveMaxPages) {
         const url = `${store.claims?.backendUrl}${BASE_API}/${workspaceId}/user/${user.id}/time-entries?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&hydrated=true&page=${page}&page-size=${PAGE_SIZE}`;
 
         const { data: entries, failed, status } = await fetchWithAuth<TimeEntry[]>(url, options);
@@ -601,9 +604,14 @@ export const Api = {
                 hasMore = false;
             } else {
                 page++;
-                // Safety limit
-                if (page > 50) {
-                    console.warn('Reached page limit (50), stopping pagination');
+                // Check against configurable max pages limit
+                const configuredMaxPages = store.config.maxPages ?? DEFAULT_MAX_PAGES;
+                const effectiveMaxPages = configuredMaxPages === 0
+                    ? HARD_MAX_PAGES_LIMIT
+                    : Math.min(configuredMaxPages, HARD_MAX_PAGES_LIMIT);
+
+                if (page > effectiveMaxPages) {
+                    console.warn(`Reached page limit (${effectiveMaxPages}), stopping pagination. Total entries fetched: ${allEntries.length}`);
                     hasMore = false;
                 }
             }

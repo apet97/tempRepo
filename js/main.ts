@@ -10,6 +10,8 @@ import { calculateAnalysis } from './calc.js';
 import { downloadCsv } from './export.js';
 import * as UI from './ui/index.js';
 import { IsoUtils, debounce, parseIsoDuration } from './utils.js';
+import { initErrorReporting, reportError } from './error-reporting.js';
+import { SENTRY_DSN } from './constants.js';
 import type { DateRange, TimeEntry, TokenClaims } from './types.js';
 
 // --- Initialization ---
@@ -34,11 +36,26 @@ export function setDefaultDates(): void {
  * Parses auth token from URL, sets up state, and starts initial data load.
  */
 export function init(): void {
+    // Initialize error reporting (Sentry) early
+    initErrorReporting({
+        dsn: SENTRY_DSN,
+        environment: typeof process !== 'undefined' && process.env.NODE_ENV === 'production' ? 'production' : 'development',
+        release: `otplus@2.0.0`,
+        sampleRate: 1.0,
+    }).catch(() => {
+        // Silent fail - error reporting is optional
+    });
+
     const params = new URLSearchParams(window.location.search);
     const token = params.get('auth_token');
 
     if (!token) {
         console.error('No auth token');
+        reportError(new Error('No auth token provided'), {
+            module: 'main',
+            operation: 'init',
+            level: 'warning',
+        });
         UI.renderLoading(false);
         const emptyState = document.getElementById('emptyState');
         if (emptyState) {
@@ -65,6 +82,11 @@ export function init(): void {
         loadInitialData();
     } catch (e) {
         console.error('Invalid token', e);
+        reportError(e instanceof Error ? e : new Error('Invalid token'), {
+            module: 'main',
+            operation: 'init',
+            level: 'error',
+        });
         UI.renderLoading(false);
         const emptyState = document.getElementById('emptyState');
         if (emptyState) {
@@ -770,6 +792,14 @@ export async function handleGenerateReport(): Promise<void> {
             return;
         }
         console.error('Report generation failed:', error);
+        reportError(err, {
+            module: 'main',
+            operation: 'handleGenerateReport',
+            level: 'error',
+            metadata: {
+                dateRange: { start: startDate, end: endDate },
+            },
+        });
         UI.showError({
             title: 'Report Generation Failed',
             message: 'An error occurred while fetching time entries. Please try again.',

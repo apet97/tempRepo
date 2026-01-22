@@ -6,6 +6,20 @@
 
 import type { FriendlyError } from './types.js';
 
+// ==================== ERROR TRACKING ====================
+
+/**
+ * Sentry DSN for error tracking.
+ * Configure this with your Sentry project's DSN.
+ * Set to empty string to disable error reporting.
+ *
+ * To get a DSN:
+ * 1. Create a project at https://sentry.io
+ * 2. Go to Settings > Projects > [Your Project] > Client Keys (DSN)
+ * 3. Copy the DSN and replace the placeholder below
+ */
+export const SENTRY_DSN = '__SENTRY_DSN__';
+
 /**
  * Keys used for LocalStorage persistence.
  */
@@ -41,6 +55,21 @@ export const CONSTANTS = {
     /** Standard ISO date format used by API. */
     DATE_FORMAT_ISO: 'YYYY-MM-DD',
 } as const;
+
+// ==================== API CONSTANTS ====================
+
+/**
+ * Default maximum number of pages to fetch from the Reports API.
+ * Each page contains up to 200 entries, so 50 pages = 10,000 entries max.
+ * Set to 0 for unlimited (will fetch until API returns empty).
+ */
+export const DEFAULT_MAX_PAGES = 50;
+
+/**
+ * Hard limit on pages to prevent runaway fetches.
+ * This is the absolute maximum regardless of configuration.
+ */
+export const HARD_MAX_PAGES_LIMIT = 500;
 
 /**
  * Summary column definition

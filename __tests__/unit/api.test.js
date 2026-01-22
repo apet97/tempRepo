@@ -195,7 +195,7 @@ describe('API Module', () => {
     it('should stop at max pages', async () => {
       const users = generateMockUsers(1);
 
-      // Set up mock to return full page for all calls (will be called up to MAX_PAGES times)
+      // Set up mock to return full page for all calls (will be called up to DEFAULT_MAX_PAGES times)
       fetch.mockImplementation(() =>
         Promise.resolve({
           ok: true,
@@ -204,7 +204,7 @@ describe('API Module', () => {
         })
       );
 
-      // Should stop at MAX_PAGES (100)
+      // Should stop at DEFAULT_MAX_PAGES (50)
       const promise = Api.fetchEntries(
         'workspace_123',
         users,
@@ -213,14 +213,14 @@ describe('API Module', () => {
       );
 
       // Advance timers repeatedly to clear rate limit delays
-      for (let i = 0; i < 110; i++) {
+      for (let i = 0; i < 60; i++) {
           await jest.advanceTimersByTimeAsync(1000);
       }
 
       const result = await promise;
 
-      expect(fetch).toHaveBeenCalledTimes(100);
-      expect(result.length).toBe(500 * 100);
+      expect(fetch).toHaveBeenCalledTimes(50);
+      expect(result.length).toBe(500 * 50);
     });
 
     it('should stop when page has fewer than PAGE_SIZE entries', async () => {

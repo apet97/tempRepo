@@ -368,6 +368,8 @@ export interface OvertimeConfig {
     amountDisplay: 'earned' | 'cost' | 'profit';
     /** Overtime calculation basis */
     overtimeBasis: 'daily' | 'weekly';
+    /** Maximum pages to fetch from Reports API (0 = unlimited up to hard limit) */
+    maxPages?: number;
 }
 
 /**

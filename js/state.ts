@@ -6,7 +6,7 @@
  */
 
 import { safeJSONParse } from './utils.js';
-import { STORAGE_KEYS } from './constants.js';
+import { STORAGE_KEYS, DEFAULT_MAX_PAGES } from './constants.js';
 import type {
     User,
     UserProfile,
@@ -57,6 +57,7 @@ class Store {
         showDecimalTime: false,
         amountDisplay: 'earned',
         overtimeBasis: 'daily',
+        maxPages: DEFAULT_MAX_PAGES,
     };
 
     /**
@@ -158,6 +159,11 @@ class Store {
                 this.config.amountDisplay = validAmountDisplays.has(amountDisplay)
                     ? (amountDisplay as 'earned' | 'cost' | 'profit')
                     : 'earned';
+                // Validate and set maxPages
+                const configMaxPages = parsed.config?.maxPages;
+                if (typeof configMaxPages === 'number' && configMaxPages >= 0) {
+                    this.config.maxPages = configMaxPages;
+                }
                 // Merge calcParams with validation
                 if (parsed.calcParams && typeof parsed.calcParams === 'object') {
                     const cp = parsed.calcParams;
@@ -656,6 +662,7 @@ class Store {
             showDecimalTime: false,
             amountDisplay: 'earned',
             overtimeBasis: 'daily',
+            maxPages: DEFAULT_MAX_PAGES,
         };
 
         this.calcParams = {
