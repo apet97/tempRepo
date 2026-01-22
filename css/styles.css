@@ -964,7 +964,7 @@ body.density-spacious {
 #detailedCard.amount-profit .report-table td:nth-child(6),
 #detailedCard.amount-profit .report-table th:nth-child(7),
 #detailedCard.amount-profit .report-table td:nth-child(7) {
-  width: 5%;
+  width: 6%;
   min-width: 70px;
 }
 
@@ -1008,7 +1008,7 @@ body.density-spacious {
 
 #detailedCard.amount-profit .report-table th:nth-child(12),
 #detailedCard.amount-profit .report-table td:nth-child(12) {
-  width: 13%;
+  width: 10%;
   min-width: 130px;
 }
 
