@@ -69,6 +69,41 @@ function extractRate(rateField: number | { amount?: number } | null | undefined)
     return 0;
 }
 
+function getEntryDurationHours(entry: TimeEntry): number {
+    let duration = parseIsoDuration(entry.timeInterval?.duration);
+    if (duration === 0 && entry.timeInterval?.start && entry.timeInterval?.end) {
+        const start = new Date(entry.timeInterval.start);
+        const end = new Date(entry.timeInterval.end);
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+            duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        }
+    }
+    return duration;
+}
+
+function sumAmountByType(amounts: TimeEntry['amounts'], targetType: string): number {
+    if (!Array.isArray(amounts) || amounts.length === 0) return 0;
+    const normalizedTarget = targetType.toUpperCase();
+    return amounts.reduce((total, amount) => {
+        const type = String(amount?.type || amount?.amountType || '').toUpperCase();
+        if (type !== normalizedTarget) return total;
+        const value = Number(amount?.value ?? amount?.amount);
+        return Number.isFinite(value) ? total + value : total;
+    }, 0);
+}
+
+function rateFromAmounts(
+    amounts: TimeEntry['amounts'],
+    targetType: string,
+    durationHours: number
+): number {
+    if (!durationHours) return 0;
+    const totalAmount = sumAmountByType(amounts, targetType);
+    if (!Number.isFinite(totalAmount) || totalAmount === 0) return 0;
+    // Reports API amounts are currency units; convert to cents for rate math.
+    return round((totalAmount / durationHours) * 100, 2);
+}
+
 /**
  * Rate configuration for amount calculations
  */
@@ -84,17 +119,25 @@ interface RatesConfig {
  * @param entry - Time entry.
  * @returns Rates in cents for earned/cost/profit.
  */
-function extractRates(entry: TimeEntry): RatesConfig {
+function extractRates(entry: TimeEntry, durationHours?: number): RatesConfig {
+    const isBillable = entry.billable !== false;
+    const entryDuration = durationHours ?? getEntryDurationHours(entry);
     // Non-billable entries don't contribute to earned amounts
-    const earnedRate = entry.billable
+    const earnedRate = isBillable
         ? extractRate(entry.earnedRate) || extractRate(entry.hourlyRate)
         : 0;
     const costRate = extractRate(entry.costRate) || 0;
-    const profitRate = earnedRate - costRate;
+    const earnedFromAmounts = isBillable
+        ? rateFromAmounts(entry.amounts, 'EARNED', entryDuration)
+        : 0;
+    const costFromAmounts = rateFromAmounts(entry.amounts, 'COST', entryDuration);
+    const resolvedEarnedRate = earnedRate || earnedFromAmounts;
+    const resolvedCostRate = costRate || costFromAmounts;
+    const profitRate = resolvedEarnedRate - resolvedCostRate;
 
     return {
-        earned: earnedRate,
-        cost: costRate,
+        earned: resolvedEarnedRate,
+        cost: resolvedCostRate,
         profit: profitRate,
     };
 }
@@ -596,18 +639,10 @@ export function calculateAnalysis(
             const processedEntries: TimeEntry[] = [];
 
             for (const entry of sortedEntries) {
-                let duration = parseIsoDuration(entry.timeInterval?.duration);
-
-                // Fallback to start/end calculation if duration parsing fails
-                if (duration === 0 && entry.timeInterval?.start && entry.timeInterval?.end) {
-                    const start = new Date(entry.timeInterval.start);
-                    const end = new Date(entry.timeInterval.end);
-                    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                        duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60); // Convert ms to hours
-                    }
-                }
+                const duration = getEntryDurationHours(entry);
                 const entryClass: EntryClassification = classifyEntryForOvertime(entry);
-                const rates = extractRates(entry);
+                const rates = extractRates(entry, duration);
+                const isBillable = entry.billable !== false;
 
                 // Get multipliers for this entry
                 const multiplier = getEffectiveMultiplier(userId, dateKey, calcStore);
@@ -693,7 +728,7 @@ export function calculateAnalysis(
                 const analysis: EntryAnalysis = {
                     regular: round(regularHours, 4),
                     overtime: round(overtimeHours, 4),
-                    isBillable: !!entry.billable,
+                    isBillable,
                     isBreak: entryClass === 'break',
                     cost: primaryAmounts.totalAmountWithOT,
                     profit: amounts.profit.totalAmountWithOT,
@@ -728,7 +763,7 @@ export function calculateAnalysis(
                     totals.breaks += duration;
                     totals.regular += regularHours;
                     // Track billable/non-billable for breaks too
-                    if (entry.billable) {
+                    if (isBillable) {
                         totals.billableWorked += regularHours;
                     } else {
                         totals.nonBillableWorked += regularHours;
@@ -737,7 +772,7 @@ export function calculateAnalysis(
                     totals.vacationEntryHours += duration;
                     totals.regular += regularHours;
                     // Track billable/non-billable for PTO too
-                    if (entry.billable) {
+                    if (isBillable) {
                         totals.billableWorked += regularHours;
                     } else {
                         totals.nonBillableWorked += regularHours;
@@ -747,7 +782,7 @@ export function calculateAnalysis(
                     totals.overtime += overtimeHours;
 
                     // Billable split (only for WORK entries)
-                    if (entry.billable) {
+                    if (isBillable) {
                         totals.billableWorked += regularHours;
                         totals.billableOT += overtimeHours;
                     } else {

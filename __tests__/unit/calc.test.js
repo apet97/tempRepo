@@ -660,6 +660,28 @@ describe('Calculation Module - calculateAnalysis', () => {
       expect(userResult.totals.profit).toBe(70);
     });
 
+    it('should derive earned rate from amounts when rates are missing', () => {
+      const entries = [{
+        id: 'entry_1',
+        userId: 'user0',
+        userName: 'User 0',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T13:00:00Z',
+          duration: 'PT4H'
+        },
+        amounts: [{ type: 'EARNED', amount: 200 }]
+      }];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+
+      const userResult = results.find(u => u.userId === 'user0');
+      expect(userResult.totals.amount).toBe(200);
+      const day = userResult.days.get('2025-01-15');
+      expect(day.entries[0].analysis.amounts.earned.rate).toBe(50);
+      expect(day.entries[0].analysis.amounts.profit.totalAmountWithOT).toBe(200);
+    });
+
     it('should use user override multiplier', () => {
       mockStore.overrides = {
         'user0': { multiplier: 2.0 }
