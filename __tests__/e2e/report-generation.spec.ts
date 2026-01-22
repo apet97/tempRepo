@@ -155,8 +155,17 @@ test.describe('Report Generation - Error Handling', () => {
         // Wait for error state
         await page.waitForTimeout(2000);
 
-        // Check if error is displayed or empty state remains
-        const hasError = await page.locator('.error-dialog, .api-status-banner, #emptyState').isVisible();
+        // Check if any error element is displayed
+        // Check each element individually to avoid strict mode violation
+        const errorDialog = page.locator('.error-dialog');
+        const apiStatusBanner = page.locator('.api-status-banner');
+        const emptyState = page.locator('#emptyState');
+
+        const hasError =
+            (await errorDialog.count() > 0 && await errorDialog.isVisible()) ||
+            (await apiStatusBanner.count() > 0 && await apiStatusBanner.isVisible()) ||
+            (await emptyState.count() > 0 && await emptyState.isVisible());
+
         expect(hasError).toBeTruthy();
     });
 
