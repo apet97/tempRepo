@@ -36,6 +36,64 @@ const REFILL_INTERVAL = 1000;
 let tokens = RATE_LIMIT;
 let lastRefill = Date.now();
 
+// ==================== URL RESOLUTION ====================
+
+/**
+ * Resolve the Reports API base URL using token claims and backend URL defaults.
+ * Handles developer portal and regional report prefixes when reportsUrl is absent.
+ */
+function resolveReportsBaseUrl(): string {
+    const reportsUrlClaim = store.claims?.reportsUrl;
+    const backendUrl = store.claims?.backendUrl || '';
+    const normalizedBackend = backendUrl.replace(/\/+$/, '');
+    let backendHost = '';
+    let backendOrigin = '';
+    let backendPath = '';
+
+    if (normalizedBackend) {
+        try {
+            const backend = new URL(normalizedBackend);
+            backendHost = backend.host.toLowerCase();
+            backendOrigin = backend.origin;
+            backendPath = backend.pathname.replace(/\/+$/, '');
+        } catch {
+            // Ignore parse errors and fall back to defaults.
+        }
+    }
+
+    if (reportsUrlClaim) {
+        const normalizedReports = reportsUrlClaim.replace(/\/+$/, '');
+        if (backendHost === 'developer.clockify.me') {
+            try {
+                const reportsHost = new URL(normalizedReports).host.toLowerCase();
+                if (reportsHost !== backendHost && normalizedBackend) {
+                    return normalizedBackend;
+                }
+            } catch {
+                if (normalizedBackend) return normalizedBackend;
+            }
+        }
+        return normalizedReports;
+    }
+
+    if (backendHost === 'developer.clockify.me' && normalizedBackend) {
+        return normalizedBackend;
+    }
+
+    if (backendHost === 'api.clockify.me') {
+        return 'https://reports.api.clockify.me';
+    }
+
+    if (backendHost.endsWith('clockify.me') && backendOrigin) {
+        if (backendPath.endsWith('/api')) {
+            return `${backendOrigin}${backendPath.replace(/\/api$/, '/report')}`;
+        }
+        return `${backendOrigin}/report`;
+    }
+
+    return 'https://reports.api.clockify.me';
+}
+
 // ==================== TYPE DEFINITIONS ====================
 
 /**
@@ -343,21 +401,15 @@ export const Api = {
         endIso: string,
         options: FetchOptions = {}
     ): Promise<TimeEntry[]> {
-        // Use dynamic reportsUrl from addon claims (not hardcoded)
-        const baseReportsUrl = store.claims?.reportsUrl || 'https://reports.api.clockify.me';
+        // Resolve reports base URL across developer/regional environments.
+        const baseReportsUrl = resolveReportsBaseUrl();
         const reportsUrl = `${baseReportsUrl}/v1/workspaces/${workspaceId}/reports/detailed`;
         const allEntries: TimeEntry[] = [];
         let page = 1;
         const pageSize = 200; // Max allowed
         let hasMore = true;
-        // Normalize amountDisplay once to keep request logic consistent with UI toggle
-        const amountDisplay = String(store.config.amountDisplay || 'earned').toLowerCase();
-        const amountShownMap: Record<string, string> = {
-            earned: 'EARNED',
-            cost: 'COST',
-            profit: 'PROFIT',
-        };
-        const amountShown = amountShownMap[amountDisplay] || 'EARNED';
+        // Always request earned amounts for stable rates; cost/profit uses the amounts array.
+        const amountShown = 'EARNED';
 
         // Iterate through paginated report response until the API signals the final page
         while (hasMore) {
@@ -365,7 +417,7 @@ export const Api = {
             const requestBody = {
                 dateRangeStart: startIso,
                 dateRangeEnd: endIso,
-                amountShown, // matches UI toggle (earned/cost/profit) for rate/amount fields
+                amountShown, // keep rate/amount fields stable when cost/profit is unavailable
                 amounts: ['EARNED', 'COST', 'PROFIT'], // always request all amounts so profit mode can stack
                 detailedFilter: {
                     page: page,
