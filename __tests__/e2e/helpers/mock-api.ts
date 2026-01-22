@@ -42,7 +42,8 @@ export function createMockTimeEntries(options: {
         userId = 'user-1',
         userName = 'Alice Johnson',
         count = 5,
-        startDate = '2024-01-15',
+        // Use yesterday as default to ensure entries fall within typical test date ranges
+        startDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     } = options;
 
     const entries = [];
@@ -116,12 +117,13 @@ export function createMockProfile(userId: string) {
  * Mock holidays data
  */
 export function createMockHolidays() {
+    const thisYear = new Date().getFullYear();
     return [
         {
             name: 'New Year',
             datePeriod: {
-                startDate: '2024-01-01',
-                endDate: '2024-01-01',
+                startDate: `${thisYear}-01-01`,
+                endDate: `${thisYear}-01-01`,
             },
         },
     ];
