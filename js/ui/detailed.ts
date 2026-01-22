@@ -215,14 +215,6 @@ export function renderDetailedTable(
             tags.push(tagHtml);
         };
 
-        const normalizeTag = (tag: unknown): string =>
-            String(tag || '')
-                .toUpperCase()
-                .replace(/[_-]+/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-
-        const entryTags = Array.isArray(e.tags) ? e.tags : [];
         const normalizedType = String(e.type || '')
             .trim()
             .toUpperCase()
