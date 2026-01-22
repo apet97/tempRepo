@@ -1004,6 +1004,19 @@ body.density-spacious {
   padding-right: 4px;
 }
 
+#detailedCard.amount-profit .report-table td:nth-child(1),
+#detailedCard.amount-profit .report-table td:nth-child(2),
+#detailedCard.amount-profit .report-table td:nth-child(3) {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+#detailedCard.amount-profit:not(.narrow-headers) .report-table td:nth-child(1),
+#detailedCard.amount-profit:not(.narrow-headers) .report-table td:nth-child(2),
+#detailedCard.amount-profit:not(.narrow-headers) .report-table td:nth-child(3) {
+  white-space: nowrap;
+}
+
 #detailedCard .header-label-short {
   display: none;
 }

@@ -28,7 +28,20 @@ let observedDetailedCard: HTMLElement | null = null;
 function updateDetailedHeaderLayout(card: HTMLElement): void {
     const isProfitMode = card.classList.contains('amount-profit');
     const width = card.getBoundingClientRect().width;
-    card.classList.toggle('narrow-headers', isProfitMode && width < NARROW_HEADER_WIDTH);
+    let useCompactHeaders = isProfitMode && width < NARROW_HEADER_WIDTH;
+    if (isProfitMode) {
+        const table = card.querySelector('.report-table');
+        if (table) {
+            const headerCells = Array.from(table.querySelectorAll('thead th')).slice(0, 7);
+            const hasOverflow = headerCells.some(
+                (cell) => cell.scrollWidth > cell.clientWidth + 1
+            );
+            if (hasOverflow) {
+                useCompactHeaders = true;
+            }
+        }
+    }
+    card.classList.toggle('narrow-headers', useCompactHeaders);
 }
 
 function ensureDetailedHeaderObserver(card: HTMLElement): void {
@@ -72,7 +85,6 @@ export function renderDetailedTable(
     if (detailedCard) {
         detailedCard.classList.toggle('billable-off', !showBillable);
         detailedCard.classList.toggle('amount-profit', isProfitMode);
-        ensureDetailedHeaderObserver(detailedCard);
     }
 
     // Use stored filter if not provided, otherwise update store
@@ -161,10 +173,10 @@ export function renderDetailedTable(
     <table class="report-table">
       <thead>
         <tr>
-          <th>${headerLabel('Date')}</th>
+          <th>${headerLabel('Date', 'Dt')}</th>
           <th>${headerLabel('Start', 'St')}</th>
           <th>${headerLabel('End', 'En')}</th>
-          <th>${headerLabel('User')}</th>
+          <th>${headerLabel('User', 'Usr')}</th>
           <th class="text-right">${headerLabel('Regular', 'Reg')}</th>
           <th class="text-right">${headerLabel('Overtime', 'OT')}</th>
           <th class="text-right">${headerLabel('Billable', 'Bill')}</th>
@@ -329,4 +341,7 @@ export function renderDetailedTable(
     }
 
     container.innerHTML = html;
+    if (detailedCard) {
+        ensureDetailedHeaderObserver(detailedCard);
+    }
 }
