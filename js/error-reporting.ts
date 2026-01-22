@@ -148,7 +148,7 @@ export async function initErrorReporting(config: SentryConfig): Promise<boolean>
 
     // Skip initialization if no DSN provided
     if (!config.dsn || config.dsn === 'YOUR_DSN' || config.dsn.startsWith('__')) {
-        console.info('[ErrorReporting] Sentry DSN not configured, error reporting disabled');
+        console.warn('[ErrorReporting] Sentry DSN not configured, error reporting disabled');
         return false;
     }
 
@@ -240,7 +240,7 @@ export async function initErrorReporting(config: SentryConfig): Promise<boolean>
         }
 
         sentryInitialized = true;
-        console.info('[ErrorReporting] Sentry initialized successfully');
+        console.warn('[ErrorReporting] Sentry initialized successfully');
         return true;
     } catch (error) {
         console.warn('[ErrorReporting] Failed to initialize Sentry:', error);
@@ -297,7 +297,7 @@ export function reportError(error: Error | string, context?: ErrorContext): void
             }
 
             // Capture the error
-            sentryInstance!.captureException(errorObj);
+            sentryInstance?.captureException(errorObj);
         });
     } catch (sentryError) {
         console.warn('[ErrorReporting] Failed to report error to Sentry:', sentryError);
@@ -317,7 +317,7 @@ export function reportMessage(
     context?: Omit<ErrorContext, 'level'>
 ): void {
     // Always log to console
-    const logFn = level === 'error' || level === 'fatal' ? console.error : level === 'warning' ? console.warn : console.info;
+    const logFn = level === 'error' || level === 'fatal' ? console.error : console.warn;
     logFn(`[${context?.module || 'App'}] ${message}`);
 
     if (!sentryInitialized || !sentryInstance) {
@@ -341,7 +341,7 @@ export function reportMessage(
                 scope.setExtras(scrubObject(context.metadata) as Record<string, unknown>);
             }
 
-            sentryInstance!.captureMessage(scrubSensitiveData(message));
+            sentryInstance?.captureMessage(scrubSensitiveData(message));
         });
     } catch (sentryError) {
         console.warn('[ErrorReporting] Failed to report message to Sentry:', sentryError);

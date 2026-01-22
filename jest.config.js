@@ -32,7 +32,8 @@ export default {
     'js/logger.ts',         // Logging - side-effect heavy, low-value coverage
     'js/main.ts',           // Orchestrator - requires full integration test
     'js/ui/index.ts',       // UI bootstrap - requires full DOM integration
-    'js/ui/overrides.ts'    // Complex DOM table - requires integration test
+    'js/ui/overrides.ts',   // Complex DOM table - requires integration test
+    'js/error-reporting.ts' // Sentry integration - optional/graceful, dynamic import
   ],
   moduleFileExtensions: ['js', 'ts'],
   verbose: false,

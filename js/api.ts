@@ -910,8 +910,11 @@ export const Api = {
                 return;
             }
 
-            if (!results.has(userId)) results.set(userId, new Map());
-            const userMap = results.get(userId)!;
+            let userMap = results.get(userId);
+            if (!userMap) {
+                userMap = new Map();
+                results.set(userId, userMap);
+            }
 
             // The period dates are nested under timeOffPeriod.period, not timeOffPeriod directly
             const timeOffPeriod = request.timeOffPeriod || {};

@@ -370,19 +370,19 @@ class Store {
             this.overrides[userId].perDayOverrides = {};
         }
 
-        if (!this.overrides[userId].perDayOverrides![dateKey]) {
-            this.overrides[userId].perDayOverrides![dateKey] = {};
+        const perDayOverrides = this.overrides[userId].perDayOverrides;
+
+        if (!perDayOverrides[dateKey]) {
+            perDayOverrides[dateKey] = {};
         }
 
         // Same validation logic as updateOverride()
         if (value === null || value === '') {
-            delete (this.overrides[userId].perDayOverrides![dateKey] as Record<string, unknown>)[
-                field
-            ];
+            delete (perDayOverrides[dateKey] as Record<string, unknown>)[field];
 
             // Cleanup empty day entries
-            if (Object.keys(this.overrides[userId].perDayOverrides![dateKey]).length === 0) {
-                delete this.overrides[userId].perDayOverrides![dateKey];
+            if (Object.keys(perDayOverrides[dateKey]).length === 0) {
+                delete perDayOverrides[dateKey];
             }
         } else {
             // Validate per-day numeric inputs just like global overrides
@@ -409,8 +409,7 @@ class Store {
                 return false;
             }
 
-            (this.overrides[userId].perDayOverrides![dateKey] as Record<string, unknown>)[field] =
-                value;
+            (perDayOverrides[dateKey] as Record<string, unknown>)[field] = value;
         }
 
         this.saveOverrides();
