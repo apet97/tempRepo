@@ -267,29 +267,6 @@ export function renderDetailedTable(
             }
         }
 
-        // Existing entry tags (user-defined)
-        if (!isPtoEntry) {
-            const systemTags = new Set([
-                'HOLIDAY',
-                'OFF DAY',
-                'TIME OFF',
-                'BREAK',
-                'HOLIDAY TIME ENTRY',
-                'TIME OFF TIME ENTRY',
-            ]);
-            (e.analysis?.tags || []).forEach((t) => {
-                if (!systemTags.has(normalizeTag(t))) {
-                    addTag(t, `<span class="badge badge-offday">${escapeHtml(t)}</span>`);
-                }
-            });
-            entryTags.forEach((t) => {
-                const tagName = typeof t === 'string' ? t : t?.name || '';
-                if (tagName && !systemTags.has(normalizeTag(tagName))) {
-                    addTag(tagName, `<span class="badge badge-offday">${escapeHtml(tagName)}</span>`);
-                }
-            });
-        }
-
         // Billable indicator
         const billable = e.analysis?.isBillable
             ? '<span class="badge badge-billable">✓</span>'
