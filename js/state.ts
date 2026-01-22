@@ -443,24 +443,25 @@ class Store {
         if (!override.perDayOverrides) {
             override.perDayOverrides = {};
         }
+        const perDayOverrides = override.perDayOverrides;
 
         // Copy the global override values to each date bucket so the per-day editor can show them
         dates.forEach((dateKey) => {
-            if (!override.perDayOverrides![dateKey]) {
-                override.perDayOverrides![dateKey] = {};
+            if (!perDayOverrides[dateKey]) {
+                perDayOverrides[dateKey] = {};
             }
 
             if (globalCapacity !== undefined && globalCapacity !== '') {
-                override.perDayOverrides![dateKey].capacity = globalCapacity;
+                perDayOverrides[dateKey].capacity = globalCapacity;
             }
             if (globalMultiplier !== undefined && globalMultiplier !== '') {
-                override.perDayOverrides![dateKey].multiplier = globalMultiplier;
+                perDayOverrides[dateKey].multiplier = globalMultiplier;
             }
             if (globalTier2Threshold !== undefined && globalTier2Threshold !== '') {
-                override.perDayOverrides![dateKey].tier2Threshold = globalTier2Threshold;
+                perDayOverrides[dateKey].tier2Threshold = globalTier2Threshold;
             }
             if (globalTier2Multiplier !== undefined && globalTier2Multiplier !== '') {
-                override.perDayOverrides![dateKey].tier2Multiplier = globalTier2Multiplier;
+                perDayOverrides[dateKey].tier2Multiplier = globalTier2Multiplier;
             }
         });
 
@@ -489,17 +490,16 @@ class Store {
         if (!this.overrides[userId].weeklyOverrides) {
             this.overrides[userId].weeklyOverrides = {};
         }
-        if (!this.overrides[userId].weeklyOverrides![weekday]) {
-            this.overrides[userId].weeklyOverrides![weekday] = {};
+        const weeklyOverrides = this.overrides[userId].weeklyOverrides;
+        if (!weeklyOverrides[weekday]) {
+            weeklyOverrides[weekday] = {};
         }
 
         // Validation (same as updateOverride)
         if (value === null || value === '') {
-            delete (this.overrides[userId].weeklyOverrides![weekday] as Record<string, unknown>)[
-                field
-            ];
-            if (Object.keys(this.overrides[userId].weeklyOverrides![weekday]).length === 0) {
-                delete this.overrides[userId].weeklyOverrides![weekday];
+            delete (weeklyOverrides[weekday] as Record<string, unknown>)[field];
+            if (Object.keys(weeklyOverrides[weekday]).length === 0) {
+                delete weeklyOverrides[weekday];
             }
         } else {
             const numValue = parseFloat(String(value));
@@ -508,8 +508,7 @@ class Store {
             if (field === 'multiplier' && numValue < 1) return false;
             if (field === 'tier2Threshold' && numValue < 0) return false;
             if (field === 'tier2Multiplier' && numValue < 1) return false;
-            (this.overrides[userId].weeklyOverrides![weekday] as Record<string, unknown>)[field] =
-                value;
+            (weeklyOverrides[weekday] as Record<string, unknown>)[field] = value;
         }
 
         this.saveOverrides();
@@ -538,23 +537,24 @@ class Store {
         if (!override.weeklyOverrides) {
             override.weeklyOverrides = {};
         }
+        const weeklyOverrides = override.weeklyOverrides;
 
         weekdays.forEach((weekday) => {
-            if (!override.weeklyOverrides![weekday]) {
-                override.weeklyOverrides![weekday] = {};
+            if (!weeklyOverrides[weekday]) {
+                weeklyOverrides[weekday] = {};
             }
             // Mirror global override values across every weekday entry for convenience
             if (override.capacity !== undefined && override.capacity !== '') {
-                override.weeklyOverrides![weekday].capacity = override.capacity;
+                weeklyOverrides[weekday].capacity = override.capacity;
             }
             if (override.multiplier !== undefined && override.multiplier !== '') {
-                override.weeklyOverrides![weekday].multiplier = override.multiplier;
+                weeklyOverrides[weekday].multiplier = override.multiplier;
             }
             if (override.tier2Threshold !== undefined && override.tier2Threshold !== '') {
-                override.weeklyOverrides![weekday].tier2Threshold = override.tier2Threshold;
+                weeklyOverrides[weekday].tier2Threshold = override.tier2Threshold;
             }
             if (override.tier2Multiplier !== undefined && override.tier2Multiplier !== '') {
-                override.weeklyOverrides![weekday].tier2Multiplier = override.tier2Multiplier;
+                weeklyOverrides[weekday].tier2Multiplier = override.tier2Multiplier;
             }
         });
 
