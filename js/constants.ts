@@ -34,7 +34,14 @@ export const STORAGE_KEYS = {
     OVERRIDES_UI_PREFIX: 'overtime_overrides_ui_',
     /** UI state persistence (summary grouping, expand/collapse states). */
     UI_STATE: 'otplus_ui_state',
+    /** Report cache in sessionStorage. */
+    REPORT_CACHE: 'otplus_report_cache',
 } as const;
+
+/**
+ * Report cache TTL in milliseconds (5 minutes).
+ */
+export const REPORT_CACHE_TTL = 5 * 60 * 1000;
 
 export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS];
 

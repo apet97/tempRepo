@@ -11,7 +11,8 @@ export { initializeElements, getElements } from './shared.js';
 export { renderSummaryStrip, renderSummaryExpandToggle, renderSummaryTable } from './summary.js';
 export { renderDetailedTable } from './detailed.js';
 export { renderOverridesTable } from './overrides.js';
-export { renderLoading, renderApiStatus, showError, hideError, showClearDataConfirmation } from './dialogs.js';
+export { renderLoading, renderApiStatus, showError, hideError, showClearDataConfirmation, showLargeDateRangeWarning, updateLoadingProgress, clearLoadingProgress, renderThrottleStatus, showCachePrompt } from './dialogs.js';
+export type { CacheAction } from './dialogs.js';
 
 // Import for internal use
 import { getElements } from './shared.js';

@@ -96,6 +96,11 @@ function resolveReportsBaseUrl(): string {
 // ==================== TYPE DEFINITIONS ====================
 
 /**
+ * Progress callback type for fetch operations
+ */
+export type FetchProgressCallback = (current: number, phase: string) => void;
+
+/**
  * Fetch options with optional abort signal
  */
 interface FetchOptions {
@@ -104,6 +109,7 @@ interface FetchOptions {
     body?: string;
     signal?: AbortSignal;
     maxRetries?: number;
+    onProgress?: FetchProgressCallback;
 }
 
 /**
@@ -256,6 +262,9 @@ async function fetchWithAuth<T>(
 
             // Handle Rate Limiting (429) with proper attempt tracking
             if (response.status === 429) {
+                // Track throttle retry in store for UI banner
+                store.incrementThrottleRetry();
+
                 const retryAfterHeader = response.headers.get('Retry-After');
                 let waitMs = 5000; // Default wait time if header is missing
                 if (retryAfterHeader) {
@@ -505,6 +514,11 @@ export const Api = {
 
         // Iterate through paginated report response until the API signals the final page
         while (hasMore) {
+            // Report progress for UI updates
+            if (options.onProgress) {
+                options.onProgress(page, 'entries');
+            }
+
             // Build the minimal report body; we always ask for all amount types so profit mode can stack values locally
             const requestBody = {
                 dateRangeStart: startIso,

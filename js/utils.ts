@@ -675,3 +675,22 @@ export function classifyEntryForOvertime(entry: EntryLike | null | undefined): E
 
     return 'work';
 }
+
+/**
+ * Calculates the number of days in a date range.
+ * Used for date range safeguards to warn users about large ranges.
+ *
+ * @param start - Start date in YYYY-MM-DD format.
+ * @param end - End date in YYYY-MM-DD format.
+ * @returns Number of days in the range (inclusive).
+ */
+export function getDateRangeDays(start: string, end: string): number {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return 0;
+    }
+    const diffMs = endDate.getTime() - startDate.getTime();
+    // Add 1 to include both start and end dates
+    return Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1;
+}

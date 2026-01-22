@@ -6,7 +6,7 @@
  */
 
 import { safeJSONParse } from './utils.js';
-import { STORAGE_KEYS, DEFAULT_MAX_PAGES } from './constants.js';
+import { STORAGE_KEYS, DEFAULT_MAX_PAGES, REPORT_CACHE_TTL } from './constants.js';
 import type {
     User,
     UserProfile,
@@ -22,6 +22,18 @@ import type {
     DateRange,
     TokenClaims,
 } from './types.js';
+
+/**
+ * Cache entry for report data stored in sessionStorage
+ */
+interface ReportCache {
+    /** Cache key: `${workspaceId}-${start}-${end}` */
+    key: string;
+    /** Timestamp when cache was created */
+    timestamp: number;
+    /** Cached time entries */
+    entries: TimeEntry[];
+}
 
 /**
  * Listener function type
@@ -88,6 +100,17 @@ class Store {
         profilesFailed: 0,
         holidaysFailed: 0,
         timeOffFailed: 0,
+    };
+
+    /**
+     * Throttle status tracking for rate limit retries.
+     */
+    throttleStatus: {
+        retryCount: number;
+        lastRetryTime: number | null;
+    } = {
+        retryCount: 0,
+        lastRetryTime: null,
     };
 
     /**
@@ -579,6 +602,21 @@ class Store {
     }
 
     /**
+     * Resets throttle status counters.
+     */
+    resetThrottleStatus(): void {
+        this.throttleStatus = { retryCount: 0, lastRetryTime: null };
+    }
+
+    /**
+     * Increments throttle retry count.
+     */
+    incrementThrottleRetry(): void {
+        this.throttleStatus.retryCount++;
+        this.throttleStatus.lastRetryTime = Date.now();
+    }
+
+    /**
      * Clears cached data maps (holidays, timeOff) before fetching new data.
      * Profiles are kept as they rarely change within a session.
      */
@@ -613,6 +651,70 @@ class Store {
                 overridesCollapsed: this.ui.overridesCollapsed,
             })
         );
+    }
+
+    /**
+     * Generates a cache key for report data.
+     * @param start - Start date (YYYY-MM-DD).
+     * @param end - End date (YYYY-MM-DD).
+     * @returns Cache key string or null if no workspace.
+     */
+    getReportCacheKey(start: string, end: string): string | null {
+        if (!this.claims?.workspaceId) return null;
+        return `${this.claims.workspaceId}-${start}-${end}`;
+    }
+
+    /**
+     * Gets cached report data if it exists and is not expired.
+     * @param key - Cache key.
+     * @returns Cached entries or null if not found or expired.
+     */
+    getCachedReport(key: string): TimeEntry[] | null {
+        try {
+            const cached = sessionStorage.getItem(STORAGE_KEYS.REPORT_CACHE);
+            if (!cached) return null;
+
+            const cache = safeJSONParse<ReportCache | null>(cached, null);
+            if (!cache) return null;
+
+            // Check if cache matches the key and is not expired
+            if (cache.key !== key) return null;
+            if (Date.now() - cache.timestamp > REPORT_CACHE_TTL) return null;
+
+            return cache.entries;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Saves report data to cache.
+     * @param key - Cache key.
+     * @param entries - Time entries to cache.
+     */
+    setCachedReport(key: string, entries: TimeEntry[]): void {
+        try {
+            const cache: ReportCache = {
+                key,
+                timestamp: Date.now(),
+                entries,
+            };
+            sessionStorage.setItem(STORAGE_KEYS.REPORT_CACHE, JSON.stringify(cache));
+        } catch (e) {
+            // Silently fail if sessionStorage quota exceeded
+            console.warn('Failed to cache report data:', e);
+        }
+    }
+
+    /**
+     * Clears the report cache.
+     */
+    clearReportCache(): void {
+        try {
+            sessionStorage.removeItem(STORAGE_KEYS.REPORT_CACHE);
+        } catch {
+            // Silently ignore
+        }
     }
 
     /**

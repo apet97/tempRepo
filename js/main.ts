@@ -75,7 +75,7 @@ import { Api } from './api.js';
 import { calculateAnalysis } from './calc.js';
 import { downloadCsv } from './export.js';
 import * as UI from './ui/index.js';
-import { IsoUtils, debounce, parseIsoDuration } from './utils.js';
+import { IsoUtils, debounce, parseIsoDuration, getDateRangeDays } from './utils.js';
 import { initErrorReporting, reportError } from './error-reporting.js';
 import { SENTRY_DSN } from './constants.js';
 import type { DateRange, TimeEntry, TokenClaims } from './types.js';
@@ -512,6 +512,15 @@ export function bindConfigEvents(): void {
         });
     }
 
+    // Refresh Button - bypass cache and fetch fresh data
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            store.clearReportCache();
+            handleGenerateReport(true);
+        });
+    }
+
     // Date Presets
     const setDateRange = (start: Date, end: Date) => {
         const startEl = document.getElementById('startDate') as HTMLInputElement | null;
@@ -673,8 +682,9 @@ let currentRequestId = 0;
 
 /**
  * Orchestrates the full report generation process.
+ * @param forceRefresh - If true, bypasses cache and fetches fresh data.
  */
-export async function handleGenerateReport(): Promise<void> {
+export async function handleGenerateReport(forceRefresh = false): Promise<void> {
     // Cancel previous request if running
     if (abortController) {
         abortController.abort();
@@ -685,10 +695,6 @@ export async function handleGenerateReport(): Promise<void> {
     // Increment request ID to detect stale responses
     currentRequestId++;
     const thisRequestId = currentRequestId;
-
-    UI.renderLoading(true);
-    store.resetApiStatus();
-    store.clearFetchCache();
 
     const startDateEl = document.getElementById('startDate') as HTMLInputElement | null;
     const endDateEl = document.getElementById('endDate') as HTMLInputElement | null;
@@ -722,21 +728,77 @@ export async function handleGenerateReport(): Promise<void> {
         return;
     }
 
+    // Date range safeguard: warn for large ranges (> 365 days)
+    const rangeDays = getDateRangeDays(startDate, endDate);
+    if (rangeDays > 365) {
+        const confirmed = await UI.showLargeDateRangeWarning(rangeDays);
+        if (!confirmed) {
+            return; // User cancelled
+        }
+    }
+
     // Use request-scoped date range
     const requestDateRange: DateRange = { start: startDate, end: endDate };
+
+    // Check for cached report data (unless force refresh is requested)
+    const cacheKey = store.getReportCacheKey(startDate, endDate);
+    let useCachedData = false;
+    let cachedEntries: typeof store.rawEntries = null;
+
+    if (cacheKey && !forceRefresh) {
+        cachedEntries = store.getCachedReport(cacheKey);
+        if (cachedEntries) {
+            // Get cache age for display
+            const cacheData = sessionStorage.getItem('otplus_report_cache');
+            if (cacheData) {
+                try {
+                    const parsed = JSON.parse(cacheData) as { timestamp: number };
+                    const cacheAgeSeconds = Math.round((Date.now() - parsed.timestamp) / 1000);
+                    const action = await UI.showCachePrompt(cacheAgeSeconds);
+                    useCachedData = action === 'use';
+                } catch {
+                    useCachedData = false;
+                }
+            }
+        }
+    }
+
+    UI.renderLoading(true);
+    store.resetApiStatus();
+    store.resetThrottleStatus();
+    store.clearFetchCache();
 
     try {
         if (!store.claims?.workspaceId) {
             throw new Error('No workspace ID');
         }
 
-        // Fetch via Detailed Report API (single request for ALL users).
-        const entries = await Api.fetchDetailedReport(
-            store.claims.workspaceId,
-            `${startDate}T00:00:00Z`,
-            `${endDate}T23:59:59Z`,
-            { signal }
-        );
+        let entries: typeof store.rawEntries;
+
+        if (useCachedData && cachedEntries) {
+            // Use cached data
+            entries = cachedEntries;
+            UI.updateLoadingProgress(0, 'cached data');
+        } else {
+            // Fetch via Detailed Report API (single request for ALL users).
+            entries = await Api.fetchDetailedReport(
+                store.claims.workspaceId,
+                `${startDate}T00:00:00Z`,
+                `${endDate}T23:59:59Z`,
+                {
+                    signal,
+                    onProgress: (page, phase) => {
+                        UI.updateLoadingProgress(page, phase);
+                    },
+                }
+            );
+
+            // Save to cache after successful fetch
+            if (cacheKey && entries && entries.length > 0) {
+                store.setCachedReport(cacheKey, entries);
+            }
+        }
+
         store.rawEntries = entries;
 
         // Prepare optional fetch promises (these can fail gracefully)
@@ -850,6 +912,8 @@ export async function handleGenerateReport(): Promise<void> {
         if (exportBtn) exportBtn.disabled = false;
 
         UI.renderApiStatus();
+        // Render throttle status if rate limiting was detected
+        UI.renderThrottleStatus(store.throttleStatus.retryCount);
     } catch (error) {
         const err = error as Error;
         if (err.name === 'AbortError') {
@@ -874,6 +938,7 @@ export async function handleGenerateReport(): Promise<void> {
             timestamp: new Date().toISOString(),
         });
     } finally {
+        UI.clearLoadingProgress();
         UI.renderLoading(false);
         abortController = null;
     }

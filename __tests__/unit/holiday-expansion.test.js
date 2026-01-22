@@ -42,6 +42,11 @@ describe('Main Logic Fixes - Holiday Expansion', () => {
             bindEvents: jest.fn(),
             showError: jest.fn(),
             hideError: jest.fn(),
+            showLargeDateRangeWarning: jest.fn(() => Promise.resolve(true)),
+            updateLoadingProgress: jest.fn(),
+            clearLoadingProgress: jest.fn(),
+            renderThrottleStatus: jest.fn(),
+            showCachePrompt: jest.fn(() => Promise.resolve('refresh')),
             Elements: {}
         };
         jest.unstable_mockModule('../../js/ui.js', () => mockUI);
@@ -67,7 +72,12 @@ describe('Main Logic Fixes - Holiday Expansion', () => {
             formatHours: h => h + 'h',
             formatCurrency: c => c,
             safeJSONParse: (text, fallback) => fallback,
-            parseIsoDuration: () => 8
+            parseIsoDuration: () => 8,
+            getDateRangeDays: (start, end) => {
+                const startDate = new Date(start);
+                const endDate = new Date(end);
+                return Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+            }
         }));
 
         // Mock Calc/Export
