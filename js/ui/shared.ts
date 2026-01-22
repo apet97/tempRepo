@@ -14,10 +14,15 @@ export interface Elements {
     resultsContainer: HTMLElement | null;
     summaryStrip: HTMLElement | null;
     summaryTableBody: HTMLElement | null;
-    userOverridesBody: HTMLElement | null;
     loadingState: HTMLElement | null;
     emptyState: HTMLElement | null;
     apiStatusBanner: HTMLElement | null;
+    // Overrides page elements
+    mainView: HTMLElement | null;
+    overridesPage: HTMLElement | null;
+    openOverridesBtn: HTMLElement | null;
+    closeOverridesBtn: HTMLElement | null;
+    overridesUserList: HTMLElement | null;
 }
 
 let cachedElements: Elements | null = null;
@@ -36,10 +41,15 @@ export function initializeElements(force = false): Elements {
         resultsContainer: document.getElementById('resultsContainer'),
         summaryStrip: document.getElementById('summaryStrip'),
         summaryTableBody: document.getElementById('summaryTableBody'),
-        userOverridesBody: document.getElementById('userOverridesBody'),
         loadingState: document.getElementById('loadingState'),
         emptyState: document.getElementById('emptyState'),
         apiStatusBanner: document.getElementById('apiStatusBanner'),
+        // Overrides page elements
+        mainView: document.getElementById('mainView'),
+        overridesPage: document.getElementById('overridesPage'),
+        openOverridesBtn: document.getElementById('openOverridesBtn'),
+        closeOverridesBtn: document.getElementById('closeOverridesBtn'),
+        overridesUserList: document.getElementById('overridesUserList'),
     };
 
     return cachedElements;

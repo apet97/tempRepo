@@ -381,9 +381,9 @@ export async function loadInitialData(): Promise<void> {
             return;
         }
 
-        // Populate the overrides table (user override controls) now that we know which users exist
+        // Populate the overrides page (user override controls) now that we know which users exist
         // This must happen before bindConfigEvents() so the user list is ready
-        UI.renderOverridesTable();
+        UI.renderOverridesPage();
     } catch {
         // Any error fetching users means we can't proceed with report generation
         UI.renderLoading(false);
@@ -415,7 +415,7 @@ export async function loadInitialData(): Promise<void> {
         },
         onOverrideModeChange: (userId: string, mode: string) => {
             store.setOverrideMode(userId, mode);
-            UI.renderOverridesTable(); // Re-render to show/hide per-day editor
+            // Note: renderOverridesPage() is called by the UI event handler when mode changes
             if (store.rawEntries) runCalculation();
         },
         onPerDayOverrideChange: (
@@ -433,7 +433,7 @@ export async function loadInitialData(): Promise<void> {
             if (startInput?.value && endInput?.value) {
                 const dates = IsoUtils.generateDateRange(startInput.value, endInput.value);
                 store.copyGlobalToPerDay(userId, dates);
-                UI.renderOverridesTable(); // Re-render to show copied values
+                // Note: renderOverridesPage() is called by the UI event handler
                 if (store.rawEntries) runCalculation();
             }
         },
@@ -448,7 +448,7 @@ export async function loadInitialData(): Promise<void> {
         },
         onCopyGlobalToWeekly: (userId: string) => {
             store.copyGlobalToWeekly(userId);
-            UI.renderOverridesTable(); // Re-render to show copied values
+            // Note: renderOverridesPage() is called by the UI event handler
             if (store.rawEntries) runCalculation();
         },
     });

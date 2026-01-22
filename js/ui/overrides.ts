@@ -1,11 +1,139 @@
 /**
  * @fileoverview User Overrides UI Module
- * Handles rendering of user override configuration table and per-day/weekly editors.
+ * Handles rendering of user override configuration and per-day/weekly editors.
+ * Supports both embedded table view and full-page settings view.
  */
 
 import { store } from '../state.js';
 import { getElements, escapeHtml } from './shared.js';
 import { IsoUtils } from '../utils.js';
+
+/**
+ * Shows the overrides page and hides the main view.
+ */
+export function showOverridesPage(): void {
+    const Elements = getElements();
+    if (Elements.mainView) {
+        Elements.mainView.classList.add('hidden');
+    }
+    if (Elements.overridesPage) {
+        Elements.overridesPage.classList.remove('hidden');
+    }
+    renderOverridesPage();
+}
+
+/**
+ * Hides the overrides page and shows the main view.
+ */
+export function hideOverridesPage(): void {
+    const Elements = getElements();
+    if (Elements.overridesPage) {
+        Elements.overridesPage.classList.add('hidden');
+    }
+    if (Elements.mainView) {
+        Elements.mainView.classList.remove('hidden');
+    }
+}
+
+/**
+ * Renders the full-page overrides view with card-based user list.
+ */
+export function renderOverridesPage(): void {
+    const Elements = getElements();
+    const container = Elements.overridesUserList;
+    if (!container) return;
+
+    if (!store.users.length) {
+        container.innerHTML = '<div class="card"><p class="muted">No users loaded. Generate a report first to see users.</p></div>';
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    store.users.forEach((user) => {
+        const override = store.getUserOverride(user.id);
+        const mode = override.mode || 'global';
+        const profile = store.profiles.get(user.id);
+        const profileCapacity = profile?.workCapacityHours;
+        const hasCustom = override.capacity || override.multiplier || override.tier2Threshold || override.tier2Multiplier;
+        const placeholder = profileCapacity != null ? profileCapacity : store.calcParams.dailyThreshold;
+
+        const card = document.createElement('div');
+        card.className = `card override-user-card${hasCustom ? ' has-custom' : ''}`;
+        card.dataset.userid = user.id;
+
+        card.innerHTML = `
+            <div class="override-user-header">
+                <span class="override-user-name">${escapeHtml(user.name)}</span>
+                ${hasCustom ? '<span class="override-badge">CUSTOM</span>' : ''}
+                ${profileCapacity != null ? `<span class="override-profile-hint">(${profileCapacity}h profile)</span>` : ''}
+            </div>
+            <div class="override-fields-grid">
+                <div class="override-field">
+                    <label>Mode</label>
+                    <select class="mode-select override-select"
+                            data-userid="${user.id}"
+                            aria-label="Override mode for ${escapeHtml(user.name)}">
+                        <option value="global" ${mode === 'global' ? 'selected' : ''}>Global</option>
+                        <option value="weekly" ${mode === 'weekly' ? 'selected' : ''}>Weekly</option>
+                        <option value="perDay" ${mode === 'perDay' ? 'selected' : ''}>Per Day</option>
+                    </select>
+                </div>
+                <div class="override-field">
+                    <label>Capacity (hrs)</label>
+                    <input type="number"
+                           class="override-input ${override.capacity ? '' : 'inherited'}"
+                           data-userid="${user.id}"
+                           data-field="capacity"
+                           placeholder="${placeholder}"
+                           value="${override.capacity || ''}"
+                           step="0.5" min="0" max="24"
+                           aria-label="Capacity override for ${escapeHtml(user.name)}">
+                </div>
+                <div class="override-field">
+                    <label>Multiplier (x)</label>
+                    <input type="number"
+                           class="override-input ${override.multiplier ? '' : 'inherited'}"
+                           data-userid="${user.id}"
+                           data-field="multiplier"
+                           placeholder="${store.calcParams.overtimeMultiplier}"
+                           value="${override.multiplier || ''}"
+                           step="0.1" min="1" max="5"
+                           aria-label="Overtime multiplier for ${escapeHtml(user.name)}">
+                </div>
+                <div class="override-field">
+                    <label>Tier2 Threshold (hrs)</label>
+                    <input type="number"
+                           class="override-input ${override.tier2Threshold ? '' : 'inherited'}"
+                           data-userid="${user.id}"
+                           data-field="tier2Threshold"
+                           placeholder="0"
+                           value="${override.tier2Threshold || ''}"
+                           step="1" min="0" max="999"
+                           aria-label="Tier2 Threshold for ${escapeHtml(user.name)}">
+                </div>
+                <div class="override-field">
+                    <label>Tier2 Mult (x)</label>
+                    <input type="number"
+                           class="override-input ${override.tier2Multiplier ? '' : 'inherited'}"
+                           data-userid="${user.id}"
+                           data-field="tier2Multiplier"
+                           placeholder="${store.calcParams.tier2Multiplier || 2.0}"
+                           value="${override.tier2Multiplier || ''}"
+                           step="0.1" min="1" max="5"
+                           aria-label="Tier2 Multiplier for ${escapeHtml(user.name)}">
+                </div>
+            </div>
+            ${mode === 'perDay' ? `<div class="override-expanded-section">${renderPerDayInputs(user.id, override.perDayOverrides || {}, profileCapacity, placeholder)}</div>` : ''}
+            ${mode === 'weekly' ? `<div class="override-expanded-section">${renderWeeklyInputs(user.id, override.weeklyOverrides || {}, profileCapacity, placeholder)}</div>` : ''}
+        `;
+
+        fragment.appendChild(card);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(fragment);
+}
 
 /**
  * Helper function to generate per-day override inputs HTML.
@@ -187,152 +315,3 @@ function renderWeeklyInputs(
     return html;
 }
 
-/**
- * Renders the User Overrides table (configuration inputs per user).
- *
- * Override Mode Logic:
- * -------------------
- * Users can have one of three override modes:
- *
- * 1. **Global Mode** (default): Single capacity/multiplier applies to all days.
- *    - Uses: override.capacity, override.multiplier
- *    - UI: Simple input fields in main row
- *
- * 2. **Weekly Mode**: Different overrides for each weekday (Mon-Sun).
- *    - Uses: override.weeklyOverrides[WEEKDAY].capacity/multiplier
- *    - UI: Expanded row with 7-day table
- *    - Useful for: Part-time schedules, different Friday hours, etc.
- *
- * 3. **Per-Day Mode**: Granular overrides for specific dates.
- *    - Uses: override.perDayOverrides[dateKey].capacity/multiplier
- *    - UI: Expanded row with calendar-based inputs
- *    - Useful for: Vacation adjustments, special project days
- *
- * Capacity Resolution Precedence (in calc.ts):
- * 1. Per-day override (if mode=perDay and date has value)
- * 2. Weekly override (if mode=weekly and weekday has value)
- * 3. Global override (if set)
- * 4. Profile capacity (if useProfileCapacity enabled)
- * 5. Global daily threshold (calcParams.dailyThreshold)
- */
-export function renderOverridesTable(): void {
-    const Elements = getElements();
-    const fragment = document.createDocumentFragment();
-
-    if (!store.users.length) return;
-
-    store.users.forEach((user) => {
-        const override = store.getUserOverride(user.id);
-        const mode = override.mode || 'global';
-        const profile = store.profiles.get(user.id);
-        const profileCapacity = profile?.workCapacityHours;
-        const tr = document.createElement('tr');
-
-        const hasCustom = override.capacity || override.multiplier;
-        const placeholder = profileCapacity != null ? profileCapacity : store.calcParams.dailyThreshold;
-
-        tr.innerHTML = `
-      <td>
-        ${escapeHtml(user.name)}
-        ${hasCustom ? '<span style="font-size:9px; color:#03a9f4; font-weight:bold; margin-left:4px;">CUSTOM</span>' : ''}
-        ${profileCapacity != null ? `<span style="font-size:9px; color:var(--text-muted); margin-left:4px;">(${profileCapacity}h profile)</span>` : ''}
-      </td>
-      <td>
-        <select class="mode-select"
-                data-userid="${user.id}"
-                aria-label="Override mode for ${escapeHtml(user.name)}">
-          <option value="global" ${mode === 'global' ? 'selected' : ''}>Global</option>
-          <option value="weekly" ${mode === 'weekly' ? 'selected' : ''}>Weekly</option>
-          <option value="perDay" ${mode === 'perDay' ? 'selected' : ''}>Per Day</option>
-        </select>
-      </td>
-      <td>
-        <input type="number"
-               class="override-input ${override.capacity ? '' : 'inherited'}"
-               data-userid="${user.id}"
-               data-field="capacity"
-               placeholder="${placeholder}"
-               value="${override.capacity || ''}"
-               step="0.5" min="0" max="24"
-               aria-label="Capacity override for ${escapeHtml(user.name)}">
-      </td>
-      <td>
-        <input type="number"
-               class="override-input ${override.multiplier ? '' : 'inherited'}"
-               data-userid="${user.id}"
-               data-field="multiplier"
-               placeholder="${store.calcParams.overtimeMultiplier}"
-               value="${override.multiplier || ''}"
-               step="0.1" min="1" max="5"
-               aria-label="Overtime multiplier for ${escapeHtml(user.name)}">
-      </td>
-      <td>
-        <input type="number"
-               class="override-input ${override.tier2Threshold ? '' : 'inherited'}"
-               data-userid="${user.id}"
-               data-field="tier2Threshold"
-               placeholder="0"
-               value="${override.tier2Threshold || ''}"
-               step="1" min="0" max="999"
-               aria-label="Tier2 Threshold for ${escapeHtml(user.name)}">
-      </td>
-      <td>
-        <input type="number"
-               class="override-input ${override.tier2Multiplier ? '' : 'inherited'}"
-               data-userid="${user.id}"
-               data-field="tier2Multiplier"
-               placeholder="${store.calcParams.tier2Multiplier || 2.0}"
-               value="${override.tier2Multiplier || ''}"
-               step="0.1" min="1" max="5"
-               aria-label="Tier2 Multiplier for ${escapeHtml(user.name)}">
-      </td>
-    `;
-        fragment.appendChild(tr);
-
-        // Add per-day editor row if mode is perDay
-        if (mode === 'perDay') {
-            const expandedRow = document.createElement('tr');
-            expandedRow.className = 'per-day-editor-row';
-            expandedRow.dataset.userid = user.id;
-
-            const expandedCell = document.createElement('td');
-            expandedCell.colSpan = 6;
-
-            // Render per-day inputs
-            expandedCell.innerHTML = renderPerDayInputs(
-                user.id,
-                override.perDayOverrides || {},
-                profileCapacity,
-                placeholder
-            );
-
-            expandedRow.appendChild(expandedCell);
-            fragment.appendChild(expandedRow);
-        }
-        // Add weekly editor row if mode is weekly
-        else if (mode === 'weekly') {
-            const expandedRow = document.createElement('tr');
-            expandedRow.className = 'weekly-editor-row';
-            expandedRow.dataset.userid = user.id;
-
-            const expandedCell = document.createElement('td');
-            expandedCell.colSpan = 6;
-
-            // Render weekly inputs
-            expandedCell.innerHTML = renderWeeklyInputs(
-                user.id,
-                override.weeklyOverrides || {},
-                profileCapacity,
-                placeholder
-            );
-
-            expandedRow.appendChild(expandedCell);
-            fragment.appendChild(expandedRow);
-        }
-    });
-
-    if (Elements.userOverridesBody) {
-        Elements.userOverridesBody.innerHTML = '';
-        Elements.userOverridesBody.appendChild(fragment);
-    }
-}

@@ -10,20 +10,24 @@ import { createMockStore } from '../helpers/mock-data.js';
 
 // Setup DOM
 document.body.innerHTML = `
-  <div id="resultsContainer" class="hidden"></div>
-  <div id="summaryStrip"></div>
-  <table>
-    <tbody id="summaryTableBody"></tbody>
-  </table>
-  <div id="detailedTableContainer"></div>
-  <table>
-    <tbody id="userOverridesBody"></tbody>
-  </table>
-  <div id="loadingState" class="hidden"></div>
-  <div id="emptyState" class="hidden"></div>
-  <div id="apiStatusBanner" class="hidden"></div>
-  <button id="generateBtn">Generate</button>
-  <button id="exportBtn">Export</button>
+  <div id="mainView">
+    <div id="resultsContainer" class="hidden"></div>
+    <div id="summaryStrip"></div>
+    <table>
+      <tbody id="summaryTableBody"></tbody>
+    </table>
+    <div id="detailedTableContainer"></div>
+    <div id="loadingState" class="hidden"></div>
+    <div id="emptyState" class="hidden"></div>
+    <div id="apiStatusBanner" class="hidden"></div>
+    <button id="generateBtn">Generate</button>
+    <button id="exportBtn">Export</button>
+    <button id="openOverridesBtn">Overrides</button>
+  </div>
+  <div id="overridesPage" class="hidden">
+    <button id="closeOverridesBtn">Back</button>
+    <div id="overridesUserList"></div>
+  </div>
 `;
 
 describe('UI Module', () => {
@@ -148,7 +152,7 @@ describe('UI Module', () => {
     });
   });
 
-  describe('renderOverridesTable', () => {
+  describe('renderOverridesPage', () => {
     beforeEach(() => {
       store.setToken('mock_token', { workspaceId: 'workspace_123' });
       store.users = [
@@ -157,20 +161,20 @@ describe('UI Module', () => {
       ];
     });
 
-    it('should render user overrides table', () => {
-      UI.renderOverridesTable();
+    it('should render user override cards', () => {
+      UI.renderOverridesPage();
 
-      const tbody = document.getElementById('userOverridesBody');
-      expect(tbody.children.length).toBe(2); // Two users
+      const userList = document.getElementById('overridesUserList');
+      expect(userList.children.length).toBe(2); // Two users
     });
 
     it('should display CUSTOM badge for users with overrides', () => {
       store.updateOverride('user_1', 'capacity', 6);
 
-      UI.renderOverridesTable();
+      UI.renderOverridesPage();
 
-      const tbody = document.getElementById('userOverridesBody');
-      expect(tbody.textContent).toContain('CUSTOM');
+      const userList = document.getElementById('overridesUserList');
+      expect(userList.textContent).toContain('CUSTOM');
     });
 
     it('should show profile capacity when available', () => {
@@ -179,10 +183,10 @@ describe('UI Module', () => {
         workingDays: ['MONDAY']
       });
 
-      UI.renderOverridesTable();
+      UI.renderOverridesPage();
 
-      const tbody = document.getElementById('userOverridesBody');
-      expect(tbody.textContent).toContain('(7h profile)');
+      const userList = document.getElementById('overridesUserList');
+      expect(userList.textContent).toContain('(7h profile)');
     });
   });
 
@@ -267,9 +271,9 @@ describe('UI Module', () => {
   });
 
   describe('Event Binding', () => {
-    it('should bind override change events', () => {
+    it('should bind override change events on overrides page', () => {
       store.setToken('mock_token', { workspaceId: 'workspace_123' });
-      UI.renderOverridesTable();
+      UI.renderOverridesPage();
 
       let callbackCalled = false;
       let receivedUserId, receivedField, receivedValue;
@@ -281,10 +285,15 @@ describe('UI Module', () => {
           receivedUserId = userId;
           receivedField = field;
           receivedValue = value;
-        }
+        },
+        onOverrideModeChange: () => {},
+        onPerDayOverrideChange: () => {},
+        onWeeklyOverrideChange: () => {},
+        onCopyFromGlobal: () => {},
+        onCopyGlobalToWeekly: () => {}
       });
 
-      const input = document.querySelector('input[data-userid="user_1"]');
+      const input = document.querySelector('#overridesUserList input[data-userid="user_1"]');
       input.value = '6';
       input.dispatchEvent(new Event('input', { bubbles: true }));
 

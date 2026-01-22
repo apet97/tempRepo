@@ -23,17 +23,23 @@ jest.mock('../../js/ui.js', () => {
     resultsContainer: { classList: { add: jest.fn(), remove: jest.fn(), contains: jest.fn(() => false) } },
     summaryStrip: { innerHTML: '', classList: { add: jest.fn(), remove: jest.fn() } },
     summaryTableBody: { innerHTML: '', appendChild: jest.fn() },
-    userOverridesBody: { innerHTML: '', addEventListener: jest.fn() },
     loadingState: { classList: { add: jest.fn(), remove: jest.fn() } },
     emptyState: { classList: { add: jest.fn(), remove: jest.fn() }, textContent: '' },
-    apiStatusBanner: { classList: { add: jest.fn(), remove: jest.fn() }, textContent: '' }
+    apiStatusBanner: { classList: { add: jest.fn(), remove: jest.fn() }, textContent: '' },
+    mainView: { classList: { add: jest.fn(), remove: jest.fn() } },
+    overridesPage: { classList: { add: jest.fn(), remove: jest.fn() } },
+    openOverridesBtn: { addEventListener: jest.fn() },
+    closeOverridesBtn: { addEventListener: jest.fn() },
+    overridesUserList: { innerHTML: '', appendChild: jest.fn() }
   };
 
   return {
     initializeElements: jest.fn(() => mockElements),
     renderLoading: jest.fn(),
     renderApiStatus: jest.fn(),
-    renderOverridesTable: jest.fn(),
+    renderOverridesPage: jest.fn(),
+    showOverridesPage: jest.fn(),
+    hideOverridesPage: jest.fn(),
     renderSummaryStrip: jest.fn(),
     renderSummaryTable: jest.fn(),
     renderDetailedTable: jest.fn(),

@@ -32,10 +32,15 @@ export const Elements: Record<string, MockElement> = {
     resultsContainer: { classList: { add: jest.fn(), remove: jest.fn() } },
     summaryStrip: { innerHTML: '', classList: { add: jest.fn(), remove: jest.fn() } },
     summaryTableBody: { innerHTML: '', appendChild: jest.fn(), classList: { add: jest.fn(), remove: jest.fn() } },
-    userOverridesBody: { innerHTML: '', addEventListener: jest.fn(), classList: { add: jest.fn(), remove: jest.fn() } },
     loadingState: { classList: { add: jest.fn(), remove: jest.fn() } },
     emptyState: { classList: { add: jest.fn(), remove: jest.fn() }, textContent: '' },
-    apiStatusBanner: { classList: { add: jest.fn(), remove: jest.fn() }, textContent: '' }
+    apiStatusBanner: { classList: { add: jest.fn(), remove: jest.fn() }, textContent: '' },
+    // Overrides page elements
+    mainView: { classList: { add: jest.fn(), remove: jest.fn() } },
+    overridesPage: { classList: { add: jest.fn(), remove: jest.fn() } },
+    openOverridesBtn: { addEventListener: jest.fn(), classList: { add: jest.fn(), remove: jest.fn() } },
+    closeOverridesBtn: { addEventListener: jest.fn(), classList: { add: jest.fn(), remove: jest.fn() } },
+    overridesUserList: { innerHTML: '', appendChild: jest.fn(), classList: { add: jest.fn(), remove: jest.fn() } }
 };
 
 /**
@@ -68,9 +73,23 @@ export function renderApiStatus(): void {
 }
 
 /**
- * Render user overrides table
+ * Show the overrides page
  */
-export function renderOverridesTable(_users?: UserAnalysis[]): void {
+export function showOverridesPage(): void {
+    // Mock implementation
+}
+
+/**
+ * Hide the overrides page
+ */
+export function hideOverridesPage(): void {
+    // Mock implementation
+}
+
+/**
+ * Render the overrides page
+ */
+export function renderOverridesPage(): void {
     // Mock implementation
 }
 

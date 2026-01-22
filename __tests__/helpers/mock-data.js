@@ -418,7 +418,6 @@ export function setupMockDOM() {
     resultsContainer: createMockElement(),
     summaryStrip: createMockElement(),
     summaryTableBody: createMockElement(),
-    userOverridesBody: createMockElement(),
     loadingState: createMockElement(),
     emptyState: createMockElement(),
     apiStatusBanner: createMockElement(),
@@ -437,7 +436,13 @@ export function setupMockDOM() {
     useProfileWorkingDays: createMockElement({ checked: true }),
     applyHolidays: createMockElement({ checked: true }),
     applyTimeOff: createMockElement({ checked: true }),
-    showBillableBreakdown: createMockElement({ checked: true })
+    showBillableBreakdown: createMockElement({ checked: true }),
+    // Overrides page elements
+    mainView: createMockElement(),
+    overridesPage: createMockElement(),
+    openOverridesBtn: createMockElement(),
+    closeOverridesBtn: createMockElement(),
+    overridesUserList: createMockElement()
   };
 
   // Mock document methods

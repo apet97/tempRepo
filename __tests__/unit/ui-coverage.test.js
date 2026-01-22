@@ -38,35 +38,41 @@ describe('UI Module - Additional Coverage', () => {
     store.overrides = {};
 
     document.body.innerHTML = `
-      <div id="resultsContainer" class="hidden"></div>
-      <div id="summaryStrip"></div>
-      <div id="summaryTableBody"></div>
-      <div id="detailedTableContainer"></div>
-      <div id="userOverridesBody"></div>
-      <div id="loadingState" class="hidden"></div>
-      <div id="emptyState" class="hidden"></div>
-      <div id="apiStatusBanner" class="hidden"></div>
-      <div id="detailedCard" class="hidden"></div>
-      <div id="summaryCard">
-        <table><thead><tr id="summaryHeaderRow"></tr></thead></table>
+      <div id="mainView">
+        <div id="resultsContainer" class="hidden"></div>
+        <div id="summaryStrip"></div>
+        <div id="summaryTableBody"></div>
+        <div id="detailedTableContainer"></div>
+        <div id="loadingState" class="hidden"></div>
+        <div id="emptyState" class="hidden"></div>
+        <div id="apiStatusBanner" class="hidden"></div>
+        <div id="detailedCard" class="hidden"></div>
+        <div id="summaryCard">
+          <table><thead><tr id="summaryHeaderRow"></tr></thead></table>
+        </div>
+        <div id="detailedFilters">
+          <button class="chip" data-filter="all">All</button>
+          <button class="chip" data-filter="holiday">Holidays</button>
+          <button class="chip" data-filter="offday">Off-days</button>
+          <button class="chip" data-filter="billable">Billable</button>
+        </div>
+        <div id="configContent"></div>
+        <input type="checkbox" id="useProfileCapacity" checked>
+        <input type="checkbox" id="useProfileWorkingDays" checked>
+        <input type="checkbox" id="applyHolidays" checked>
+        <input type="checkbox" id="applyTimeOff" checked>
+        <input type="checkbox" id="showBillableBreakdown" checked>
+        <input type="number" id="configDaily" value="8">
+        <input type="number" id="configMultiplier" value="1.5">
+        <button id="configToggle">Toggle</button>
+        <button id="generateBtn">Generate</button>
+        <button id="exportBtn">Export</button>
+        <button id="openOverridesBtn">Overrides</button>
       </div>
-      <div id="detailedFilters">
-        <button class="chip" data-filter="all">All</button>
-        <button class="chip" data-filter="holiday">Holidays</button>
-        <button class="chip" data-filter="offday">Off-days</button>
-        <button class="chip" data-filter="billable">Billable</button>
+      <div id="overridesPage" class="hidden">
+        <button id="closeOverridesBtn">Back</button>
+        <div id="overridesUserList"></div>
       </div>
-      <div id="configContent"></div>
-      <input type="checkbox" id="useProfileCapacity" checked>
-      <input type="checkbox" id="useProfileWorkingDays" checked>
-      <input type="checkbox" id="applyHolidays" checked>
-      <input type="checkbox" id="applyTimeOff" checked>
-      <input type="checkbox" id="showBillableBreakdown" checked>
-      <input type="number" id="configDaily" value="8">
-      <input type="number" id="configMultiplier" value="1.5">
-      <button id="configToggle">Toggle</button>
-      <button id="generateBtn">Generate</button>
-      <button id="exportBtn">Export</button>
     `;
 
     UI.initializeElements(true); // Force re-initialization to prevent stale references
@@ -280,7 +286,7 @@ describe('UI Module - Additional Coverage', () => {
     });
   });
 
-  describe('renderOverridesTable', () => {
+  describe('renderOverridesPage', () => {
     it('should render with profile capacity', () => {
       store.users = [{ id: 'user1', name: 'Alice' }];
       store.profiles.set('user1', {
@@ -288,19 +294,19 @@ describe('UI Module - Additional Coverage', () => {
         workingDays: ['MONDAY']
       });
 
-      UI.renderOverridesTable();
+      UI.renderOverridesPage();
 
-      const tbody = document.getElementById('userOverridesBody');
-      expect(tbody.textContent).toContain('(7.5h profile)');
+      const userList = document.getElementById('overridesUserList');
+      expect(userList.textContent).toContain('(7.5h profile)');
     });
 
     it('should handle empty users', () => {
       store.users = [];
 
-      UI.renderOverridesTable();
+      UI.renderOverridesPage();
 
-      const tbody = document.getElementById('userOverridesBody');
-      expect(tbody.children.length).toBe(0);
+      const userList = document.getElementById('overridesUserList');
+      expect(userList.textContent).toContain('No users loaded');
     });
   });
 

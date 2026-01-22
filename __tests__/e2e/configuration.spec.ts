@@ -137,22 +137,26 @@ test.describe('User Overrides', () => {
         await navigateWithToken(page);
     });
 
-    test('user overrides table is visible', async ({ page }) => {
-        // Wait for users to load
-        await page.waitForSelector('#userOverridesBody tr', { timeout: 5000 });
+    test('user overrides page is accessible via button', async ({ page }) => {
+        // Click the Overrides button to open the overrides page
+        await page.click('#openOverridesBtn');
 
-        // Should have rows for each user
-        const rows = page.locator('#userOverridesBody tr');
-        const count = await rows.count();
+        // Wait for overrides page to be visible
+        await page.waitForSelector('#overridesPage:not(.hidden)', { timeout: 5000 });
+
+        // Should have user cards
+        const cards = page.locator('.override-user-card');
+        const count = await cards.count();
         expect(count).toBeGreaterThan(0);
     });
 
     test('user override inputs accept values', async ({ page }) => {
-        // Wait for users to load
-        await page.waitForSelector('#userOverridesBody tr', { timeout: 5000 });
+        // Open overrides page
+        await page.click('#openOverridesBtn');
+        await page.waitForSelector('#overridesPage:not(.hidden)', { timeout: 5000 });
 
-        // Find first row's capacity input
-        const firstCapacityInput = page.locator('#userOverridesBody tr:first-child input[data-field="capacity"]');
+        // Find first card's capacity input
+        const firstCapacityInput = page.locator('.override-user-card:first-child input[data-field="capacity"]');
 
         if (await firstCapacityInput.isVisible()) {
             // Clear and enter new value
@@ -162,16 +166,33 @@ test.describe('User Overrides', () => {
     });
 
     test('mode selector changes override mode', async ({ page }) => {
-        // Wait for users to load
-        await page.waitForSelector('#userOverridesBody tr', { timeout: 5000 });
+        // Open overrides page
+        await page.click('#openOverridesBtn');
+        await page.waitForSelector('#overridesPage:not(.hidden)', { timeout: 5000 });
 
-        // Find first row's mode selector
-        const modeSelector = page.locator('#userOverridesBody tr:first-child select').first();
+        // Find first card's mode selector
+        const modeSelector = page.locator('.override-user-card:first-child select.mode-select').first();
 
         if (await modeSelector.isVisible()) {
             // Change to weekly mode
             await modeSelector.selectOption('weekly');
             await expect(modeSelector).toHaveValue('weekly');
         }
+    });
+
+    test('back button returns to main view', async ({ page }) => {
+        // Open overrides page
+        await page.click('#openOverridesBtn');
+        await page.waitForSelector('#overridesPage:not(.hidden)', { timeout: 5000 });
+
+        // Main view should be hidden
+        await expect(page.locator('#mainView')).toHaveClass(/hidden/);
+
+        // Click back button
+        await page.click('#closeOverridesBtn');
+
+        // Overrides page should be hidden, main view visible
+        await expect(page.locator('#overridesPage')).toHaveClass(/hidden/);
+        await expect(page.locator('#mainView')).not.toHaveClass(/hidden/);
     });
 });

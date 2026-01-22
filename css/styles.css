@@ -1147,19 +1147,6 @@ body.density-spacious {
 }
 
 /* Overrides */
-.overrides-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-/* Overrides table stays compact while accommodating editors for capacity/multiplier values */
-.overrides-table th,
-.overrides-table td {
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--border-color);
-}
-
 .override-input {
   width: 100%;
   max-width: 68px;
@@ -1250,12 +1237,6 @@ body.density-spacious {
 .tab-nav-card {
   display: none;
   padding: 8px;
-}
-
-/* User Overrides */
-.overrides-table-container {
-  max-height: 300px;
-  overflow-y: auto;
 }
 
 /* Empty State */
@@ -1650,4 +1631,197 @@ body.density-spacious {
 .mode-select:focus {
   outline: none;
   border-color: var(--primary-color);
+}
+
+/* ========================================
+   Overrides Page Styles
+   ======================================== */
+
+/* Page animation */
+#overridesPage {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header with back button */
+.overrides-page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.overrides-page-title {
+  font-size: 20px;
+  font-weight: 600;
+  flex: 1;
+  margin: 0;
+}
+
+/* Intro card */
+.overrides-intro {
+  background: var(--bg-subtle);
+}
+
+.overrides-intro p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* User cards container */
+#overridesUserList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Individual user card */
+.override-user-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 20px;
+  background: var(--bg-surface);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.override-user-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.override-user-card.has-custom {
+  border-left: 3px solid var(--color-accent);
+}
+
+/* User header */
+.override-user-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.override-user-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.override-badge {
+  font-size: 9px;
+  font-weight: bold;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.override-profile-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* Fields grid - responsive */
+.override-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.override-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.override-field label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.override-field .override-input,
+.override-field .override-select {
+  width: 100%;
+  max-width: none;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.override-field .override-input:focus,
+.override-field .override-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.override-field .override-input.inherited {
+  color: var(--text-muted);
+}
+
+/* Expanded section for per-day/weekly editors */
+.override-expanded-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Mobile: stack fields */
+@media (max-width: 480px) {
+  .override-fields-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .override-user-card {
+    padding: 16px;
+  }
+
+  .overrides-page-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .overrides-page-title {
+    font-size: 18px;
+    width: 100%;
+    order: 2;
+  }
+}
+
+/* Dark mode adjustments */
+.cl-theme-dark .override-user-card {
+  background: var(--bg-surface);
+  border-color: var(--border-color);
+}
+
+.cl-theme-dark .override-user-card.has-custom {
+  border-left-color: var(--color-accent);
+}
+
+.cl-theme-dark .override-field .override-input,
+.cl-theme-dark .override-field .override-select {
+  background: var(--bg-subtle);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.cl-theme-dark .overrides-intro {
+  background: var(--bg-subtle);
 }
