@@ -200,7 +200,7 @@ export function renderDetailedTable(
           <th class="text-right amount-cell">${headerLabel('Overtime', 'OT')} $${amountHeaderNote}</th>
           ${showTier2 ? `<th class="text-right amount-cell">T2 $${amountHeaderNote}</th>` : ''}
           <th class="text-right amount-cell">Total $${amountHeaderNote}</th>
-          <th class="text-right">Status <span class="status-info" title="HOLIDAY ENTRY / TIME-OFF ENTRY = PTO entries (count as regular hours)&#10;HOLIDAY = Work on a holiday (all work is overtime)&#10;TIME-OFF = Day has time-off reducing capacity&#10;OFF-DAY = Non-working day (weekend)&#10;BREAK = Break entry (counts as regular hours)">ⓘ</span></th>
+          <th class="text-right status-header-cell">Status <button type="button" class="status-info-btn" aria-label="Status badge explanations">ⓘ</button></th>
         </tr>
       </thead>
       <tbody>`;

@@ -873,17 +873,80 @@ body.density-spacious {
   align-items: center;
 }
 
-/* Status column info tooltip */
-.status-info {
-  cursor: help;
-  color: var(--text-muted);
-  font-weight: normal;
-  font-size: 12px;
-  margin-left: 4px;
+/* Status column header wrapper for popover positioning */
+.status-header-cell {
+  position: relative;
 }
 
-.status-info:hover {
+/* Status column info button */
+.status-info-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: normal;
+  padding: 2px 4px;
+  margin-left: 4px;
+  border-radius: 50%;
+  transition: background-color 0.2s, color 0.2s;
+  vertical-align: middle;
+}
+
+.status-info-btn:hover,
+.status-info-btn:focus {
   color: var(--color-accent);
+  background-color: var(--bg-hover);
+  outline: none;
+}
+
+/* Status info popover */
+.status-info-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  padding: 12px 16px;
+  z-index: 100;
+  min-width: 280px;
+  max-width: 320px;
+  font-size: 12px;
+  font-weight: normal;
+  text-transform: none;
+  text-align: left;
+  white-space: normal;
+}
+
+.status-info-popover.hidden {
+  display: none;
+}
+
+.status-info-popover h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.status-info-popover dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+}
+
+.status-info-popover dt {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.status-info-popover dd {
+  margin: 0;
+  color: var(--text-muted);
 }
 
 #detailedCard.billable-off .chip[data-filter="billable"] {
