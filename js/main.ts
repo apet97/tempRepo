@@ -806,6 +806,18 @@ export function bindConfigEvents(): void {
 
         enableTieredOTEl.addEventListener('change', () => {
             store.config.enableTieredOT = enableTieredOTEl.checked;
+
+            // When enabling Tiered OT, sync tier2Multiplier to match regular OT multiplier
+            // This prevents unexpected rate increases when first enabling the feature
+            if (enableTieredOTEl.checked) {
+                store.calcParams.tier2Multiplier = store.calcParams.overtimeMultiplier;
+                // Update the UI input to reflect the synced value
+                const tier2MultEl = document.getElementById('configTier2Multiplier') as HTMLInputElement | null;
+                if (tier2MultEl) {
+                    tier2MultEl.value = String(store.calcParams.tier2Multiplier);
+                }
+            }
+
             store.saveConfig();
             updateTier2Visibility(enableTieredOTEl.checked);
             if (store.rawEntries) runCalculation();
