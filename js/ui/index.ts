@@ -44,11 +44,13 @@ export function bindEvents(callbacks: UICallbacks): void {
         { passive: false }
     );
 
-    // Pagination Event Delegation
+    // Detailed table event delegation (pagination + status popover)
     const detailedContainer = document.getElementById('detailedTableContainer');
     if (detailedContainer) {
         detailedContainer.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
+
+            // Pagination
             if (target.matches('.pagination-btn')) {
                 const newPage = parseInt(target.dataset.page || '', 10);
                 if (!isNaN(newPage)) {
@@ -57,57 +59,52 @@ export function bindEvents(callbacks: UICallbacks): void {
                         renderDetailedTable(store.analysisResults);
                     }
                 }
+                return;
+            }
+
+            // Status info popover toggle
+            const btn = target.closest('.status-info-btn') as HTMLElement | null;
+            if (btn) {
+                e.stopPropagation();
+                const headerCell = btn.closest('.status-header-cell');
+                if (!headerCell) return;
+
+                let popover = headerCell.querySelector('.status-info-popover') as HTMLElement | null;
+
+                if (popover) {
+                    popover.classList.toggle('hidden');
+                } else {
+                    popover = document.createElement('div');
+                    popover.className = 'status-info-popover';
+                    popover.innerHTML = `
+                        <h4>Status Badges</h4>
+                        <dl>
+                            <dt>HOLIDAY ENTRY</dt>
+                            <dd>PTO entry (counts as regular hours)</dd>
+                            <dt>TIME-OFF ENTRY</dt>
+                            <dd>PTO entry (counts as regular hours)</dd>
+                            <dt>HOLIDAY</dt>
+                            <dd>Work on a holiday (all work is overtime)</dd>
+                            <dt>TIME-OFF</dt>
+                            <dd>Day has time-off reducing capacity</dd>
+                            <dt>OFF-DAY</dt>
+                            <dd>Non-working day (weekend)</dd>
+                            <dt>BREAK</dt>
+                            <dd>Break entry (counts as regular hours)</dd>
+                        </dl>
+                    `;
+                    headerCell.appendChild(popover);
+                }
+                return;
+            }
+
+            // Close popover when clicking outside (but inside container)
+            const openPopover = detailedContainer.querySelector('.status-info-popover:not(.hidden)');
+            if (openPopover && !openPopover.contains(target)) {
+                openPopover.classList.add('hidden');
             }
         });
     }
-
-    // Status info popover - click to toggle
-    document.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        const btn = target.closest('.status-info-btn') as HTMLElement | null;
-
-        if (btn) {
-            e.stopPropagation();
-            const headerCell = btn.closest('.status-header-cell');
-            if (!headerCell) return;
-
-            let popover = headerCell.querySelector('.status-info-popover') as HTMLElement | null;
-
-            if (popover) {
-                // Toggle existing popover
-                popover.classList.toggle('hidden');
-            } else {
-                // Create popover
-                popover = document.createElement('div');
-                popover.className = 'status-info-popover';
-                popover.innerHTML = `
-                    <h4>Status Badges</h4>
-                    <dl>
-                        <dt>HOLIDAY ENTRY</dt>
-                        <dd>PTO entry (counts as regular hours)</dd>
-                        <dt>TIME-OFF ENTRY</dt>
-                        <dd>PTO entry (counts as regular hours)</dd>
-                        <dt>HOLIDAY</dt>
-                        <dd>Work on a holiday (all work is overtime)</dd>
-                        <dt>TIME-OFF</dt>
-                        <dd>Day has time-off reducing capacity</dd>
-                        <dt>OFF-DAY</dt>
-                        <dd>Non-working day (weekend)</dd>
-                        <dt>BREAK</dt>
-                        <dd>Break entry (counts as regular hours)</dd>
-                    </dl>
-                `;
-                headerCell.appendChild(popover);
-            }
-            return;
-        }
-
-        // Close popover when clicking outside
-        const openPopover = document.querySelector('.status-info-popover:not(.hidden)');
-        if (openPopover && !openPopover.contains(target)) {
-            openPopover.classList.add('hidden');
-        }
-    });
 
     // Generate button
     const generateBtn = document.getElementById('generateBtn');
