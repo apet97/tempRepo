@@ -200,7 +200,7 @@ export function renderDetailedTable(
           <th class="text-right amount-cell">${headerLabel('Overtime', 'OT')} $${amountHeaderNote}</th>
           ${showTier2 ? `<th class="text-right amount-cell">T2 $${amountHeaderNote}</th>` : ''}
           <th class="text-right amount-cell">Total $${amountHeaderNote}</th>
-          <th class="text-right">Status</th>
+          <th class="text-right">Status <span class="status-info" title="HOLIDAY ENTRY / TIME-OFF ENTRY = PTO entries (count as regular hours)&#10;HOLIDAY = Work on a holiday (all work is overtime)&#10;TIME-OFF = Day has time-off reducing capacity&#10;OFF-DAY = Non-working day (weekend)&#10;BREAK = Break entry (counts as regular hours)">ⓘ</span></th>
         </tr>
       </thead>
       <tbody>`;
@@ -232,13 +232,13 @@ export function renderDetailedTable(
         if (isHolidayEntry) {
             addTag(
                 'HOLIDAY-TIME-ENTRY',
-                '<span class="badge badge-holiday">HOLIDAY TIME ENTRY</span>'
+                '<span class="badge badge-holiday" title="Holiday time entry (counts as regular hours, not overtime)">HOLIDAY ENTRY</span>'
             );
         }
         if (isTimeOffEntry) {
             addTag(
                 'TIME-OFF-TIME-ENTRY',
-                '<span class="badge badge-timeoff">TIME OFF TIME ENTRY</span>'
+                '<span class="badge badge-timeoff" title="Time-off entry (counts as regular hours, not overtime)">TIME-OFF ENTRY</span>'
             );
         }
 

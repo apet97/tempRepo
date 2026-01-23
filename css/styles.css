@@ -860,9 +860,8 @@ body.density-spacious {
 
 #detailedCard .report-table th:last-child, /* Status */
 #detailedCard .report-table td:last-child {
-  width: 12%;
-  min-width: 155px;
-  overflow: visible;
+  width: 14%;
+  min-width: 170px;
 }
 
 /* Fix tags column flex wrapping */
@@ -872,6 +871,19 @@ body.density-spacious {
   justify-content: flex-start;
   flex-wrap: wrap;
   align-items: center;
+}
+
+/* Status column info tooltip */
+.status-info {
+  cursor: help;
+  color: var(--text-muted);
+  font-weight: normal;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.status-info:hover {
+  color: var(--color-accent);
 }
 
 #detailedCard.billable-off .chip[data-filter="billable"] {
