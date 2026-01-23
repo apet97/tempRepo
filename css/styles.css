@@ -783,6 +783,7 @@ body.density-spacious {
 .table-scroll {
   width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   padding-right: 12px;
 }
 
@@ -874,7 +875,7 @@ body.density-spacious {
 }
 
 /* Status column header wrapper for popover positioning */
-.status-header-cell {
+.report-table th.status-header-cell {
   position: relative;
 }
 
