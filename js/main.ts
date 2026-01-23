@@ -163,11 +163,11 @@ import type { DateRange, TimeEntry, TokenClaims } from './types.js';
 // ============================================================================
 
 /**
- * Sets default date range (last 30 days) in the UI date input controls.
+ * Sets default date range (today) in the UI date input controls.
  *
  * This function is called during application initialization to provide a reasonable
- * default date range for report generation. The 30-day default is a common baseline
- * for weekly/monthly overtime analysis.
+ * default date range for report generation. Both start and end dates default to today,
+ * allowing users to quickly generate a same-day report.
  *
  * ## Edge Cases
  * - If the date inputs don't exist in the DOM, this silently returns (no error thrown)
@@ -179,15 +179,13 @@ import type { DateRange, TimeEntry, TokenClaims } from './types.js';
  * - Persistence: User's chosen date range is persisted via "change" listeners in `bindConfigEvents()`
  */
 export function setDefaultDates(): void {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 30);
+    const today = new Date();
 
     const startEl = document.getElementById('startDate') as HTMLInputElement | null;
     const endEl = document.getElementById('endDate') as HTMLInputElement | null;
 
-    if (startEl) startEl.value = IsoUtils.toISODate(start);
-    if (endEl) endEl.value = IsoUtils.toISODate(end);
+    if (startEl) startEl.value = IsoUtils.toISODate(today);
+    if (endEl) endEl.value = IsoUtils.toISODate(today);
 }
 
 /**
@@ -201,7 +199,7 @@ export function setDefaultDates(): void {
  * 3. Decode and validate JWT payload (must contain `workspaceId` claim)
  * 4. Apply theme setting from JWT claim (Clockify can set DARK/LIGHT theme)
  * 5. Store token in application state (via `store.setToken()`)
- * 6. Set default date range (last 30 days)
+ * 6. Set default date range (today)
  * 7. Load initial data (fetch users, bind event handlers)
  *
  * ## Error Handling
@@ -287,7 +285,7 @@ export function init(): void {
         // Store token and claims in centralized state (state.ts) for subsequent API calls
         store.setToken(token, payload);
 
-        // Initialize UI with sensible defaults (last 30 days)
+        // Initialize UI with sensible defaults (today)
         setDefaultDates();
 
         // Proceed to data load and event binding

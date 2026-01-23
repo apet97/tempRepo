@@ -131,6 +131,22 @@ body {
   color: var(--text-primary);
 }
 
+.btn-accent-outline {
+  background: white;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-accent-outline:hover {
+  background: var(--color-accent);
+  color: white;
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 13px;
@@ -454,6 +470,14 @@ body {
   background: var(--bg-hover);
   border-color: var(--color-accent);
   color: var(--text-primary);
+}
+
+.cl-theme-dark .btn-accent-outline {
+  background: var(--bg-subtle);
+}
+
+.cl-theme-dark .btn-accent-outline:hover {
+  background: var(--color-accent);
 }
 
 .cl-theme-dark .badge-holiday {
@@ -837,7 +861,7 @@ body.density-spacious {
 #detailedCard .report-table th:nth-child(13), /* Status */
 #detailedCard .report-table td:nth-child(13) {
   width: 12%;
-  min-width: 120px;
+  min-width: 155px;
 }
 
 /* Fix tags column flex wrapping */
@@ -1213,6 +1237,12 @@ body.density-spacious {
 
 .tier2-config {
   display: contents;
+}
+
+/* Ensure Amounts and Decimal time controls are always visible */
+.config-inline > label.config-item:has(#amountDisplay),
+.config-inline > label.config-item:has(#showDecimalTime) {
+  display: inline-flex !important;
 }
 
 .config-input-sm {
