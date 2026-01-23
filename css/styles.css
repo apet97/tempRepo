@@ -1211,6 +1211,10 @@ body.density-spacious {
   margin-top: 10px;
 }
 
+.tier2-config {
+  display: contents;
+}
+
 .config-input-sm {
   width: 70px;
   padding: var(--input-padding);

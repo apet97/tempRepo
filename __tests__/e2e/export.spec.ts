@@ -20,14 +20,14 @@ test.describe('CSV Export', () => {
         // Wait for results
         await expect(page.locator('#resultsContainer')).toBeVisible({ timeout: 10000 });
 
-        // Set up download listener
-        const downloadPromise = page.waitForEvent('download');
+        // Ensure export button is enabled before clicking
+        await expect(page.locator('#exportBtn')).toBeEnabled({ timeout: 5000 });
 
-        // Click export
-        await page.click('#exportBtn');
-
-        // Wait for download
-        const download = await downloadPromise;
+        // Use Promise.all to set up listener and click simultaneously for reliability
+        const [download] = await Promise.all([
+            page.waitForEvent('download', { timeout: 15000 }),
+            page.click('#exportBtn'),
+        ]);
 
         // Verify download filename
         const filename = download.suggestedFilename();
@@ -47,14 +47,14 @@ test.describe('CSV Export', () => {
         // Wait for results
         await expect(page.locator('#resultsContainer')).toBeVisible({ timeout: 10000 });
 
-        // Set up download listener
-        const downloadPromise = page.waitForEvent('download');
+        // Ensure export button is enabled before clicking
+        await expect(page.locator('#exportBtn')).toBeEnabled({ timeout: 5000 });
 
-        // Click export
-        await page.click('#exportBtn');
-
-        // Wait for download and read content
-        const download = await downloadPromise;
+        // Use Promise.all to set up listener and click simultaneously for reliability
+        const [download] = await Promise.all([
+            page.waitForEvent('download', { timeout: 15000 }),
+            page.click('#exportBtn'),
+        ]);
         const path = await download.path();
 
         if (path) {

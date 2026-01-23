@@ -94,6 +94,7 @@ export function renderDetailedTable(
     if (!container) return;
     const detailedCard = document.getElementById('detailedCard');
     const showBillable = store.config.showBillableBreakdown;
+    const showTier2 = store.config.enableTieredOT;
     const amountDisplay = getAmountDisplayMode();
     const isProfitMode = amountDisplay === 'profit';
     if (detailedCard) {
@@ -197,7 +198,7 @@ export function renderDetailedTable(
           <th class="text-right amount-cell">${detailedRateLabel}${amountHeaderNote}</th>
           <th class="text-right amount-cell">${headerLabel('Regular', 'Reg')} $${amountHeaderNote}</th>
           <th class="text-right amount-cell">${headerLabel('Overtime', 'OT')} $${amountHeaderNote}</th>
-          <th class="text-right amount-cell">T2 $${amountHeaderNote}</th>
+          ${showTier2 ? `<th class="text-right amount-cell">T2 $${amountHeaderNote}</th>` : ''}
           <th class="text-right amount-cell">Total $${amountHeaderNote}</th>
           <th class="text-right">Status</th>
         </tr>
@@ -282,9 +283,11 @@ export function renderDetailedTable(
             : formatCurrency(
                   (e.analysis?.overtimeAmountBase || 0) + (e.analysis?.tier1Premium || 0)
               );
-        const t2Cell = isProfitMode
-            ? buildProfitStacks(amountsByType, (amount) => amount.tier2Premium || 0, 'right')
-            : formatCurrency(e.analysis?.tier2Premium || 0);
+        const t2Cell = showTier2
+            ? (isProfitMode
+                ? buildProfitStacks(amountsByType, (amount) => amount.tier2Premium || 0, 'right')
+                : formatCurrency(e.analysis?.tier2Premium || 0))
+            : '';
         const totalCell = isProfitMode
             ? buildProfitStacks(
                   amountsByType,
@@ -305,7 +308,7 @@ export function renderDetailedTable(
         <td class="text-right amount-cell">${rateCell}</td>
         <td class="text-right amount-cell">${regularCell}</td>
         <td class="text-right amount-cell">${otCell}</td>
-        <td class="text-right amount-cell">${t2Cell}</td>
+        ${showTier2 ? `<td class="text-right amount-cell">${t2Cell}</td>` : ''}
         <td class="text-right highlight amount-cell">${totalCell}</td>
         <td class="text-right"><div class="tags-cell">${tags.join(' ') || '—'}</div></td>
     </tr>`;
