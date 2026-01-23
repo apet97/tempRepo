@@ -63,6 +63,11 @@ test.describe('Configuration Panel', () => {
     });
 
     test('tier 2 threshold input works', async ({ page }) => {
+        // Enable Tiered OT to show tier 2 inputs
+        const enableTieredOTToggle = page.locator('#enableTieredOT');
+        await enableTieredOTToggle.check();
+        await expect(enableTieredOTToggle).toBeChecked();
+
         const tier2ThresholdInput = page.locator('#configTier2Threshold');
 
         // Should have default value of 0
@@ -71,6 +76,23 @@ test.describe('Configuration Panel', () => {
         // Change value
         await tier2ThresholdInput.fill('4');
         await expect(tier2ThresholdInput).toHaveValue('4');
+    });
+
+    test('tier 2 config is hidden by default and shown when enabled', async ({ page }) => {
+        const enableTieredOTToggle = page.locator('#enableTieredOT');
+        const tier2Config = page.locator('.tier2-config').first();
+
+        // Should be unchecked by default
+        await expect(enableTieredOTToggle).not.toBeChecked();
+
+        // Tier 2 config should be hidden
+        await expect(tier2Config).toBeHidden();
+
+        // Enable tiered OT
+        await enableTieredOTToggle.check();
+
+        // Tier 2 config should now be visible
+        await expect(tier2Config).toBeVisible();
     });
 
     test('amount display selector works', async ({ page }) => {
