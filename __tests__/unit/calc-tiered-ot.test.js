@@ -20,6 +20,7 @@ describe('Calculation Module - Tiered Overtime', () => {
         applyHolidays: false,
         applyTimeOff: false,
         showBillableBreakdown: true,
+        enableTieredOT: true,
         overtimeBasis: 'daily'
       },
       calcParams: {

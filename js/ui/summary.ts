@@ -106,6 +106,7 @@ export function renderSummaryStrip(users: UserAnalysis[]): void {
     );
 
     const showBillable = store.config.showBillableBreakdown;
+    const showTier2 = store.config.enableTieredOT && showBillable;
     const amountLabels = getAmountLabels();
     const amountDisplay = getAmountDisplayMode();
     const isProfitMode = amountDisplay === 'profit';
@@ -152,7 +153,7 @@ export function renderSummaryStrip(users: UserAnalysis[]): void {
           'left'
       )}</span></div>
       ${
-          showBillable
+          showTier2
               ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${renderAmountStack(
                     [
                         { label: 'Amt', value: totals.otPremiumTier2Earned },
@@ -175,7 +176,7 @@ export function renderSummaryStrip(users: UserAnalysis[]): void {
         : `
       <div class="summary-item highlight"><span class="summary-label">${amountLabels.total}</span><span class="summary-value">${formatCurrency(totals.amount)}</span></div>
       <div class="summary-item"><span class="summary-label">OT Premium</span><span class="summary-value">${formatCurrency(totals.otPremium)}</span></div>
-      ${showBillable ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>` : ''}
+      ${showTier2 ? `<div class="summary-item"><span class="summary-label">Tier 2 Premium</span><span class="summary-value">${formatCurrency(totals.otPremiumTier2)}</span></div>` : ''}
       <div class="summary-item"><span class="summary-label">${amountLabels.base}</span><span class="summary-value">${formatCurrency(totals.amountBase)}</span></div>
     `;
 

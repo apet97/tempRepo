@@ -98,10 +98,13 @@
               class="config-input-sm" aria-label="Overtime Multiplier"> x
           </label>
           <label class="config-item">
+            <input type="checkbox" id="enableTieredOT"> Tiered OT
+          </label>
+          <label class="config-item tier2-config">
             Tier 2 starts after <input type="number" id="configTier2Threshold" value="0" min="0" max="999" step="1"
               class="config-input-sm" aria-label="Tier 2 Threshold in OT Hours"> OT hrs
           </label>
-          <label class="config-item">
+          <label class="config-item tier2-config">
             Tier 2 multiplier <input type="number" id="configTier2Multiplier" value="2.0" min="1" max="5" step="0.1"
               class="config-input-sm" aria-label="Tier 2 Overtime Multiplier"> x
           </label>

@@ -792,6 +792,28 @@ export function bindConfigEvents(): void {
         );
     }
 
+    // Enable Tiered OT Toggle
+    const enableTieredOTEl = document.getElementById('enableTieredOT') as HTMLInputElement | null;
+    const tier2ConfigEls = document.querySelectorAll('.tier2-config');
+
+    function updateTier2Visibility(enabled: boolean) {
+        tier2ConfigEls.forEach(el => {
+            (el as HTMLElement).style.display = enabled ? '' : 'none';
+        });
+    }
+
+    if (enableTieredOTEl) {
+        enableTieredOTEl.checked = store.config.enableTieredOT;
+        updateTier2Visibility(store.config.enableTieredOT);
+
+        enableTieredOTEl.addEventListener('change', () => {
+            store.config.enableTieredOT = enableTieredOTEl.checked;
+            store.saveConfig();
+            updateTier2Visibility(enableTieredOTEl.checked);
+            if (store.rawEntries) runCalculation();
+        });
+    }
+
     // Tier 2 Threshold (OT hours before switching to tier 2 multiplier)
     // When tier2ThresholdHours = 40, first 40 OT hours use overtimeMultiplier,
     // additional hours use tier2Multiplier (double overtime)

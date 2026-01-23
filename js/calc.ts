@@ -1752,7 +1752,7 @@ export function calculateAnalysis(
                 // determine how many OT hours are tier1 vs tier2.
                 // IMPORTANT: Tier2 accumulator is per-USER (not per-day).
 
-                if (overtimeHours > 0 && tier2Multiplier > multiplier) {
+                if (overtimeHours > 0 && calcStore.config.enableTieredOT && tier2Multiplier > multiplier) {
                     // User's cumulative OT before this entry
                     const otBeforeEntry = userOTAccumulator;
 

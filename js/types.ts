@@ -364,6 +364,8 @@ export interface OvertimeConfig {
     showBillableBreakdown: boolean;
     /** Show decimal time format */
     showDecimalTime: boolean;
+    /** Enable tiered overtime (tier 2) - default false */
+    enableTieredOT: boolean;
     /** Amount display mode */
     amountDisplay: 'earned' | 'cost' | 'profit';
     /** Overtime calculation basis */

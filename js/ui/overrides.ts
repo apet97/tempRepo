@@ -110,7 +110,7 @@ export function renderOverridesPage(): void {
                            step="0.1" min="1" max="5"
                            aria-label="Overtime multiplier for ${escapeHtml(user.name)}">
                 </div>
-                <div class="override-field">
+                ${store.config.enableTieredOT ? `<div class="override-field">
                     <label>Tier2 Threshold (hrs)</label>
                     <input type="number"
                            class="override-input ${override.tier2Threshold ? '' : 'inherited'}"
@@ -131,7 +131,7 @@ export function renderOverridesPage(): void {
                            value="${override.tier2Multiplier || ''}"
                            step="0.1" min="1" max="5"
                            aria-label="Tier2 Multiplier for ${escapeHtml(user.name)}">
-                </div>
+                </div>` : ''}
             </div>
             ${mode === 'perDay' ? `<div class="override-expanded-section">${renderPerDayInputs(user.id, override.perDayOverrides || {}, profileCapacity, placeholder)}</div>` : ''}
             ${mode === 'weekly' ? `<div class="override-expanded-section">${renderWeeklyInputs(user.id, override.weeklyOverrides || {}, profileCapacity, placeholder)}</div>` : ''}
@@ -185,7 +185,7 @@ function renderPerDayInputs(
     }
 
     html += '<table class="per-day-table">';
-    html += '<thead><tr><th>Date</th><th>Day</th><th>Capacity</th><th>Multiplier</th><th>Tier2 Threshold</th><th>Tier2 Mult</th></tr></thead>';
+    html += `<thead><tr><th>Date</th><th>Day</th><th>Capacity</th><th>Multiplier</th>${store.config.enableTieredOT ? '<th>Tier2 Threshold</th><th>Tier2 Mult</th>' : ''}</tr></thead>`;
     html += '<tbody>';
 
     dates.forEach((dateKey) => {
@@ -215,7 +215,7 @@ function renderPerDayInputs(
                        placeholder="${store.calcParams.overtimeMultiplier}"
                        step="0.1" min="1" max="5" />
             </td>
-            <td>
+            ${store.config.enableTieredOT ? `<td>
                 <input type="number"
                        class="per-day-input"
                        data-userid="${userId}"
@@ -234,7 +234,7 @@ function renderPerDayInputs(
                        value="${dayOverride.tier2Multiplier || ''}"
                        placeholder="${store.calcParams.tier2Multiplier || 2.0}"
                        step="0.1" min="1" max="5" />
-            </td>
+            </td>` : ''}
         </tr>`;
     });
 
@@ -273,7 +273,7 @@ function renderWeeklyInputs(
     }
 
     html += '<table class="weekly-table">';
-    html += '<thead><tr><th>Weekday</th><th>Capacity (hrs)</th><th>Multiplier (x)</th><th>Tier2 Threshold</th><th>Tier2 Mult</th></tr></thead>';
+    html += `<thead><tr><th>Weekday</th><th>Capacity (hrs)</th><th>Multiplier (x)</th>${store.config.enableTieredOT ? '<th>Tier2 Threshold</th><th>Tier2 Mult</th>' : ''}</tr></thead>`;
     html += '<tbody>';
 
     weekdays.forEach((weekday) => {
@@ -300,7 +300,7 @@ function renderWeeklyInputs(
                    placeholder="${store.calcParams.overtimeMultiplier}"
                    step="0.1" min="1" max="5" />
         </td>
-        <td>
+        ${store.config.enableTieredOT ? `<td>
             <input type="number" class="weekly-input"
                    data-userid="${userId}"
                    data-weekday="${weekday}"
@@ -317,7 +317,7 @@ function renderWeeklyInputs(
                    value="${dayOverride.tier2Multiplier || ''}"
                    placeholder="${store.calcParams.tier2Multiplier || 2.0}"
                    step="0.1" min="1" max="5" />
-        </td>
+        </td>` : ''}
     </tr>`;
     });
 

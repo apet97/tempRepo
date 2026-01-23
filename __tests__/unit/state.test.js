@@ -48,6 +48,7 @@ describe('State Module - Store Class', () => {
         applyTimeOff: true,
         showBillableBreakdown: true,
         showDecimalTime: false,
+        enableTieredOT: false,
         amountDisplay: 'earned',
         overtimeBasis: 'daily',
         maxPages: 50
