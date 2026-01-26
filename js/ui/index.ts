@@ -5,7 +5,6 @@
 
 import { store } from '../state.js';
 import type { UICallbacks } from '../types.js';
-
 // Import for internal use
 import { getElements } from './shared.js';
 import { renderDetailedTable } from './detailed.js';
