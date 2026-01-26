@@ -4,6 +4,8 @@
  */
 
 import { store } from '../state.js';
+import { classifyEntryForOvertime } from '../utils.js';
+import type { UserAnalysis, TimeEntry, DayMeta } from '../types.js';
 import {
     formatHoursDisplay,
     formatCurrency,
@@ -11,8 +13,6 @@ import {
     getAmountDisplayMode,
     buildProfitStacks,
 } from './shared.js';
-import { classifyEntryForOvertime } from '../utils.js';
-import type { UserAnalysis, TimeEntry, DayMeta } from '../types.js';
 
 /**
  * Extended entry with day metadata for rendering

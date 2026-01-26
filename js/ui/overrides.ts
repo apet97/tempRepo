@@ -5,8 +5,8 @@
  */
 
 import { store } from '../state.js';
-import { getElements, escapeHtml } from './shared.js';
 import { IsoUtils } from '../utils.js';
+import { getElements, escapeHtml } from './shared.js';
 
 /**
  * Shows the overrides page and hides the main view.

@@ -170,8 +170,6 @@ import '../../js/main.js';
 // ============================================================================
 
 describe('main.js - Initialization', () => {
-  let originalLocation;
-
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -206,11 +204,6 @@ describe('main.js - Initialization', () => {
     // Initialize UI elements
     UI.initializeElements();
 
-    // Reset window.location
-    originalLocation = window.location;
-    delete window.location;
-    window.location = { search: '' };
-
     // Reset store state
     store.token = null;
     store.claims = null;
@@ -221,21 +214,18 @@ describe('main.js - Initialization', () => {
   });
 
   afterEach(() => {
-    window.location = originalLocation;
+    jest.restoreAllMocks();
   });
 
   describe('init() - Token Validation', () => {
     it('should initialize with valid token', async () => {
       const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ3b3Jrc3BhY2VJZCI6IndzXzEyMyIsInVzZXJJZCI6InVzXzQ1NiJ9.signature';
-      window.location.search = `?auth_token=${mockToken}`;
 
       // Verify initial state
       expect(store.token).toBeNull();
 
-      // Manually trigger init logic (since auto-init is disabled in tests)
-      const initModule = async () => {
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get('auth_token');
+      // Manually trigger init logic - directly parse token without window.location dependency
+      const initModule = async (token) => {
         const payload = JSON.parse(atob(token.split('.')[1]));
         store.setToken(token, payload);
 
@@ -243,7 +233,7 @@ describe('main.js - Initialization', () => {
         store.users = await mockApi.fetchUsers(store.claims.workspaceId);
       };
 
-      await initModule();
+      await initModule(mockToken);
 
       // Verify token was set and claims were extracted
       expect(store.token).toBe(mockToken);
@@ -253,21 +243,17 @@ describe('main.js - Initialization', () => {
     });
 
     it('should handle missing token error', async () => {
-      window.location.search = '';
-
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
       // Simulate init with no token
-      const initModule = () => {
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get('auth_token');
+      const initModule = (token) => {
         if (!token) {
           console.error('No auth token');
           UI.renderLoading(false);
         }
       };
 
-      initModule();
+      initModule(null);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('No auth token');
       consoleErrorSpy.mockRestore();

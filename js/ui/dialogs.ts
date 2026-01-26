@@ -4,8 +4,8 @@
  */
 
 import { store } from '../state.js';
-import { getElements, escapeHtml } from './shared.js';
 import type { FriendlyError } from '../types.js';
+import { getElements, escapeHtml } from './shared.js';
 
 /**
  * Toggles the loading state visualization.

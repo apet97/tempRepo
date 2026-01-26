@@ -4,16 +4,6 @@
  */
 
 import { store } from '../state.js';
-import {
-    getElements,
-    formatHoursDisplay,
-    formatCurrency,
-    escapeHtml,
-    getAmountDisplayMode,
-    getAmountLabels,
-    renderAmountStack,
-    getSwatchColor,
-} from './shared.js';
 import type { UserAnalysis, SummaryRow } from '../types.js';
 
 // Import from utils for these specific functions
@@ -24,6 +14,16 @@ import {
     getWeekKey,
     formatWeekKey,
 } from '../utils.js';
+import {
+    getElements,
+    formatHoursDisplay,
+    formatCurrency,
+    escapeHtml,
+    getAmountDisplayMode,
+    getAmountLabels,
+    renderAmountStack,
+    getSwatchColor,
+} from './shared.js';
 
 /**
  * Renders the high-level summary strip (Totals).

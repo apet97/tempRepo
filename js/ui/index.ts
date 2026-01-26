@@ -6,6 +6,11 @@
 import { store } from '../state.js';
 import type { UICallbacks } from '../types.js';
 
+// Import for internal use
+import { getElements } from './shared.js';
+import { renderDetailedTable } from './detailed.js';
+import { showOverridesPage, hideOverridesPage, renderOverridesPage } from './overrides.js';
+
 // Re-export all public functions
 export { initializeElements, getElements } from './shared.js';
 export { renderSummaryStrip, renderSummaryExpandToggle, renderSummaryTable } from './summary.js';
@@ -13,11 +18,6 @@ export { renderDetailedTable } from './detailed.js';
 export { showOverridesPage, hideOverridesPage, renderOverridesPage } from './overrides.js';
 export { renderLoading, renderApiStatus, showError, hideError, showClearDataConfirmation, showLargeDateRangeWarning, updateLoadingProgress, clearLoadingProgress, renderThrottleStatus, showCachePrompt } from './dialogs.js';
 export type { CacheAction } from './dialogs.js';
-
-// Import for internal use
-import { getElements } from './shared.js';
-import { renderDetailedTable } from './detailed.js';
-import { showOverridesPage, hideOverridesPage, renderOverridesPage } from './overrides.js';
 
 /**
  * Binds global UI events (scrolling, inputs, buttons).

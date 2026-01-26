@@ -1,13 +1,15 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import security from 'eslint-plugin-security';
+import importPlugin from 'eslint-plugin-import';
 
 export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
         plugins: {
-            security: security
+            security: security,
+            import: importPlugin
         },
         languageOptions: {
             ecmaVersion: 2020,
@@ -72,7 +74,18 @@ export default tseslint.config(
             'eqeqeq': ['error', 'always', { null: 'ignore' }],
             'curly': ['error', 'multi-line'],
             'no-throw-literal': 'error',
-            'prefer-promise-reject-errors': 'error'
+            'prefer-promise-reject-errors': 'error',
+
+            // Import rules
+            'import/no-duplicates': 'error',
+            'import/no-self-import': 'error',
+            'import/no-cycle': 'warn',
+            'import/no-useless-path-segments': 'error',
+            'import/first': 'error',
+            'import/order': ['warn', {
+                'groups': ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+                'newlines-between': 'never'
+            }]
         }
     },
     {
