@@ -45,7 +45,3 @@ All Clockify requests go through `api.fetchWithAuth`, which attaches `X-Addon-To
 4. `calculateAnalysis()` groups by user/day, determines effective capacity (overrides → profile → defaults), splits work vs OT via tail attribution, and calculates money columns including tier2 premiums.
 5. UI renderers consume `store.analysisResults` to display the summary strip, grouped tables, and paginated detailed entries; export and status indicators rely on the same analysis object.
 
-## When to read this guide
-- Onboarding new team members (see the modules/flow section).
-- Diagnosing data issues (refer to the API catalog and storage schema to understand where values originate).
-- Preparing documentation updates (link this guide along with `docs/spec.md` and `docs/prd.md`).
