@@ -195,7 +195,7 @@ describe('Error Reporting Module', () => {
       expect(mockSentry.init.mock.calls.length).toBe(callCount); // No new calls
     });
 
-    it('should set workspace tag when claims are available', async () => {
+    it('should set workspace tag when claims are available (hashed for privacy)', async () => {
       store.claims = { workspaceId: 'ws_123' };
 
       await errorReporting.initErrorReporting({
@@ -204,7 +204,9 @@ describe('Error Reporting Module', () => {
         release: '1.0.0'
       });
 
-      expect(mockSentry.setTag).toHaveBeenCalledWith('workspace_id', 'ws_123');
+      // Workspace ID should be hashed using FNV-1a for privacy
+      // 'ws_123' hashes to 'c9937290'
+      expect(mockSentry.setTag).toHaveBeenCalledWith('workspace_id', 'c9937290');
     });
   });
 

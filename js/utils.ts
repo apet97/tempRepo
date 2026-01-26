@@ -325,6 +325,25 @@ export function createUserFriendlyError(error: Error | string, type?: ErrorType)
 // ==================== GENERIC HELPERS ====================
 
 /**
+ * Decodes a Base64URL-encoded string to a regular string.
+ * Base64URL uses `-` instead of `+` and `_` instead of `/`, and may omit padding.
+ * This is commonly used in JWTs.
+ *
+ * @param str - The Base64URL-encoded string.
+ * @returns The decoded string.
+ */
+export function base64urlDecode(str: string): string {
+    // Replace Base64URL characters with standard Base64 characters
+    let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if missing
+    const padding = base64.length % 4;
+    if (padding) {
+        base64 += '='.repeat(4 - padding);
+    }
+    return atob(base64);
+}
+
+/**
  * Rounds a number to a specific number of decimal places.
  * Crucial for avoiding floating point drift in currency and hour calculations.
  *

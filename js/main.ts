@@ -151,7 +151,7 @@ import { Api } from './api.js';
 import { calculateAnalysis } from './calc.js';
 import { downloadCsv } from './export.js';
 import * as UI from './ui/index.js';
-import { IsoUtils, debounce, parseIsoDuration, getDateRangeDays } from './utils.js';
+import { IsoUtils, debounce, parseIsoDuration, getDateRangeDays, base64urlDecode } from './utils.js';
 import { initErrorReporting, reportError } from './error-reporting.js';
 import { SENTRY_DSN } from './constants.js';
 import type { DateRange, TimeEntry, TokenClaims } from './types.js';
@@ -233,7 +233,7 @@ export function init(): void {
     initErrorReporting({
         dsn: SENTRY_DSN,
         environment: typeof process !== 'undefined' && process.env.NODE_ENV === 'production' ? 'production' : 'development',
-        release: `otplus@2.0.0`,
+        release: `otplus@${typeof process !== 'undefined' && process.env.VERSION ? process.env.VERSION : '0.0.0'}`,
         sampleRate: 1.0,
     }).catch(() => {
         // Silent fail - error reporting is optional; don't break app if Sentry is down
@@ -267,9 +267,10 @@ export function init(): void {
     }
 
     try {
-        // Decode JWT: split on '.' to get payload (second part), then base64 decode
+        // Decode JWT: split on '.' to get payload (second part), then base64url decode
         // Format: header.payload.signature, we need payload
-        const payload = JSON.parse(atob(token.split('.')[1])) as TokenClaims;
+        // JWTs use Base64URL encoding which may contain `-` and `_` characters
+        const payload = JSON.parse(base64urlDecode(token.split('.')[1])) as TokenClaims;
 
         // Validate that payload contains required claims
         if (!payload || !payload.workspaceId) {

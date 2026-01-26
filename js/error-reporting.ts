@@ -234,9 +234,10 @@ export async function initErrorReporting(config: SentryConfig): Promise<boolean>
             },
         });
 
-        // Set workspace context if available
-        if (store.claims?.workspaceId) {
-            Sentry.setTag('workspace_id', store.claims.workspaceId);
+        // Set workspace context if available (hashed for privacy)
+        const hashedWsId = getHashedWorkspaceId();
+        if (hashedWsId) {
+            Sentry.setTag('workspace_id', hashedWsId);
         }
 
         sentryInitialized = true;
@@ -283,9 +284,10 @@ export function reportError(error: Error | string, context?: ErrorContext): void
                 scope.setTag('operation', context.operation);
             }
 
-            // Set workspace context
-            if (store.claims?.workspaceId) {
-                scope.setTag('workspace_id', store.claims.workspaceId);
+            // Set workspace context (hashed for privacy)
+            const hashedWsId = getHashedWorkspaceId();
+            if (hashedWsId) {
+                scope.setTag('workspace_id', hashedWsId);
             }
 
             // Set extra context (scrubbed)
@@ -334,8 +336,10 @@ export function reportMessage(
             if (context?.operation) {
                 scope.setTag('operation', context.operation);
             }
-            if (store.claims?.workspaceId) {
-                scope.setTag('workspace_id', store.claims.workspaceId);
+            // Set workspace context (hashed for privacy)
+            const hashedWsId = getHashedWorkspaceId();
+            if (hashedWsId) {
+                scope.setTag('workspace_id', hashedWsId);
             }
             if (context?.metadata) {
                 scope.setExtras(scrubObject(context.metadata) as Record<string, unknown>);
@@ -395,15 +399,26 @@ export function addBreadcrumb(
 // ==================== HELPERS ====================
 
 /**
- * Simple hash function for user IDs (FNV-1a)
+ * Simple hash function for strings (FNV-1a)
+ * Used to hash user IDs and workspace IDs for privacy.
  */
-function hashString(str: string): string {
+export function hashString(str: string): string {
     let hash = 2166136261;
     for (let i = 0; i < str.length; i++) {
         hash ^= str.charCodeAt(i);
         hash = Math.imul(hash, 16777619);
     }
     return (hash >>> 0).toString(16);
+}
+
+/**
+ * Gets the hashed workspace ID for privacy-safe Sentry tagging.
+ * Returns null if no workspace ID is available.
+ */
+function getHashedWorkspaceId(): string | null {
+    const workspaceId = store.claims?.workspaceId;
+    if (!workspaceId) return null;
+    return hashString(workspaceId);
 }
 
 /**

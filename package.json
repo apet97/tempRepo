@@ -17,7 +17,7 @@
     "build:dev": "node build.js",
     "build:prod": "node build.js --production",
     "build:watch": "node build.js --watch",
-    "clean": "rm -rf dist coverage",
+    "clean": "node scripts/clean.js",
     "release": "node scripts/release.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

@@ -90,7 +90,8 @@ async function build() {
             'process.env.NODE_ENV': JSON.stringify(isProduction ? 'production' : 'development'),
         },
         banner: {
-            js: `// OTPLUS v${VERSION} - Built ${new Date().toISOString()}\n`,
+            // Use SOURCE_DATE_EPOCH for reproducible builds if set, otherwise current time
+            js: `// OTPLUS v${VERSION} - Built ${process.env.SOURCE_DATE_EPOCH ? new Date(parseInt(process.env.SOURCE_DATE_EPOCH, 10) * 1000).toISOString() : new Date().toISOString()}\n`,
         },
         logLevel: 'info',
     };

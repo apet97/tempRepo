@@ -81,6 +81,13 @@ describe('Main Logic Fixes - Holiday Expansion', () => {
                 const startDate = new Date(start);
                 const endDate = new Date(end);
                 return Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+            },
+            base64urlDecode: (str) => {
+                // Mock base64url decoding
+                let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                const padding = base64.length % 4;
+                if (padding) base64 += '='.repeat(4 - padding);
+                return atob(base64);
             }
         }));
 

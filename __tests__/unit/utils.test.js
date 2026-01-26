@@ -11,7 +11,8 @@ import {
   formatCurrency,
   formatHours,
   IsoUtils,
-  classifyEntryForOvertime
+  classifyEntryForOvertime,
+  base64urlDecode
 } from '../../js/utils.js';
 import { standardAfterEach } from '../helpers/setup.js';
 
@@ -1906,5 +1907,53 @@ describe('IsoUtils Mutation Tests', () => {
     it('should return false for empty string', () => {
       expect(IsoUtils.isWeekend('')).toBe(false);
     });
+  });
+});
+
+// ============================================================================
+// BASE64URL DECODING
+// ============================================================================
+
+describe('base64urlDecode', () => {
+  it('should decode standard Base64URL string', () => {
+    // "Hello" encoded as base64url
+    const encoded = 'SGVsbG8';
+    expect(base64urlDecode(encoded)).toBe('Hello');
+  });
+
+  it('should handle Base64URL with - and _ characters', () => {
+    // Base64URL uses - instead of + and _ instead of /
+    // "a+b/c" in standard Base64 is YStiL2M=
+    // In Base64URL: YStiL2M becomes YStiL2M (no change needed for this example)
+    // Let's use a known value: "<<>>" in Base64 is PDw+Pg== which in Base64URL is PDw-Pg
+    const encoded = 'PDw-Pg';
+    expect(base64urlDecode(encoded)).toBe('<<>>');
+  });
+
+  it('should add missing padding', () => {
+    // "a" encoded as base64 is "YQ==" but base64url omits padding: "YQ"
+    expect(base64urlDecode('YQ')).toBe('a');
+    // "ab" encoded is "YWI=" but base64url omits padding: "YWI"
+    expect(base64urlDecode('YWI')).toBe('ab');
+  });
+
+  it('should handle strings that need no padding', () => {
+    // "abc" encoded as base64url is "YWJj" (length divisible by 4)
+    expect(base64urlDecode('YWJj')).toBe('abc');
+  });
+
+  it('should decode a JWT-like payload', () => {
+    // A minimal JWT payload: {"sub":"123"}
+    const payload = 'eyJzdWIiOiIxMjMifQ';
+    const decoded = base64urlDecode(payload);
+    expect(JSON.parse(decoded)).toEqual({ sub: '123' });
+  });
+
+  it('should handle payload with special base64url characters from JWT', () => {
+    // Create a payload that would have + and / in standard base64
+    // This simulates real JWT payloads that might contain these
+    const payload = 'eyJ3b3Jrc3BhY2VJZCI6IndzXzEyMyIsInRoZW1lIjoiREFSSyJ9';
+    const decoded = JSON.parse(base64urlDecode(payload));
+    expect(decoded).toEqual({ workspaceId: 'ws_123', theme: 'DARK' });
   });
 });
