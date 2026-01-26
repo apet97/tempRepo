@@ -2444,4 +2444,210 @@ describe('LocalStorage Quota Handling', () => {
       expect(localStorage.getItem(STORAGE_KEYS.REPORT_CACHE)).toBeNull();
     });
   });
+
+  describe('Legacy Override Migration (lines 531-537)', () => {
+    it('should add mode property to legacy overrides without mode', () => {
+      // Set up claims for workspace scoping
+      store.claims = { workspaceId: 'ws_legacy', backendUrl: 'https://api.clockify.me/api' };
+
+      // Store legacy overrides without mode property
+      const legacyOverrides = {
+        user1: { capacity: 6, multiplier: 1.5 },
+        user2: { capacity: 7 }
+      };
+      const key = `${STORAGE_KEYS.OVERRIDES_PREFIX}ws_legacy`;
+      localStorage.setItem(key, JSON.stringify(legacyOverrides));
+
+      // Trigger _loadOverrides by calling a method that uses it
+      store._loadOverrides();
+
+      // After migration, overrides should have mode = 'global'
+      expect(store.overrides.user1.mode).toBe('global');
+      expect(store.overrides.user2.mode).toBe('global');
+      // Original properties should be preserved
+      expect(store.overrides.user1.capacity).toBe(6);
+      expect(store.overrides.user1.multiplier).toBe(1.5);
+    });
+
+    it('should not overwrite existing mode property', () => {
+      store.claims = { workspaceId: 'ws_mode', backendUrl: 'https://api.clockify.me/api' };
+
+      // Override with existing mode property
+      const overridesWithMode = {
+        user1: { capacity: 6, mode: 'perDay' }
+      };
+      const key = `${STORAGE_KEYS.OVERRIDES_PREFIX}ws_mode`;
+      localStorage.setItem(key, JSON.stringify(overridesWithMode));
+
+      store._loadOverrides();
+
+      // Should preserve existing mode
+      expect(store.overrides.user1.mode).toBe('perDay');
+    });
+  });
+
+  describe('Per-Day Override Cleanup (line 752)', () => {
+    it('should remove empty per-day override entries after field deletion', () => {
+      store.claims = { workspaceId: 'ws_cleanup', backendUrl: 'https://api.clockify.me/api' };
+      store.overrides = {
+        user1: {
+          mode: 'perDay',
+          perDayOverrides: {
+            '2025-01-15': { capacity: 8 }
+          }
+        }
+      };
+
+      // Delete the only field in a per-day entry
+      const result = store.updatePerDayOverride('user1', '2025-01-15', 'capacity', null);
+
+      expect(result).toBe(true);
+      // The date key should be removed since it's now empty
+      expect(store.overrides.user1.perDayOverrides['2025-01-15']).toBeUndefined();
+    });
+
+    it('should keep per-day entry if other fields remain', () => {
+      store.claims = { workspaceId: 'ws_keep', backendUrl: 'https://api.clockify.me/api' };
+      store.overrides = {
+        user1: {
+          mode: 'perDay',
+          perDayOverrides: {
+            '2025-01-15': { capacity: 8, multiplier: 1.5 }
+          }
+        }
+      };
+
+      // Delete one field, but another remains
+      store.updatePerDayOverride('user1', '2025-01-15', 'capacity', null);
+
+      // The date key should still exist since multiplier remains
+      expect(store.overrides.user1.perDayOverrides['2025-01-15']).toBeDefined();
+      expect(store.overrides.user1.perDayOverrides['2025-01-15'].multiplier).toBe(1.5);
+    });
+  });
+
+  describe('copyGlobalToPerDay Initialization (line 818)', () => {
+    it('should initialize perDayOverrides for each date when empty', () => {
+      store.claims = { workspaceId: 'ws_copy', backendUrl: 'https://api.clockify.me/api' };
+      store.overrides = {
+        user1: {
+          mode: 'perDay', // Must be in perDay mode for copyGlobalToPerDay
+          capacity: 7,
+          multiplier: 1.75
+        }
+      };
+
+      const dates = ['2025-01-15', '2025-01-16', '2025-01-17'];
+      const result = store.copyGlobalToPerDay('user1', dates);
+
+      expect(result).toBe(true);
+      expect(store.overrides.user1.mode).toBe('perDay');
+      // Each date should have the global values copied
+      dates.forEach(date => {
+        expect(store.overrides.user1.perDayOverrides[date]).toBeDefined();
+        expect(store.overrides.user1.perDayOverrides[date].capacity).toBe(7);
+        expect(store.overrides.user1.perDayOverrides[date].multiplier).toBe(1.75);
+      });
+    });
+
+    it('should initialize empty perDayOverrides object if missing', () => {
+      store.claims = { workspaceId: 'ws_init', backendUrl: 'https://api.clockify.me/api' };
+      store.overrides = {
+        user1: {
+          mode: 'perDay', // Must be in perDay mode
+          capacity: 6
+        }
+      };
+
+      // perDayOverrides doesn't exist yet
+      expect(store.overrides.user1.perDayOverrides).toBeUndefined();
+
+      store.copyGlobalToPerDay('user1', ['2025-01-15']);
+
+      // Should create perDayOverrides and populate it
+      expect(store.overrides.user1.perDayOverrides).toBeDefined();
+      expect(store.overrides.user1.perDayOverrides['2025-01-15'].capacity).toBe(6);
+    });
+  });
+
+  describe('copyGlobalToWeekly Initialization (line 911)', () => {
+    it('should initialize weeklyOverrides for each weekday when empty', () => {
+      store.claims = { workspaceId: 'ws_weekly', backendUrl: 'https://api.clockify.me/api' };
+      store.overrides = {
+        user1: {
+          mode: 'weekly', // Must be in weekly mode for copyGlobalToWeekly
+          capacity: 8,
+          multiplier: 2.0,
+          tier2Threshold: 10,
+          tier2Multiplier: 2.5
+        }
+      };
+
+      const result = store.copyGlobalToWeekly('user1');
+
+      expect(result).toBe(true);
+      expect(store.overrides.user1.mode).toBe('weekly');
+
+      // All weekdays should have the global values
+      const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+      weekdays.forEach(day => {
+        expect(store.overrides.user1.weeklyOverrides[day]).toBeDefined();
+        expect(store.overrides.user1.weeklyOverrides[day].capacity).toBe(8);
+        expect(store.overrides.user1.weeklyOverrides[day].multiplier).toBe(2.0);
+        expect(store.overrides.user1.weeklyOverrides[day].tier2Threshold).toBe(10);
+        expect(store.overrides.user1.weeklyOverrides[day].tier2Multiplier).toBe(2.5);
+      });
+    });
+
+    it('should initialize empty weeklyOverrides object if missing', () => {
+      store.claims = { workspaceId: 'ws_winit', backendUrl: 'https://api.clockify.me/api' };
+      store.overrides = {
+        user1: {
+          mode: 'weekly', // Must be in weekly mode
+          capacity: 6
+        }
+      };
+
+      expect(store.overrides.user1.weeklyOverrides).toBeUndefined();
+
+      store.copyGlobalToWeekly('user1');
+
+      expect(store.overrides.user1.weeklyOverrides).toBeDefined();
+      expect(store.overrides.user1.weeklyOverrides.MONDAY.capacity).toBe(6);
+    });
+  });
+
+  describe('clearAllData Multi-Workspace Cleanup (lines 1211-1219)', () => {
+    it('should remove all workspace-scoped override keys from localStorage', () => {
+      // Set up claims for current workspace
+      store.claims = { workspaceId: 'ws_current', backendUrl: 'https://api.clockify.me/api' };
+
+      // Simulate multiple workspace override keys in localStorage
+      localStorage.setItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_1`, JSON.stringify({ user1: { capacity: 6 } }));
+      localStorage.setItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_2`, JSON.stringify({ user2: { capacity: 7 } }));
+      localStorage.setItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_current`, JSON.stringify({ user3: { capacity: 8 } }));
+      localStorage.setItem('other_key', 'should_remain');
+
+      // Verify keys exist before clear
+      expect(localStorage.getItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_1`)).not.toBeNull();
+      expect(localStorage.getItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_2`)).not.toBeNull();
+
+      store.clearAllData();
+
+      // All override keys should be removed
+      expect(localStorage.getItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_1`)).toBeNull();
+      expect(localStorage.getItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_2`)).toBeNull();
+      expect(localStorage.getItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws_current`)).toBeNull();
+      // Other keys should remain
+      expect(localStorage.getItem('other_key')).toBe('should_remain');
+    });
+
+    it('should handle empty localStorage gracefully', () => {
+      store.claims = { workspaceId: 'ws_empty', backendUrl: 'https://api.clockify.me/api' };
+      localStorage.clear();
+
+      // Should not throw
+      expect(() => store.clearAllData()).not.toThrow();
+    });
+  });
 });

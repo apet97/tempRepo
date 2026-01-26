@@ -6319,4 +6319,388 @@ describe('calc.js - Edge Cases & Full Coverage', () => {
       expect(userResult.totals.total).toBe(8);
     });
   });
+
+  // ============================================================================
+  // Weekly mode NaN checks (lines 687, 764, 831)
+  // ============================================================================
+  describe('Weekly mode NaN checks for branch coverage', () => {
+    test('should use weekly multiplier override when valid (line 687)', () => {
+      // Create an entry on a Monday with overtime
+      const entry = createEntry({
+        start: '2024-01-15T09:00:00Z', // Monday
+        end: '2024-01-15T19:00:00Z',
+        duration: 'PT10H',
+        hourlyRate: 5000
+      });
+
+      const store = createMinimalStore({
+        overrides: {
+          user1: {
+            mode: 'weekly',
+            weeklyOverrides: {
+              MONDAY: { multiplier: 1.75 }
+            }
+          }
+        }
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      const dayData = result[0].days.get('2024-01-15');
+      // 10h worked, 8h capacity = 2h OT
+      expect(dayData.entries[0].analysis.overtime).toBe(2);
+      // Verify multiplier is applied: Base rate: $50/hr
+      // Regular: 8h * $50 = $400
+      // OT: 2h * $50 * 1.75 = $175
+      // Total: $575
+      expect(dayData.entries[0].analysis.amounts.earned.totalAmountWithOT).toBeCloseTo(575, 1);
+    });
+
+    test('should fall back to global multiplier when weekly override is NaN (line 687)', () => {
+      // Test the NaN fallback branch
+      const entry = createEntry({
+        start: '2024-01-15T09:00:00Z', // Monday
+        end: '2024-01-15T19:00:00Z',
+        duration: 'PT10H',
+        hourlyRate: 5000
+      });
+
+      const store = createMinimalStore({
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5, // Will be used when weekly override is invalid
+          tier2ThresholdHours: 0,
+          tier2Multiplier: 2.0
+        },
+        overrides: {
+          user1: {
+            mode: 'weekly',
+            weeklyOverrides: {
+              MONDAY: { multiplier: 'invalid' } // NaN when parsed
+            }
+          }
+        }
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      const dayData = result[0].days.get('2024-01-15');
+      // Should fall back to global multiplier of 1.5
+      // Regular: 8h * $50 = $400
+      // OT: 2h * $50 * 1.5 = $150
+      // Total: $550
+      expect(dayData.entries[0].analysis.amounts.earned.totalAmountWithOT).toBeCloseTo(550, 1);
+    });
+
+    test('should use weekly tier2Threshold override when valid (line 764)', () => {
+      // Create entries that exceed tier2 threshold
+      const entries = [
+        createEntry({
+          id: 'e1',
+          start: '2024-01-15T09:00:00Z', // Monday
+          end: '2024-01-15T21:00:00Z', // 12h = 4h OT
+          duration: 'PT12H',
+          hourlyRate: 5000
+        }),
+        createEntry({
+          id: 'e2',
+          start: '2024-01-16T09:00:00Z', // Tuesday
+          end: '2024-01-16T21:00:00Z',
+          duration: 'PT12H',
+          hourlyRate: 5000
+        })
+      ];
+
+      const store = createMinimalStore({
+        config: {
+          enableTieredOT: true
+        },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5,
+          tier2ThresholdHours: 10, // Default threshold
+          tier2Multiplier: 2.0
+        },
+        overrides: {
+          user1: {
+            mode: 'weekly',
+            weeklyOverrides: {
+              MONDAY: { tier2Threshold: 2 }, // Override: tier2 kicks in after 2h OT on Monday
+              TUESDAY: { tier2Threshold: 2 }
+            }
+          }
+        }
+      });
+
+      const result = calculateAnalysis(entries, store, {
+        start: '2024-01-15',
+        end: '2024-01-16'
+      });
+
+      // User should have accumulated OT across both days
+      expect(result[0].totals.overtime).toBe(8); // 4h Monday + 4h Tuesday
+    });
+
+    test('should fall back to global tier2Threshold when weekly override is NaN (line 764)', () => {
+      const entry = createEntry({
+        start: '2024-01-15T09:00:00Z', // Monday
+        end: '2024-01-15T21:00:00Z', // 12h = 4h OT
+        duration: 'PT12H',
+        hourlyRate: 5000
+      });
+
+      const store = createMinimalStore({
+        config: {
+          enableTieredOT: true
+        },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5,
+          tier2ThresholdHours: 2, // Default: tier2 after 2h OT
+          tier2Multiplier: 2.0
+        },
+        overrides: {
+          user1: {
+            mode: 'weekly',
+            weeklyOverrides: {
+              MONDAY: { tier2Threshold: 'not-a-number' } // NaN when parsed
+            }
+          }
+        }
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // Should use global tier2ThresholdHours (2)
+      // 4h OT: 2h at tier1 (1.5x), 2h at tier2 (2.0x)
+      expect(result[0].totals.overtime).toBe(4);
+    });
+
+    test('should use weekly tier2Multiplier override when valid (line 831)', () => {
+      const entry = createEntry({
+        start: '2024-01-15T09:00:00Z', // Monday
+        end: '2024-01-15T22:00:00Z', // 13h = 5h OT
+        duration: 'PT13H',
+        hourlyRate: 5000
+      });
+
+      const store = createMinimalStore({
+        config: {
+          enableTieredOT: true
+        },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5,
+          tier2ThresholdHours: 2, // Tier2 kicks in after 2h OT
+          tier2Multiplier: 2.0 // Default tier2 multiplier
+        },
+        overrides: {
+          user1: {
+            mode: 'weekly',
+            weeklyOverrides: {
+              MONDAY: { tier2Multiplier: 2.5 } // Override: higher tier2 rate on Monday
+            }
+          }
+        }
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      const dayData = result[0].days.get('2024-01-15');
+      // 13h worked - 8h capacity = 5h OT
+      // First 2h OT at 1.5x, remaining 3h at tier2Multiplier (2.5x)
+      expect(dayData.entries[0].analysis.overtime).toBe(5);
+    });
+
+    test('should fall back to global tier2Multiplier when weekly override is NaN (line 831)', () => {
+      const entry = createEntry({
+        start: '2024-01-15T09:00:00Z', // Monday
+        end: '2024-01-15T21:00:00Z', // 12h = 4h OT (2h tier1, 2h tier2)
+        duration: 'PT12H',
+        hourlyRate: 5000
+      });
+
+      const store = createMinimalStore({
+        config: {
+          enableTieredOT: true
+        },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5,
+          tier2ThresholdHours: 2, // Tier2 after 2h OT
+          tier2Multiplier: 2.0 // Default tier2 multiplier
+        },
+        overrides: {
+          user1: {
+            mode: 'weekly',
+            weeklyOverrides: {
+              MONDAY: { tier2Multiplier: 'invalid-value' } // NaN when parsed
+            }
+          }
+        }
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // Should use global tier2Multiplier (2.0)
+      // 8h regular @ $50 = $400
+      // 2h tier1 @ $50 * 1.5 = $150
+      // 2h tier2 @ $50 * 2.0 = $200
+      // But tier2 premium is additive: 2h * $50 * (2.0 - 1.5) = $50 additional
+      expect(result[0].totals.overtime).toBe(4);
+    });
+
+    // Tests for GLOBAL override NaN fallback (not weekly mode)
+    test('should fall back to calcParams when global tier2Threshold is NaN (line 764)', () => {
+      const entry = createEntry({
+        start: '2024-01-15T09:00:00Z',
+        end: '2024-01-15T21:00:00Z', // 12h = 4h OT
+        duration: 'PT12H',
+        hourlyRate: 5000
+      });
+
+      const store = createMinimalStore({
+        config: {
+          enableTieredOT: true
+        },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5,
+          tier2ThresholdHours: 2, // Will be used when global override is NaN
+          tier2Multiplier: 2.0
+        },
+        overrides: {
+          user1: {
+            mode: 'global', // NOT weekly mode
+            tier2Threshold: 'not-a-number' // NaN - should fall through to calcParams
+          }
+        }
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // Uses calcParams.tier2ThresholdHours (2), so 2h tier1, 2h tier2
+      expect(result[0].totals.overtime).toBe(4);
+    });
+
+    test('should fall back to calcParams when global tier2Multiplier is NaN (line 831)', () => {
+      const entry = createEntry({
+        start: '2024-01-15T09:00:00Z',
+        end: '2024-01-15T21:00:00Z', // 12h = 4h OT
+        duration: 'PT12H',
+        hourlyRate: 5000
+      });
+
+      const store = createMinimalStore({
+        config: {
+          enableTieredOT: true
+        },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5,
+          tier2ThresholdHours: 2,
+          tier2Multiplier: 2.0 // Will be used when global override is NaN
+        },
+        overrides: {
+          user1: {
+            mode: 'global', // NOT weekly mode
+            tier2Multiplier: 'invalid' // NaN - should fall through to calcParams
+          }
+        }
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // Uses calcParams.tier2Multiplier (2.0)
+      expect(result[0].totals.overtime).toBe(4);
+    });
+  });
+
+  // ============================================================================
+  // Map entry safety checks (lines 1496, 1589)
+  // ============================================================================
+  describe('Map entry safety checks for branch coverage', () => {
+    test('should handle entries grouped by user correctly (line 1496)', () => {
+      // Create multiple entries for the same user
+      const entries = [
+        createEntry({
+          id: 'e1',
+          userId: 'user1',
+          start: '2024-01-15T09:00:00Z',
+          end: '2024-01-15T12:00:00Z',
+          duration: 'PT3H'
+        }),
+        createEntry({
+          id: 'e2',
+          userId: 'user1',
+          start: '2024-01-15T13:00:00Z',
+          end: '2024-01-15T17:00:00Z',
+          duration: 'PT4H'
+        })
+      ];
+
+      const store = createMinimalStore();
+      const result = calculateAnalysis(entries, store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // Both entries should be grouped under user1
+      const userResult = result.find(u => u.userId === 'user1');
+      const dayData = userResult.days.get('2024-01-15');
+      expect(dayData.entries.length).toBe(2);
+      // Check total worked hours: 3h + 4h = 7h
+      expect(userResult.totals.total).toBe(7);
+    });
+
+    test('should handle entries grouped by date correctly (line 1589)', () => {
+      // Create entries on different dates
+      const entries = [
+        createEntry({
+          id: 'e1',
+          start: '2024-01-15T09:00:00Z',
+          end: '2024-01-15T17:00:00Z',
+          duration: 'PT8H'
+        }),
+        createEntry({
+          id: 'e2',
+          start: '2024-01-16T09:00:00Z',
+          end: '2024-01-16T17:00:00Z',
+          duration: 'PT8H'
+        })
+      ];
+
+      const store = createMinimalStore();
+      const result = calculateAnalysis(entries, store, {
+        start: '2024-01-15',
+        end: '2024-01-16'
+      });
+
+      const userResult = result.find(u => u.userId === 'user1');
+      // Each date should have its entry
+      expect(userResult.days.get('2024-01-15').entries[0].analysis.regular).toBe(8);
+      expect(userResult.days.get('2024-01-16').entries[0].analysis.regular).toBe(8);
+    });
+  });
 });

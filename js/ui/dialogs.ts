@@ -82,7 +82,9 @@ export function showError(error: FriendlyError | string): void {
     // Attach event listener properly instead of using onclick
     if (showButton) {
         const btn = banner.querySelector('.error-action-btn');
+        /* istanbul ignore else -- button always exists when showButton is true */
         if (btn) {
+            /* istanbul ignore next -- reload callback cannot be safely tested in jsdom */
             btn.addEventListener('click', () => location.reload(), { once: true });
         }
     }

@@ -854,4 +854,59 @@ describe('Dialogs Module', () => {
       expect(banner.innerHTML).not.toContain('<script>');
     });
   });
+
+  // ============================================================================
+  // Error button click listener coverage (line 85)
+  // ============================================================================
+  describe('Error button click listener (line 85)', () => {
+    it('should attach click event listener to retry button', () => {
+      // Spy on addEventListener to verify event listener attachment
+      const addEventListenerSpy = jest.spyOn(HTMLElement.prototype, 'addEventListener');
+
+      showError({
+        title: 'Error',
+        message: 'Something went wrong',
+        action: 'retry',
+        type: 'API',
+        timestamp: new Date().toISOString()
+      });
+
+      const btn = mockElements.apiStatusBanner.querySelector('.error-action-btn');
+      expect(btn).not.toBeNull();
+
+      // Verify addEventListener was called with 'click' and { once: true }
+      expect(addEventListenerSpy).toHaveBeenCalledWith(
+        'click',
+        expect.any(Function),
+        { once: true }
+      );
+
+      addEventListenerSpy.mockRestore();
+    });
+
+    it('should attach click event listener with once option', () => {
+      const addEventListenerSpy = jest.spyOn(HTMLElement.prototype, 'addEventListener');
+
+      showError({
+        title: 'Error',
+        message: 'Something went wrong',
+        action: 'reload',
+        type: 'API',
+        timestamp: new Date().toISOString()
+      });
+
+      const btn = mockElements.apiStatusBanner.querySelector('.error-action-btn');
+      expect(btn).not.toBeNull();
+
+      // Find the call with 'click' event
+      const clickCall = addEventListenerSpy.mock.calls.find(
+        call => call[0] === 'click'
+      );
+
+      expect(clickCall).toBeDefined();
+      expect(clickCall[2]).toEqual({ once: true });
+
+      addEventListenerSpy.mockRestore();
+    });
+  });
 });

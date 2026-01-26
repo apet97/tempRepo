@@ -1365,6 +1365,135 @@ describe('UI Module - Additional Coverage', () => {
       expect(thead.innerHTML).not.toContain('Capacity');
     });
   });
+
+  // ============================================================================
+  // Summary.ts coverage for lines 336, 555-559
+  // ============================================================================
+  describe('Summary table amounts and DOM update (lines 336, 555-559)', () => {
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <div id="resultsContainer" class="hidden">
+          <table id="summaryCard">
+            <thead><tr id="summaryHeaderRow"></tr></thead>
+            <tbody id="summaryTableBody"></tbody>
+          </table>
+        </div>
+        <div id="loadingState" class="hidden"></div>
+        <div id="emptyState" class="hidden"></div>
+        <div id="apiStatusBanner" class="hidden"></div>
+        <div id="summaryStrip"></div>
+      `;
+
+      UI.initializeElements(true);
+
+      store.config.showBillableBreakdown = true;
+      store.config.amountDisplay = 'earned';
+      store.ui.summaryGroupBy = 'user';
+      store.ui.summaryExpanded = false;
+    });
+
+    it('should accumulate amounts from entry amounts breakdown (line 336)', () => {
+      // Create entries with full amounts breakdown
+      const entries = [{
+        id: 'entry1',
+        userId: 'user1',
+        userName: 'Alice',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T19:00:00Z',
+          duration: 'PT10H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }];
+
+      store.users = [{ id: 'user1', name: 'Alice' }];
+      store.profiles.set('user1', {
+        workCapacityHours: 8,
+        workingDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']
+      });
+
+      const analysis = calculateAnalysis(entries, store, {
+        start: '2025-01-15',
+        end: '2025-01-15'
+      });
+
+      // Verify the analysis includes amounts
+      const userResult = analysis.find(u => u.userId === 'user1');
+      const dayData = userResult.days.get('2025-01-15');
+      expect(dayData.entries[0].analysis.amounts).toBeDefined();
+
+      // Render and verify
+      UI.renderSummaryTable(analysis);
+
+      const tableBody = document.getElementById('summaryTableBody');
+      expect(tableBody.innerHTML).toContain('Alice');
+    });
+
+    it('should update summaryTableBody DOM correctly (lines 555-559)', () => {
+      const entries = [{
+        id: 'entry1',
+        userId: 'user1',
+        userName: 'Bob',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T17:00:00Z',
+          duration: 'PT8H'
+        },
+        hourlyRate: { amount: 6000 },
+        billable: true
+      }];
+
+      store.users = [{ id: 'user1', name: 'Bob' }];
+
+      const analysis = calculateAnalysis(entries, store, {
+        start: '2025-01-15',
+        end: '2025-01-15'
+      });
+
+      UI.renderSummaryTable(analysis);
+
+      // Verify DOM was updated
+      const tableBody = document.getElementById('summaryTableBody');
+      expect(tableBody).not.toBeNull();
+      expect(tableBody.children.length).toBeGreaterThan(0);
+
+      // Verify resultsContainer is shown
+      const resultsContainer = document.getElementById('resultsContainer');
+      expect(resultsContainer.classList.contains('hidden')).toBe(false);
+    });
+
+    it('should show resultsContainer after rendering (line 559)', () => {
+      store.users = [{ id: 'user1', name: 'Charlie' }];
+
+      const entries = [{
+        id: 'entry1',
+        userId: 'user1',
+        userName: 'Charlie',
+        timeInterval: {
+          start: '2025-01-15T09:00:00Z',
+          end: '2025-01-15T17:00:00Z',
+          duration: 'PT8H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }];
+
+      const analysis = calculateAnalysis(entries, store, {
+        start: '2025-01-15',
+        end: '2025-01-15'
+      });
+
+      // Ensure hidden initially
+      const resultsContainer = document.getElementById('resultsContainer');
+      expect(resultsContainer.classList.contains('hidden')).toBe(true);
+
+      UI.renderSummaryTable(analysis);
+
+      // Should be visible after render
+      expect(resultsContainer.classList.contains('hidden')).toBe(false);
+    });
+  });
 });
 
 /**

@@ -1493,6 +1493,7 @@ export function calculateAnalysis(
 
         // Add entry to user's array
         const userEntries = entriesByUser.get(userId);
+        /* istanbul ignore else -- TypeScript type narrowing, always truthy after .set() */
         if (userEntries) {
             userEntries.push(entry);
         }
@@ -1586,6 +1587,7 @@ export function calculateAnalysis(
 
             // Add entry to date's array
             const dateEntries = entriesByDate.get(dateKey);
+            /* istanbul ignore else -- TypeScript type narrowing, always truthy after .set() */
             if (dateEntries) {
                 dateEntries.push(entry);
             }

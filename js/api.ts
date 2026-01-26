@@ -319,6 +319,7 @@ function resolveReportsBaseUrl(): string {
                 }
             } catch {
                 // Parse error: fall back to backendUrl if available
+                /* istanbul ignore else -- normalizedBackend is always truthy when backendHost is developer.clockify.me */
                 if (normalizedBackend) return normalizedBackend;
             }
         }

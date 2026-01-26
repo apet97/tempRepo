@@ -100,6 +100,7 @@ export function renderDetailedTable(
     const showTier2 = store.config.enableTieredOT;
     const amountDisplay = getAmountDisplayMode();
     const isProfitMode = amountDisplay === 'profit';
+    /* istanbul ignore else -- detailedCard always exists when this function is called */
     if (detailedCard) {
         detailedCard.classList.toggle('billable-off', !showBillable);
         detailedCard.classList.toggle('amount-profit', isProfitMode);
@@ -340,6 +341,7 @@ export function renderDetailedTable(
     }
 
     container.innerHTML = html;
+    /* istanbul ignore else -- detailedCard always exists when this function is called */
     if (detailedCard) {
         ensureDetailedHeaderObserver(detailedCard);
     }

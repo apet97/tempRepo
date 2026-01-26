@@ -333,6 +333,7 @@ function computeSummaryRows(
                 // Cost: totals are based on the detailed per-entry amount view selected via the dropdown
                 group.amount += entry.analysis?.cost || 0;
                 const amountsByType = entry.analysis?.amounts;
+                /* istanbul ignore else -- amounts are always present after calculation */
                 if (amountsByType) {
                     group.amountEarned += amountsByType.earned?.totalAmountWithOT || 0;
                     group.amountCost += amountsByType.cost?.totalAmountWithOT || 0;
@@ -552,10 +553,12 @@ export function renderSummaryTable(users: UserAnalysis[]): void {
         fragment.appendChild(tr);
     }
 
+    /* istanbul ignore else -- Elements are always initialized when this function is called */
     if (Elements.summaryTableBody) {
         Elements.summaryTableBody.innerHTML = '';
         Elements.summaryTableBody.appendChild(fragment);
     }
+    /* istanbul ignore else -- Elements are always initialized when this function is called */
     if (Elements.resultsContainer) {
         Elements.resultsContainer.classList.remove('hidden');
     }
