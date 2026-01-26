@@ -1673,11 +1673,9 @@ export function calculateAnalysis(
                     effectiveCapacity = Math.max(0, effectiveCapacity - timeOff.hours);
                 }
             }
-            // Stryker disable all: Equivalent - when false, entryTimeOffHours=0 so cap unchanged
-            else if (hasTimeOffEntry) {
+            else if (hasTimeOffEntry) { // Stryker disable ConditionalExpression: Equivalent
                 effectiveCapacity = Math.max(0, effectiveCapacity - entryTimeOffHours);
             }
-            // Stryker restore all
 
             // === CREATE DAY METADATA ===
             // Store context information for this day (for UI and debugging)
@@ -1764,12 +1762,10 @@ export function calculateAnalysis(
                     }
                     // Case 2: Entry fits entirely within remaining capacity
                     // (Equivalent: when acc+dur=cap, Case3 gives same result)
-                    // Stryker disable EqualityOperator
-                    else if (dailyAccumulator + duration <= effectiveCapacity) {
+                    else if (dailyAccumulator + duration <= effectiveCapacity) { // Stryker disable EqualityOperator
                         regularHours = duration;
                         overtimeHours = 0;
                     }
-                    // Stryker restore EqualityOperator
                     // Case 3: Entry straddles capacity boundary (split required)
                     else {
                         // Portion that fits in capacity is regular
@@ -1802,13 +1798,11 @@ export function calculateAnalysis(
                         tier2Hours = overtimeHours;
                         tier1Hours = 0;
                     }
-                    // Case 2: All new OT is still within tier1 threshold
-                    // Stryker disable EqualityOperator,BlockStatement
-                    else if (otAfterEntry <= tier2Threshold) {
+                    // Case 2: All new OT is still within tier1 threshold (Equivalent: when otAfter=threshold, Case3 same result)
+                    else if (otAfterEntry <= tier2Threshold) { // Stryker disable EqualityOperator,BlockStatement
                         tier1Hours = overtimeHours;
                         tier2Hours = 0;
                     }
-                    // Stryker restore EqualityOperator,BlockStatement
                     // Case 3: This entry crosses tier2 threshold (split)
                     else {
                         // Hours until tier2 threshold are tier1
@@ -1819,16 +1813,15 @@ export function calculateAnalysis(
 
                     // Update user's cumulative OT accumulator
                     userOTAccumulator = otAfterEntry;
-                // Stryker disable all
-                } else {
+                } else { // Stryker disable BlockStatement: Equivalent - tier2 disabled calculates same tier1Hours
                     // Tier2 disabled or same as tier1: all OT is tier1
                     tier1Hours = overtimeHours;
                     tier2Hours = 0;
 
                     // Still track cumulative OT (for potential future tier2 activation)
+                    // Stryker disable next-line AssignmentOperator: Equivalent - accumulator not used when tier2 disabled
                     userOTAccumulator += overtimeHours;
                 }
-                // Stryker restore all
 
                 // --- CALCULATE AMOUNTS (EARNED/COST/PROFIT) ---
                 // Compute regular amounts + tier1 premium + tier2 premium

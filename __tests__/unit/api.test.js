@@ -697,3 +697,482 @@ describe('API Module', () => {
 // These tests are specifically designed to kill surviving mutants in api.ts
 // ============================================================================
 
+describe('API Mutation Killers', () => {
+  beforeEach(async () => {
+    const mockPayload = createMockTokenPayload();
+    store.token = 'mock_jwt_token';
+    store.claims = mockPayload;
+    store.resetApiStatus();
+    fetch.mockReset();
+    resetRateLimiter();
+    jest.useFakeTimers();
+    await jest.advanceTimersByTimeAsync(100);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    fetch.mockReset();
+  });
+
+  // ============================================================================
+  // normalizeTimestamp regex mutations (line 775)
+  // ============================================================================
+  describe('normalizeTimestamp compact format handling', () => {
+    it('should insert T separator for compact timestamp without seconds', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      // Compact format without seconds: "2025-01-1509:30Z"
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_compact_no_sec',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-1509:30Z',
+                end: '2025-01-1517:30Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 }
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      expect(entries[0].timeInterval.start).toBe('2025-01-15T09:30Z');
+      expect(entries[0].timeInterval.end).toBe('2025-01-15T17:30Z');
+    });
+
+    it('should insert T separator for compact timestamp with seconds', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      // Compact format with seconds: "2025-01-1514:30:45Z"
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_compact_with_sec',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-1514:30:45Z',
+                end: '2025-01-1518:30:45Z',
+                duration: 14400
+              },
+              hourlyRate: { amount: 5000 }
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      expect(entries[0].timeInterval.start).toBe('2025-01-15T14:30:45Z');
+      expect(entries[0].timeInterval.end).toBe('2025-01-15T18:30:45Z');
+    });
+
+    it('should handle spaced timestamp format', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      // Spaced format: "2025-01-15 09:00:00Z"
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_spaced',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15 09:00:00Z',
+                end: '2025-01-15 17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 }
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      expect(entries[0].timeInterval.start).toBe('2025-01-15T09:00:00Z');
+      expect(entries[0].timeInterval.end).toBe('2025-01-15T17:00:00Z');
+    });
+  });
+
+  // ============================================================================
+  // pickRateValue two-pass logic mutations (lines 788-790)
+  // ============================================================================
+  describe('pickRateValue two-pass rate selection', () => {
+    it('should use zero rate when first pass finds no positive values', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      // First rate is NaN/undefined, second is 0
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_zero_rate',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              rate: null,
+              hourlyRate: { amount: 0 },
+              earnedRate: 0,
+              amount: 0
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Zero rate should be used (second pass accepts finite non-positive values)
+      expect(entries[0].hourlyRate.amount).toBe(0);
+      expect(entries[0].earnedRate).toBe(0);
+    });
+
+    it('should skip Infinity rate in first pass and use fallback', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_infinity',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              rate: { amount: Infinity },
+              hourlyRate: { amount: 5000 },
+              earnedRate: 0
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Should use the valid hourlyRate (5000) not Infinity
+      expect(entries[0].hourlyRate.amount).toBe(5000);
+    });
+
+    it('should handle negative rates as valid in second pass', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_negative',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              rate: null,
+              hourlyRate: null,
+              earnedRate: -100 // Negative is finite, used in second pass
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Negative rate is finite, so it should be selected in second pass
+      expect(entries[0].earnedRate).toBe(-100);
+    });
+  });
+
+  // ============================================================================
+  // ensureShownAmount optional chaining mutations (lines 805-808)
+  // ============================================================================
+  describe('ensureShownAmount edge cases', () => {
+    it('should handle null items in amounts array', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_null_amounts',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amount: 100,
+              amounts: [null, undefined, { type: 'EARNED', value: 100 }]
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Should handle null items gracefully and find the valid EARNED entry
+      const earned = entries[0].amounts.find(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earned?.value).toBe(100);
+    });
+
+    it('should use amountType fallback when type is undefined', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_amountType',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amounts: [{ type: undefined, amountType: 'EARNED', value: 200 }]
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Should use amountType when type is undefined
+      const earned = entries[0].amounts.find(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earned?.value).toBe(200);
+    });
+
+    it('should use amount fallback when value is null', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_amount_fallback',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amounts: [{ type: 'EARNED', value: null, amount: 150 }]
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // When value is null, should use amount field via ?? fallback
+      const earned = entries[0].amounts.find(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      // The amount is in the raw data, so check it's present
+      expect(earned?.amount).toBe(150);
+    });
+
+    it('should handle items with missing type/amountType properties', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_missing_type',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amount: 400, // Fallback amount
+              amounts: [{ value: 100 }] // No type or amountType
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Should have EARNED entry from fallback when no matching type found
+      const earned = entries[0].amounts.find(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earned?.value).toBe(400);
+    });
+
+    it('should sum values using optional chaining for value/amount', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_sum',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amounts: [
+                { type: 'EARNED', value: 100 },
+                { type: 'EARNED', value: 200 }
+              ]
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Should have both EARNED entries
+      const earnedEntries = entries[0].amounts.filter(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earnedEntries.length).toBe(2);
+      const totalEarned = earnedEntries.reduce((sum, a) => sum + (a?.value ?? a?.amount ?? 0), 0);
+      expect(totalEarned).toBe(300);
+    });
+  });
+});

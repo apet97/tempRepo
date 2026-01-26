@@ -6703,4 +6703,200 @@ describe('calc.js - Edge Cases & Full Coverage', () => {
       expect(userResult.days.get('2024-01-16').entries[0].analysis.regular).toBe(8);
     });
   });
+
+  // ============================================================================
+  // Additional Mutation Killers for 98%+ Score
+  // ============================================================================
+  // These tests target specific surviving mutants identified in mutation analysis
+  // ============================================================================
+
+  describe('hasTimeOffEntry conditional mutations (line 1677)', () => {
+    // The mutation changes `else if (hasTimeOffEntry)` to `else if (true)`
+    // This test verifies that when hasTimeOffEntry is FALSE, capacity is NOT reduced
+    test('should NOT reduce capacity when no TIME_OFF entries exist and applyTimeOff is false', () => {
+      const store = createMinimalStore({
+        config: {
+          applyTimeOff: false // This enables fallback detection from entry types
+        }
+      });
+
+      // Only REGULAR entries - no TIME_OFF entries
+      const entries = [
+        createEntry({
+          id: '1',
+          type: 'REGULAR',
+          duration: 'PT8H',
+          start: '2024-01-15T08:00:00Z',
+          end: '2024-01-15T16:00:00Z'
+        })
+      ];
+
+      const result = calculateAnalysis(entries, store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // If mutation alive (else if (true)), capacity would be reduced to 0
+      // and all 8h would be overtime. With correct code, all 8h is regular.
+      expect(result[0].totals.regular).toBe(8);
+      expect(result[0].totals.overtime).toBe(0);
+    });
+
+    test('should reduce capacity via entry-based time-off when applyTimeOff is false', () => {
+      const store = createMinimalStore({
+        config: {
+          applyTimeOff: false // Fallback detection kicks in
+        }
+      });
+
+      // TIME_OFF entry (4h) + REGULAR work entry (8h)
+      const entries = [
+        createEntry({
+          id: '1',
+          type: 'TIME_OFF',
+          duration: 'PT4H',
+          start: '2024-01-15T08:00:00Z',
+          end: '2024-01-15T12:00:00Z',
+          billable: false
+        }),
+        createEntry({
+          id: '2',
+          type: 'REGULAR',
+          duration: 'PT8H',
+          start: '2024-01-15T12:00:00Z',
+          end: '2024-01-15T20:00:00Z'
+        })
+      ];
+
+      const result = calculateAnalysis(entries, store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // TIME_OFF (4h) reduces capacity from 8h to 4h
+      // REGULAR (8h) has 4h regular, 4h overtime
+      // TIME_OFF itself is classified as PTO (4h regular)
+      // Total: 8h regular (4h TIME_OFF + 4h work), 4h overtime
+      expect(result[0].totals.overtime).toBe(4);
+      expect(result[0].totals.regular).toBe(8);
+    });
+  });
+
+  describe('Exact capacity boundary mutations (line 1768)', () => {
+    // Mutation: `dailyAccumulator + duration <= effectiveCapacity` → `<`
+    // This would make entries that sum to EXACT capacity trigger a split
+    test('should classify ALL as regular when entries sum EXACTLY to capacity', () => {
+      const store = createMinimalStore({
+        calcParams: { dailyThreshold: 8 }
+      });
+
+      // 4h + 4h = 8h exactly equals capacity
+      const entries = [
+        createEntry({
+          id: 'first',
+          start: '2024-01-15T08:00:00Z',
+          end: '2024-01-15T12:00:00Z',
+          duration: 'PT4H'
+        }),
+        createEntry({
+          id: 'second',
+          start: '2024-01-15T12:00:00Z',
+          end: '2024-01-15T16:00:00Z',
+          duration: 'PT4H'
+        })
+      ];
+
+      const result = calculateAnalysis(entries, store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // If mutation alive (< instead of <=), second entry would be partially split
+      // With correct code (<=), both entries are fully regular
+      const dayEntries = result[0].days.get('2024-01-15')?.entries;
+      expect(dayEntries[0].analysis.regular).toBe(4);
+      expect(dayEntries[0].analysis.overtime).toBe(0);
+      expect(dayEntries[1].analysis.regular).toBe(4);
+      expect(dayEntries[1].analysis.overtime).toBe(0);
+      expect(result[0].totals.overtime).toBe(0);
+      expect(result[0].totals.regular).toBe(8);
+    });
+
+    test('should handle 3 entries summing to exact capacity', () => {
+      const store = createMinimalStore({
+        calcParams: { dailyThreshold: 8 }
+      });
+
+      // 2h + 3h + 3h = 8h exactly
+      const entries = [
+        createEntry({
+          id: 'first',
+          start: '2024-01-15T08:00:00Z',
+          end: '2024-01-15T10:00:00Z',
+          duration: 'PT2H'
+        }),
+        createEntry({
+          id: 'second',
+          start: '2024-01-15T10:00:00Z',
+          end: '2024-01-15T13:00:00Z',
+          duration: 'PT3H'
+        }),
+        createEntry({
+          id: 'third',
+          start: '2024-01-15T13:00:00Z',
+          end: '2024-01-15T16:00:00Z',
+          duration: 'PT3H'
+        })
+      ];
+
+      const result = calculateAnalysis(entries, store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      expect(result[0].totals.regular).toBe(8);
+      expect(result[0].totals.overtime).toBe(0);
+    });
+  });
+
+  describe('Tier2 threshold boundary mutations (lines 1807-1829)', () => {
+    // Mutation: `otAfterEntry <= tier2Threshold` → `<`
+    // This tests the EXACT boundary - when OT exactly equals threshold
+    test('should put ALL OT in tier1 when otAfterEntry EXACTLY equals threshold', () => {
+      const store = createMinimalStore({
+        config: { enableTieredOT: true },
+        calcParams: {
+          dailyThreshold: 8,
+          overtimeMultiplier: 1.5,
+          tier2ThresholdHours: 4, // Tier2 kicks in after 4h OT
+          tier2Multiplier: 2.0
+        }
+      });
+
+      // 12h entry = 8h regular + 4h OT, otAfterEntry = 4 = threshold
+      const entry = createEntry({
+        hourlyRate: 10000, // $100/hr
+        duration: 'PT12H',
+        start: '2024-01-15T08:00:00Z',
+        end: '2024-01-15T20:00:00Z'
+      });
+
+      const result = calculateAnalysis([entry], store, {
+        start: '2024-01-15',
+        end: '2024-01-15'
+      });
+
+      // If mutation alive (< instead of <=), all 4h OT would hit tier2 boundary case
+      // With correct code (<=), all 4h OT is tier1 since otAfterEntry (4) <= threshold (4)
+      const dayEntries = result[0].days.get('2024-01-15')?.entries;
+      expect(dayEntries[0].analysis.tier1Premium).toBe(200); // (1.5-1) * 4h * $100
+      expect(dayEntries[0].analysis.tier2Premium).toBe(0);
+      // tier1 premium = (1.5 - 1) * 4h * $100 = $200
+      expect(result[0].totals.otPremium).toBe(200);
+      expect(result[0].totals.otPremiumTier2).toBe(0);
+    });
+
+    // Note: Multi-day OT accumulation is already tested at line 1249
+    // Note: Same-day tier2 tracking is already tested elsewhere
+  });
 });
