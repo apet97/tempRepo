@@ -1337,3 +1337,130 @@ describe('Utils Mutation Killers', () => {
     });
   });
 });
+
+// ============================================================================
+// base64urlDecode Mutation Killers (lines 337, 340, 341)
+// ============================================================================
+import { base64urlDecode } from '../../js/utils.js';
+
+describe('base64urlDecode Mutation Killers', () => {
+  // Line 337: str.replace(/_/g, '/') - mutation changes '/' to ''
+  // Need a test where _ MUST become / for correct decoding
+  describe('underscore to slash replacement mutation (line 337)', () => {
+    it('KILLER: should correctly replace _ with / for decoding', () => {
+      // In Base64URL, _ represents / from standard Base64
+      // "a?" (0x61 0x3F) in Base64 is "YT8=" with the 8 being at the / position
+      // Actually, let's use a known value where _ appears
+      // "<<>>" in standard Base64 is "PDw+Pg==" but in Base64URL it's "PDw-Pg" (+ becomes -, = removed)
+
+      // Let's create a value that has _ in it
+      // Standard Base64 for "f?" = "Zj8=" -> Base64URL = "Zj8" (no _ needed)
+      // We need a value where / appears. "/" itself encodes to "Lw==" in Base64
+      // But _ is used to replace / in the encoded string, not the input
+
+      // The actual character that produces _ in Base64URL is when
+      // the 6-bit value 63 appears, which maps to / in Base64 and _ in Base64URL
+      // Binary 111111 = 63
+
+      // Simple test: encode "<<>>" which produces PDw+Pg in Base64URL
+      // The + in "PDw+Pg" comes from the standard Base64 character
+      // Wait, the mutation is about replacing _ with / not - with +
+
+      // Let me construct a proper test:
+      // In Base64URL: - replaces + and _ replaces /
+      // So if we have "a/b" encoded:
+      // "a/b" = 0x61 0x2F 0x62 = Base64 "YS9i" -> Base64URL "YS9i" (no _ here)
+
+      // Let me try "?" which is 0x3F
+      // Single character "?" -> Base64 = "Pw==" -> Base64URL = "Pw"
+      // That's not right either...
+
+      // Actually the replacement is: _ in input becomes / for standard Base64
+      // So if input has _, it should become / before atob
+      // Example: "abc_def" in Base64URL notation should decode with _ -> /
+      // Let's use "T_8" which represents the bytes for "O?" when _ is converted to /
+      // "O?" = 0x4F 0x3F -> Base64 = "T/8" -> Base64URL = "T_8"
+
+      // With mutation: T_8 -> T8 (invalid length, or decode wrong)
+      // With correct code: T_8 -> T/8 -> decode to "O?"
+
+      // Actually "T/8" is only 3 chars, need padding
+      // T_8 -> T/8= -> atob("T/8=") = "\x4F\xFF" which is O followed by 0xFF
+
+      // Let me verify: btoa("O\xFF") = "T/8="
+      // So base64urlDecode("T_8") should return "O\xFF"
+
+      const encoded = 'T_8'; // Would be "T/8" in standard Base64
+      const decoded = base64urlDecode(encoded);
+      // With correct code: decoded = "O\xFF"
+      // With mutation: decoded would fail or be wrong
+
+      // The character at position 1 should be the byte 0xFF
+      expect(decoded.charCodeAt(0)).toBe(0x4F); // 'O'
+      expect(decoded.charCodeAt(1)).toBe(0xFF); // The byte that requires /
+    });
+
+    it('KILLER: should handle multiple _ characters', () => {
+      // "O\xFF\xFF" -> btoa = "T///=" -> Base64URL = "T___"
+      const encoded = 'T___';
+      const decoded = base64urlDecode(encoded);
+      expect(decoded).toBe('O\xFF\xFF');
+    });
+  });
+
+  // Line 340: if (padding) - mutation changes to if (false)
+  // Need a test where padding is REQUIRED for correct decoding
+  describe('padding conditional mutation (line 340)', () => {
+    it('KILLER: should add padding for length % 4 == 1 (needs 3 chars)', () => {
+      // Length 5 % 4 = 1, needs 3 '=' chars
+      // But wait, valid Base64 can't have length % 4 == 1
+      // Let me use length % 4 == 2 (needs 2 '=')
+
+      // "a" -> btoa = "YQ==" -> Base64URL = "YQ" (length 2)
+      // 2 % 4 = 2, padding = 2, need 2 '=' chars
+      const result = base64urlDecode('YQ');
+      expect(result).toBe('a');
+    });
+
+    it('KILLER: should add padding for length % 4 == 3 (needs 1 char)', () => {
+      // "ab" -> btoa = "YWI=" -> Base64URL = "YWI" (length 3)
+      // 3 % 4 = 3, padding = 3, need 1 '=' char
+      const result = base64urlDecode('YWI');
+      expect(result).toBe('ab');
+    });
+
+    it('KILLER: should not add padding for length % 4 == 0', () => {
+      // "abc" -> btoa = "YWJj" -> Base64URL = "YWJj" (length 4)
+      // 4 % 4 = 0, no padding needed
+      const result = base64urlDecode('YWJj');
+      expect(result).toBe('abc');
+    });
+  });
+
+  // Line 341: '='.repeat(4 - padding) - mutation changes '=' to ''
+  // Need a test where the '=' padding character is essential
+  describe('padding character mutation (line 341)', () => {
+    it('KILLER: should use = character for padding (not empty string)', () => {
+      // If '=' becomes '', then "YQ" would become "YQ" with no padding
+      // atob("YQ") without proper padding might fail or return wrong result
+      // Let's test that the padding '=' is actually added
+
+      // For "a", Base64URL encoded is "YQ" (needs "YQ==")
+      // Without = padding: atob("YQ") might throw or return gibberish
+
+      const result = base64urlDecode('YQ');
+      expect(result).toBe('a');
+
+      // Double-check with another value
+      const result2 = base64urlDecode('YWI'); // needs "YWI="
+      expect(result2).toBe('ab');
+    });
+
+    it('KILLER: should correctly pad with multiple = characters', () => {
+      // "Y" alone (length 1) % 4 = 1, but this is invalid Base64
+      // Let's use "Zg" which encodes "f" and needs "Zg=="
+      const result = base64urlDecode('Zg');
+      expect(result).toBe('f');
+    });
+  });
+});

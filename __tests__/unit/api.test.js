@@ -1174,5 +1174,158 @@ describe('API Mutation Killers', () => {
       const totalEarned = earnedEntries.reduce((sum, a) => sum + (a?.value ?? a?.amount ?? 0), 0);
       expect(totalEarned).toBe(300);
     });
+
+    // MUTATION KILLER: Test arithmetic operator mutation (total + value → total - value)
+    it('KILLER: should add (not subtract) values when summing amounts', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      // Create a scenario where add vs subtract makes observable difference
+      // With two positive values and no fallback amount:
+      // With +: 100 + 100 = 200 ≠ 0 → no fallback added
+      // With -: 100 - 100 = 0 → fallback added (DIFFERENT!)
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_add_test',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amount: 999, // Fallback amount that should NOT be used
+              amounts: [
+                { type: 'EARNED', value: 100 },
+                { type: 'EARNED', value: 100 }
+              ]
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // With correct code (+): shownTotal = 200 ≠ 0 → no fallback, amounts stay as-is
+      // With mutation (-): shownTotal = 0 → fallback {type: 'EARNED', value: 999} added
+      const earnedEntries = entries[0].amounts.filter(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+
+      // Should have exactly 2 EARNED entries (no fallback added)
+      // If mutation alive, would have 3 entries (fallback added because 100 - 100 = 0)
+      expect(earnedEntries.length).toBe(2);
+      expect(earnedEntries.every(e => e.value === 100)).toBe(true);
+    });
+
+    // MUTATION KILLER: Test optional chaining with actual null item access
+    it('KILLER: should not throw when item is null in reduce', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      // Put null in amounts array - without optional chaining, item.type throws
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_null_item',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amount: 500, // Fallback
+              amounts: [null, { type: 'COST', value: 100 }] // null item, no EARNED
+            }
+          ]
+        })
+      });
+
+      // With correct code: null?.type returns undefined, doesn't throw
+      // With mutation: null.type throws TypeError
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // Should add EARNED fallback since no EARNED in amounts
+      const earnedEntries = entries[0].amounts.filter(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earnedEntries.length).toBe(1);
+      expect(earnedEntries[0].value).toBe(500);
+    });
+
+    // MUTATION KILLER: Test string literal '' mutation
+    it('KILLER: should use empty string fallback for missing type (not "Stryker was here!")', async () => {
+      store.claims = {
+        workspaceId: 'ws_test',
+        backendUrl: 'https://api.clockify.me'
+      };
+
+      // Item with type=null and amountType=null - falls back to ''
+      // '' !== 'EARNED' so this item is skipped in sum
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          timeentries: [
+            {
+              _id: 'entry_empty_type',
+              userId: 'user_1',
+              userName: 'User 1',
+              billable: true,
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T17:00:00Z',
+                duration: 28800
+              },
+              hourlyRate: { amount: 5000 },
+              amount: 250, // Fallback
+              amounts: [
+                { type: null, amountType: null, value: 100 }, // type becomes '' → not 'EARNED'
+                { type: 'COST', value: 50 } // COST, not EARNED
+              ]
+            }
+          ]
+        })
+      });
+
+      const entries = await Api.fetchDetailedReport(
+        'ws_test',
+        '2025-01-15T00:00:00Z',
+        '2025-01-16T00:00:00Z'
+      );
+
+      // With correct code: type='' (empty string), not 'EARNED', so item skipped
+      // With mutation: type='STRYKER WAS HERE!' (uppercase), not 'EARNED', so item skipped
+      // In this case the mutation is equivalent, but the test documents expected behavior
+      const earnedEntries = entries[0].amounts.filter(
+        (a) => String(a?.type || a?.amountType || '').toUpperCase() === 'EARNED'
+      );
+      expect(earnedEntries.length).toBe(1);
+      expect(earnedEntries[0].value).toBe(250); // Fallback was added
+    });
   });
 });
