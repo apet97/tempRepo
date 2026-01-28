@@ -1673,11 +1673,11 @@ export function calculateAnalysis(
                     effectiveCapacity = Math.max(0, effectiveCapacity - timeOff.hours);
                 }
             }
-            /* Stryker disable all: Entry-based time-off fallback - equivalent when no TIME_OFF entries */
+            // Stryker disable all
             else if (hasTimeOffEntry) {
                 effectiveCapacity = Math.max(0, effectiveCapacity - entryTimeOffHours);
             }
-            /* Stryker restore all */
+            // Stryker restore all
 
             // === CREATE DAY METADATA ===
             // Store context information for this day (for UI and debugging)
@@ -1764,12 +1764,12 @@ export function calculateAnalysis(
                     }
                     // Case 2: Entry fits entirely within remaining capacity
                     // (Equivalent: when acc+dur=cap, Case3 gives same result)
-                    /* Stryker disable all: Boundary condition - when acc+dur=cap, Case3 gives same result */
+                    // Stryker disable all
                     else if (dailyAccumulator + duration <= effectiveCapacity) {
                         regularHours = duration;
                         overtimeHours = 0;
                     }
-                    /* Stryker restore all */
+                    // Stryker restore all
                     // Case 3: Entry straddles capacity boundary (split required)
                     else {
                         // Portion that fits in capacity is regular
@@ -1803,12 +1803,12 @@ export function calculateAnalysis(
                         tier1Hours = 0;
                     }
                     // Case 2: All new OT is still within tier1 threshold (Equivalent: when otAfter=threshold, Case3 same result)
-                    /* Stryker disable all: Boundary condition - when otAfter=threshold, Case3 gives same result */
+                    // Stryker disable all
                     else if (otAfterEntry <= tier2Threshold) {
                         tier1Hours = overtimeHours;
                         tier2Hours = 0;
                     }
-                    /* Stryker restore all */
+                    // Stryker restore all
                     // Case 3: This entry crosses tier2 threshold (split)
                     else {
                         // Hours until tier2 threshold are tier1
