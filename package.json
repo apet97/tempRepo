@@ -36,7 +36,7 @@
     "@stryker-mutator/jest-runner": "^9.4.0",
     "@stryker-mutator/typescript-checker": "^9.4.0",
     "@types/jest": "^30.0.0",
-    "babel-jest": "^29.7.0",
+    "babel-jest": "^30.2.0",
     "esbuild": "^0.27.2",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
