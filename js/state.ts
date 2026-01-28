@@ -581,7 +581,7 @@ class Store {
         const saved = localStorage.getItem(cacheKey);
         if (!saved) return;
         const cache = safeJSONParse<MapCache<UserProfile> | null>(saved, null);
-        if (!this._isCacheFresh(cache)) return;
+        if (!cache || !this._isCacheFresh(cache)) return;
         const map = new Map<string, UserProfile>(cache.entries || []);
         if (map.size > 0) {
             this.profiles = map;

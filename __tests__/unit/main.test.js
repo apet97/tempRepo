@@ -118,11 +118,13 @@ jest.mock('../../js/api.js', () => ({
 }));
 
 // Mock utils module
-jest.mock('../../js/utils.js', () => ({
-  IsoUtils: {
-    toDateKey: jest.fn((date) => {
-      if (!date) return '';
-      const y = date.getUTCFullYear();
+jest.mock('../../js/utils.js', () => {
+  let canonicalTimeZone = null;
+  return {
+    IsoUtils: {
+      toDateKey: jest.fn((date) => {
+        if (!date) return '';
+        const y = date.getUTCFullYear();
       const m = String(date.getUTCMonth() + 1).padStart(2, '0');
       const d = String(date.getUTCDate()).padStart(2, '0');
       return `${y}-${m}-${d}`;
@@ -148,19 +150,28 @@ jest.mock('../../js/utils.js', () => ({
     }),
     debounce: jest.fn((fn) => fn)
   },
-  debounce: jest.fn((fn) => fn),
-  setCanonicalTimeZone: jest.fn(),
-  isValidTimeZone: jest.fn(() => true),
-  formatHours: jest.fn((h) => `${h}h`),
-  formatCurrency: jest.fn((a) => `$${a}`),
-  safeJSONParse: jest.fn((text, fallback) => {
-    try { return JSON.parse(text); } catch (e) { return fallback; }
-  }),
-  escapeHtml: jest.fn((str) => {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  })
-}));
+    debounce: jest.fn((fn) => fn),
+    base64urlDecode: jest.fn((value) => {
+      const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+      return atob(padded);
+    }),
+    setCanonicalTimeZone: jest.fn((timeZone) => {
+      canonicalTimeZone = timeZone;
+    }),
+    getCanonicalTimeZone: jest.fn(() => canonicalTimeZone || 'UTC'),
+    isValidTimeZone: jest.fn(() => true),
+    formatHours: jest.fn((h) => `${h}h`),
+    formatCurrency: jest.fn((a) => `$${a}`),
+    safeJSONParse: jest.fn((text, fallback) => {
+      try { return JSON.parse(text); } catch (e) { return fallback; }
+    }),
+    escapeHtml: jest.fn((str) => {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    })
+  };
+});
 
 // Mock calc module
 const mockCalculateAnalysis = jest.fn(() => []);
@@ -188,7 +199,7 @@ import { store } from '../../js/state.js';
 import * as exportModule from '../../js/export.js';
 
 // Force load main module (this should not auto-init with our guard)
-import '../../js/main.js';
+import { init } from '../../js/main.js';
 
 // ============================================================================
 // TEST SUITE
@@ -335,6 +346,36 @@ describe('main.js - Initialization', () => {
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('Invalid token', expect.any(Error));
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('init() - Timezone Resolution', () => {
+    const base64url = (value) =>
+      Buffer.from(JSON.stringify(value))
+        .toString('base64')
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+
+    it('should prefer report time zone over workspace time zone', async () => {
+      const workspaceTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const payload = {
+        workspaceId: 'ws_123',
+        workspaceTimeZone
+      };
+      const token = `${base64url({ alg: 'HS256', typ: 'JWT' })}.${base64url(payload)}.sig`;
+      window.location.search = `?auth_token=${token}`;
+
+      store.config.reportTimeZone = 'UTC';
+      mockApi.fetchUsers.mockResolvedValue([{ id: 'user1', name: 'User 1' }]);
+      store.setToken = jest.fn((value, claims) => {
+        store.token = value;
+        store.claims = claims;
+      });
+      init();
+
+      const utilsMock = jest.requireMock('../../js/utils.js');
+      expect(utilsMock.getCanonicalTimeZone()).toBe('UTC');
     });
   });
 

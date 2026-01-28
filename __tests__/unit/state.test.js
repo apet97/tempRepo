@@ -1285,6 +1285,10 @@ describe('State Module - Store Class', () => {
       jest.restoreAllMocks();
     });
 
+    it('should treat null cache as stale', () => {
+      expect(store._isCacheFresh(null)).toBe(false);
+    });
+
     it('should save and load profiles cache when fresh', () => {
       store.profiles.set('user1', { workCapacityHours: 8 });
       store.saveProfilesCache();

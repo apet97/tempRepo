@@ -203,15 +203,15 @@ function resolveCanonicalTimeZone(
     claims: TokenClaims | null,
     preferredTimeZone: string | null | undefined
 ): string {
+    if (preferredTimeZone && isValidTimeZone(preferredTimeZone)) {
+        return preferredTimeZone;
+    }
     const workspaceTimeZone =
         (claims?.workspaceTimeZone as string | undefined) ||
         (claims?.workspaceTimezone as string | undefined) ||
         (claims?.timeZone as string | undefined);
     if (workspaceTimeZone && isValidTimeZone(workspaceTimeZone)) {
         return workspaceTimeZone;
-    }
-    if (preferredTimeZone && isValidTimeZone(preferredTimeZone)) {
-        return preferredTimeZone;
     }
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
