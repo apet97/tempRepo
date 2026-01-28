@@ -115,7 +115,7 @@ async function waitForToken() {
 
 ## 5. Calculation Logic: Timezone Awareness
 To prevent evening work from shifting to the next day, date extraction is performed using a canonical timezone instead of raw string splitting.
-The canonical timezone is resolved in this order: workspace claim (if present), user-selected report timezone, then browser default.
+The canonical timezone is resolved in this order: user-selected report timezone (if set), workspace claim (if present), then browser default.
 
 ```javascript
 // extractDateKey in utils.js
@@ -193,6 +193,7 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 - Framework: Stryker Mutator
 - Purpose: Validates test effectiveness (not just coverage)
 - Config: `stryker.config.json`, `jest.stryker.config.js`
+- Cadence: Not run on every PR; executed nightly or manually via CI workflow dispatch.
 
 **Mutation Score (Achieved)**:
 | File | Score |

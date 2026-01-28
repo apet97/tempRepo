@@ -94,7 +94,7 @@ Configure a second overtime tier for extended overtime:
 | **Use profile capacity** | Pull daily capacity from user's Clockify profile |
 
 ### Report Time Zone
-Select the time zone used to group entries into dates. By default, OTPLUS uses the workspace time zone (if provided by Clockify), otherwise your browser time zone. You can override this with any IANA time zone (for example, `America/Chicago`).
+Select the time zone used to group entries into dates. If you set a Report Time Zone, it overrides the workspace time zone and the browser default. If left blank, OTPLUS uses the workspace time zone (when provided by Clockify), otherwise your browser time zone. You can choose any IANA time zone (for example, `America/Chicago`).
 
 ---
 

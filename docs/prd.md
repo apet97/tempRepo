@@ -26,7 +26,7 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 - **Persistent Data Caching:** Profiles, holidays, and time-off maps are cached in localStorage (6-hour TTL) to reduce repeat fetches for large teams.
 
 ### 3.2 Accuracy & Compliance
-- **Timezone Awareness:** Uses a canonical timezone (workspace claim → user-selected report timezone → browser default) for date grouping, ensuring evening work is attributed to the correct calendar day rather than shifting to the next day in UTC.
+- **Timezone Awareness:** Uses a canonical timezone (user-selected report timezone → workspace claim → browser default) for date grouping, ensuring evening work is attributed to the correct calendar day rather than shifting to the next day in UTC.
 - **Holiday Compliance:** Strictly adheres to the API requirement for `YYYY-MM-DD` date formatting.
 - **Precision Math:** All duration and cost calculations use `utils.round()` to eliminate floating-point drift.
 - **Overtime Basis Options:** Supports daily, weekly, and combined overtime bases for flexible payroll policies.
