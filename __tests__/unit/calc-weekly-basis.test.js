@@ -252,6 +252,25 @@ describe('Weekly Overtime Basis Specification', () => {
     });
   });
 
+  describe('Weekly Overtime with Break Entries', () => {
+    it('should ignore break entries in weekly overtime accumulation', () => {
+      mockStore.config.overtimeBasis = 'weekly';
+      const dateRange = { start: '2025-01-13', end: '2025-01-13' };
+
+      const entries = [
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-13', 9).withDuration(8).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-13', 13).withDuration(1).asBreak().build()
+      ];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+      const userResult = results.find(u => u.userId === 'user0');
+
+      expect(userResult.totals.total).toBe(9);
+      expect(userResult.totals.breaks).toBe(1);
+      expect(userResult.totals.overtime).toBe(0);
+    });
+  });
+
   describe('Per-User Independent Weekly Accumulators', () => {
     it('should track per-user independent weekly accumulators', () => {
       const users = generateMockUsers(2);

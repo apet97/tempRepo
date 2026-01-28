@@ -192,6 +192,162 @@ describe('UI Module - Additional Coverage', () => {
       expect(hasBillableColumn || hasAmountColumn).toBe(true);
     });
 
+    it('should show OT breakdown columns when overtimeBasis is both and expanded', () => {
+      store.ui.summaryExpanded = true;
+      store.config.overtimeBasis = 'both';
+
+      const entries = [
+        { date: '2025-01-13' },
+        { date: '2025-01-14' },
+        { date: '2025-01-15' },
+        { date: '2025-01-16' },
+        { date: '2025-01-17' },
+        { date: '2025-01-18' }
+      ].map((d, idx) => ({
+        id: `entry${idx + 1}`,
+        userId: 'user1',
+        userName: 'Alice',
+        timeInterval: {
+          start: `${d.date}T09:00:00Z`,
+          end: `${d.date}T18:00:00Z`,
+          duration: 'PT9H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }));
+
+      const analysis = calculateAnalysis(entries, store, {
+        start: '2025-01-13',
+        end: '2025-01-18'
+      });
+
+      UI.renderSummaryTable(analysis);
+
+      const thead = document.querySelector('#summaryCard thead tr');
+      expect(thead.innerHTML).toContain('OT Daily');
+      expect(thead.innerHTML).toContain('OT Weekly');
+      expect(thead.innerHTML).toContain('OT Overlap');
+
+      const tbody = document.getElementById('summaryTableBody');
+      expect(tbody.innerHTML).toContain('6h');  // daily/overlap OT
+      expect(tbody.innerHTML).toContain('14h'); // weekly/combined OT
+    });
+
+    it('should fall back to overtime when combinedOvertime is missing', () => {
+      const analysis = [{
+        userId: 'user1',
+        userName: 'Alice',
+        totals: {
+          expectedCapacity: 8,
+          total: 2,
+          regular: 0,
+          overtime: 2,
+          breaks: 0,
+          billableWorked: 0,
+          billableOT: 0,
+          nonBillableOT: 0,
+          vacationEntryHours: 0,
+          amount: 0,
+          amountEarned: 0,
+          amountCost: 0,
+          amountProfit: 0,
+          otPremium: 0,
+          holidayCount: 0,
+          timeOffCount: 0
+        },
+        days: new Map([
+          ['2025-01-15', {
+            entries: [{
+              id: 'entry_missing_combined',
+              userId: 'user1',
+              userName: 'Alice',
+              description: 'Missing combined',
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T11:00:00Z',
+                duration: 'PT2H'
+              },
+              billable: true,
+              analysis: {
+                regular: 0,
+                overtime: 2,
+                isBillable: true
+              }
+            }],
+            meta: {
+              capacity: 8,
+              isHoliday: false,
+              holidayName: '',
+              isNonWorking: false,
+              isTimeOff: false
+            }
+          }]
+        ])
+      }];
+
+      UI.renderSummaryTable(analysis);
+
+      const tbody = document.getElementById('summaryTableBody');
+      expect(tbody.innerHTML).toContain('2h');
+    });
+
+    it('should default combined overtime to zero when analysis is missing', () => {
+      store.config.overtimeBasis = 'both';
+
+      const analysis = [{
+        userId: 'user1',
+        userName: 'Alice',
+        totals: {
+          expectedCapacity: 8,
+          total: 2,
+          regular: 0,
+          overtime: 0,
+          breaks: 0,
+          billableWorked: 0,
+          billableOT: 0,
+          nonBillableOT: 0,
+          vacationEntryHours: 0,
+          amount: 0,
+          amountEarned: 0,
+          amountCost: 0,
+          amountProfit: 0,
+          otPremium: 0,
+          holidayCount: 0,
+          timeOffCount: 0
+        },
+        days: new Map([
+          ['2025-01-15', {
+            entries: [{
+              id: 'entry_missing_analysis',
+              userId: 'user1',
+              userName: 'Alice',
+              description: 'Missing analysis',
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T11:00:00Z',
+                duration: 'PT2H'
+              },
+              billable: true
+            }],
+            meta: {
+              capacity: 8,
+              isHoliday: false,
+              holidayName: '',
+              isNonWorking: false,
+              isTimeOff: false
+            }
+          }]
+        ])
+      }];
+
+      UI.renderSummaryTable(analysis);
+
+      const row = document.querySelector('#summaryTableBody tr');
+      const cells = row.querySelectorAll('td');
+      expect(cells[3].textContent).toContain('0h');
+      expect(row.querySelectorAll('td.text-danger').length).toBe(0);
+    });
+
     it('should hide billable columns when disabled', () => {
       store.config.showBillableBreakdown = false;
 

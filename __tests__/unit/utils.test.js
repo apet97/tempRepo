@@ -318,12 +318,25 @@ describe('IsoUtils', () => {
     it('should validate time zone identifiers', () => {
       expect(isValidTimeZone('UTC')).toBe(true);
       expect(isValidTimeZone('Invalid/Zone')).toBe(false);
+      expect(isValidTimeZone('')).toBe(false);
     });
 
     it('should return a canonical timezone string', () => {
       const tz = getCanonicalTimeZone();
       expect(typeof tz).toBe('string');
       expect(tz.length).toBeGreaterThan(0);
+    });
+
+    it('should fall back to UTC when resolved time zone is missing', () => {
+      const original = Intl.DateTimeFormat;
+      Intl.DateTimeFormat = jest.fn(() => ({
+        resolvedOptions: () => ({ timeZone: '' })
+      }));
+
+      setCanonicalTimeZone(null);
+      expect(getCanonicalTimeZone()).toBe('UTC');
+
+      Intl.DateTimeFormat = original;
     });
 
     it('should use canonical timezone for date keys', () => {
@@ -336,6 +349,23 @@ describe('IsoUtils', () => {
       setCanonicalTimeZone('UTC');
       const date = new Date('2025-01-15T12:00:00Z');
       expect(IsoUtils.toDateKey(date)).toBe('2025-01-15');
+    });
+
+    it('should return empty string for null date in toDateKey', () => {
+      expect(IsoUtils.toDateKey(null)).toBe('');
+    });
+
+    it('should use default date parts when formatter is missing parts', () => {
+      setCanonicalTimeZone('UTC');
+      const original = Intl.DateTimeFormat;
+      Intl.DateTimeFormat = jest.fn(() => ({
+        formatToParts: () => [{ type: 'literal', value: '-' }]
+      }));
+
+      const date = new Date('2025-01-15T12:00:00Z');
+      expect(IsoUtils.toDateKey(date)).toBe('0000-01-01');
+
+      Intl.DateTimeFormat = original;
     });
 
     it('should ignore invalid canonical time zones', () => {

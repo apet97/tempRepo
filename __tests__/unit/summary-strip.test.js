@@ -132,6 +132,23 @@ describe('Summary Strip Layout Specification', () => {
       const strip = document.getElementById('summaryStrip');
       expect(strip.innerHTML).toContain('Users');
     });
+
+    it('should show combined overtime label and breakdown when overtimeBasis is both', async () => {
+      mockStore.config.overtimeBasis = 'both';
+      const users = generateMockAnalysisData(1);
+      users[0].totals.combinedOvertime = 6;
+      users[0].totals.dailyOvertime = 4;
+      users[0].totals.weeklyOvertime = 6;
+      users[0].totals.overlapOvertime = 4;
+
+      renderSummaryStrip(users);
+
+      const strip = document.getElementById('summaryStrip');
+      expect(strip.innerHTML).toContain('OT (Combined)');
+      expect(strip.innerHTML).toContain('OT Daily');
+      expect(strip.innerHTML).toContain('OT Weekly');
+      expect(strip.innerHTML).toContain('OT Overlap');
+    });
   });
 
   describe('Billable Breakdown Display', () => {

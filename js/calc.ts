@@ -1685,7 +1685,7 @@ export function calculateAnalysis(
                 isHolidayDay,
                 isNonWorking,
                 isTimeOffDay,
-                timeOffHours: timeOff?.hours || entryTimeOffHours,
+                timeOffHours: timeOff?.hours || entryTimeOffHours || 0,
                 forceOvertime,
             });
         }
@@ -1693,9 +1693,9 @@ export function calculateAnalysis(
         // === DAILY OVERTIME SPLITS ===
         if (useDaily) {
             for (const dateKey of allDates) {
-                const context = dayContextByDate.get(dateKey);
-                const dayEntries = context?.entries || [];
-                const effectiveCapacity = context?.effectiveCapacity ?? 0;
+                const context = dayContextByDate.get(dateKey)!;
+                const dayEntries = context.entries;
+                const effectiveCapacity = context.effectiveCapacity;
 
                 /* istanbul ignore next -- defensive: timeInterval.start is always present for valid entries */
                 /* Stryker disable all: Defensive fallback for null timeInterval (never triggered with valid entries) */
@@ -1735,16 +1735,15 @@ export function calculateAnalysis(
             const entriesByWeek = new Map<string, TimeEntry[]>();
 
             for (const dateKey of allDates) {
-                const context = dayContextByDate.get(dateKey);
-                const dayEntries = context?.entries || [];
+                const context = dayContextByDate.get(dateKey)!;
+                const dayEntries = context.entries;
                 const weekKey = getWeekKey(dateKey);
-                if (!entriesByWeek.has(weekKey)) {
-                    entriesByWeek.set(weekKey, []);
+                let bucket = entriesByWeek.get(weekKey);
+                if (!bucket) {
+                    bucket = [];
+                    entriesByWeek.set(weekKey, bucket);
                 }
-                const bucket = entriesByWeek.get(weekKey);
-                if (bucket) {
-                    bucket.push(...dayEntries);
-                }
+                bucket.push(...dayEntries);
             }
 
             for (const [, weekEntries] of entriesByWeek) {
@@ -1763,11 +1762,8 @@ export function calculateAnalysis(
 
                     let overtimeHours = 0;
                     if (entryClass === 'work') {
-                        const entryDateKey = IsoUtils.extractDateKey(entry.timeInterval?.start);
-                        const context = entryDateKey
-                            ? dayContextByDate.get(entryDateKey)
-                            : undefined;
-                        const forceOvertime = context?.forceOvertime ?? false;
+                        const entryDateKey = IsoUtils.extractDateKey(entry.timeInterval?.start)!;
+                        const forceOvertime = dayContextByDate.get(entryDateKey)!.forceOvertime;
 
                         // Stryker disable all
                         if (weeklyThreshold === 0 || forceOvertime || weeklyAccumulator >= weeklyThreshold) {
@@ -1793,15 +1789,15 @@ export function calculateAnalysis(
 
         // === PROCESS EACH DATE IN RANGE ===
         for (const dateKey of allDates) {
-            const context = dayContextByDate.get(dateKey);
-            const dayEntries = context?.entries || [];
-            const dayMeta = context?.meta;
-            const baseCapacity = context?.baseCapacity ?? 0;
-            const effectiveCapacity = context?.effectiveCapacity ?? 0;
-            const isHolidayDay = context?.isHolidayDay ?? false;
-            const isNonWorking = context?.isNonWorking ?? false;
-            const isTimeOffDay = context?.isTimeOffDay ?? false;
-            const timeOffHours = context?.timeOffHours ?? 0;
+            const context = dayContextByDate.get(dateKey)!;
+            const dayEntries = context.entries;
+            const dayMeta = context.meta;
+            const baseCapacity = context.baseCapacity;
+            const effectiveCapacity = context.effectiveCapacity;
+            const isHolidayDay = context.isHolidayDay;
+            const isNonWorking = context.isNonWorking;
+            const isTimeOffDay = context.isTimeOffDay;
+            const timeOffHours = context.timeOffHours;
 
             /* istanbul ignore next -- defensive: timeInterval.start is always present for valid entries */
             /* Stryker disable all: Defensive fallback for null timeInterval (never triggered with valid entries) */
