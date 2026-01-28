@@ -77,13 +77,7 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 
 ### Code Quality Metrics
 - **Unit Test Coverage**: 100% lines/branches
-- **Mutation Score Target**: 100% for core modules (calc.ts, utils.ts, api.ts)
-- **Current api.ts Mutation Score**: 83.14% (74 survivors, 25 timeouts)
-
-### Future Quality Improvements
-1. Eliminate mutation testing timeouts by splitting large test files
-2. Achieve 100% mutation score through targeted refactoring
-3. Add injectable logging seam for testable observability
+- **Mutation Score**: 100% for all core modules (calc.ts, utils.ts, api.ts)
 
 ## 7. Operational Guide & APIs
 - **Guide:** `docs/guide.md` documents what OTPLUS consumes (modules, storage, UI toggles) and enumerates every Clockify API request it issues.
