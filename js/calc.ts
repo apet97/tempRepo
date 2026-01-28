@@ -1673,7 +1673,7 @@ export function calculateAnalysis(
                     effectiveCapacity = Math.max(0, effectiveCapacity - timeOff.hours);
                 }
             }
-            /* Stryker disable all */
+            /* Stryker disable all: Entry-based time-off fallback - equivalent when no TIME_OFF entries */
             else if (hasTimeOffEntry) {
                 effectiveCapacity = Math.max(0, effectiveCapacity - entryTimeOffHours);
             }
@@ -1764,7 +1764,7 @@ export function calculateAnalysis(
                     }
                     // Case 2: Entry fits entirely within remaining capacity
                     // (Equivalent: when acc+dur=cap, Case3 gives same result)
-                    /* Stryker disable all */
+                    /* Stryker disable all: Boundary condition - when acc+dur=cap, Case3 gives same result */
                     else if (dailyAccumulator + duration <= effectiveCapacity) {
                         regularHours = duration;
                         overtimeHours = 0;
@@ -1803,7 +1803,7 @@ export function calculateAnalysis(
                         tier1Hours = 0;
                     }
                     // Case 2: All new OT is still within tier1 threshold (Equivalent: when otAfter=threshold, Case3 same result)
-                    /* Stryker disable all */
+                    /* Stryker disable all: Boundary condition - when otAfter=threshold, Case3 gives same result */
                     else if (otAfterEntry <= tier2Threshold) {
                         tier1Hours = overtimeHours;
                         tier2Hours = 0;
@@ -1819,7 +1819,7 @@ export function calculateAnalysis(
 
                     // Update user's cumulative OT accumulator
                     userOTAccumulator = otAfterEntry;
-                /* Stryker disable all */
+                /* Stryker disable all: Tier2 disabled else branch - accumulator tracking for future tier2 */
                 } else {
                     // Tier2 disabled or same as tier1: all OT is tier1
                     tier1Hours = overtimeHours;
