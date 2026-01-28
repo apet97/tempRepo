@@ -3,18 +3,17 @@ import { setupApiMocks, navigateWithToken } from './helpers/mock-api';
 
 test.describe('CSV Export', () => {
     test.beforeEach(async ({ page }) => {
-        await setupApiMocks(page);
+        await setupApiMocks(page, { entriesPerUser: 1, startDate: '2025-01-15' });
         await navigateWithToken(page);
     });
 
     test('downloads CSV when clicking export button', async ({ page }) => {
         // Generate report first
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
         await page.click('#generateBtn');
 
         // Wait for results
@@ -36,12 +35,11 @@ test.describe('CSV Export', () => {
 
     test('CSV contains expected headers', async ({ page }) => {
         // Generate report first
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
         await page.click('#generateBtn');
 
         // Wait for results
@@ -68,6 +66,10 @@ test.describe('CSV Export', () => {
             expect(headers).toContain('Date');
             expect(headers).toContain('Regular');
             expect(headers).toContain('Overtime');
+
+            const dataLines = lines.slice(1).filter(l => l.trim());
+            expect(dataLines.some(line => line.includes('Alice Johnson'))).toBe(true);
+            expect(dataLines.some(line => line.includes('3h'))).toBe(true);
         }
     });
 });

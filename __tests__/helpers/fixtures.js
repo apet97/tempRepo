@@ -13,6 +13,8 @@ import { jest } from '@jest/globals';
 // Constants - Unified mock values used across all tests
 // ============================================================================
 
+let fixturesEntryCounter = 0;
+
 /**
  * Standard mock authentication token
  * All tests should use this consistent format
@@ -147,7 +149,11 @@ export const TestFixtures = {
    * @returns {Object} Entry fixture
    */
   createEntryFixture(overrides = {}) {
-    const id = overrides.id || `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    if (!fixturesEntryCounter) {
+        fixturesEntryCounter = 0;
+    }
+    fixturesEntryCounter += 1;
+    const id = overrides.id || `entry_${fixturesEntryCounter}`;
     const defaults = {
       id,
       userId: MOCK_USER_IDS.primary,

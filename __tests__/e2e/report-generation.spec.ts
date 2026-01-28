@@ -3,18 +3,20 @@ import { setupApiMocks, navigateWithToken, mockUsers } from './helpers/mock-api'
 
 test.describe('Report Generation', () => {
     test.beforeEach(async ({ page }) => {
-        await setupApiMocks(page);
+        page.on('dialog', async (dialog) => {
+            await dialog.accept();
+        });
+        await setupApiMocks(page, { entriesPerUser: 1, startDate: '2025-01-15' });
         await navigateWithToken(page);
     });
 
     test('generates report when clicking Generate button', async ({ page }) => {
         // Set date range
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
 
         // Click generate
         await page.click('#generateBtn');
@@ -28,12 +30,11 @@ test.describe('Report Generation', () => {
 
     test('shows summary table with user data', async ({ page }) => {
         // Set date range and generate
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
         await page.click('#generateBtn');
 
         // Wait for summary table
@@ -42,16 +43,20 @@ test.describe('Report Generation', () => {
         // Should have rows for each user
         const rows = page.locator('#summaryTableBody tr');
         await expect(rows).toHaveCount(mockUsers.length);
+
+        // First row should include a deterministic total (3h) for the first user
+        const firstRowText = await rows.first().innerText();
+        expect(firstRowText).toContain('Alice Johnson');
+        expect(firstRowText).toContain('3h');
     });
 
     test('switches between summary and detailed tabs', async ({ page }) => {
         // Generate report first
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
         await page.click('#generateBtn');
 
         // Wait for results
@@ -79,12 +84,11 @@ test.describe('Report Generation', () => {
         await expect(page.locator('#exportBtn')).toBeDisabled();
 
         // Generate report
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
         await page.click('#generateBtn');
 
         // Wait for results
@@ -110,13 +114,9 @@ test.describe('Report Generation', () => {
     });
 
     test('validates date range (start before end)', async ({ page }) => {
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1);
-
         // Set invalid range (start after end)
-        await page.fill('#startDate', today.toISOString().split('T')[0]);
-        await page.fill('#endDate', yesterday.toISOString().split('T')[0]);
+        await page.fill('#startDate', '2025-01-15');
+        await page.fill('#endDate', '2025-01-14');
         await page.click('#generateBtn');
 
         // Should show validation error (via error dialog or other means)
@@ -127,12 +127,11 @@ test.describe('Report Generation', () => {
 
     test('group by selector changes summary grouping', async ({ page }) => {
         // Generate report first
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
         await page.click('#generateBtn');
 
         // Wait for results
@@ -147,6 +146,12 @@ test.describe('Report Generation', () => {
 });
 
 test.describe('Report Generation - Error Handling', () => {
+    test.beforeEach(async ({ page }) => {
+        page.on('dialog', async (dialog) => {
+            await dialog.accept();
+        });
+    });
+
     test('shows error when users fetch fails', async ({ page }) => {
         await setupApiMocks(page, { shouldFailUsers: true });
         await navigateWithToken(page);
@@ -160,21 +165,23 @@ test.describe('Report Generation - Error Handling', () => {
         await expect(apiStatusBanner.or(emptyStateWithError)).toBeVisible({ timeout: 10000 });
     });
 
-    test('shows error when report fetch fails', async ({ page }) => {
+    test('handles report fetch failure gracefully', async ({ page }) => {
         await setupApiMocks(page, { shouldFailReport: true });
         await navigateWithToken(page);
 
         // Set date range and generate
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - 7);
+        const startDate = '2025-01-08';
+        const endDate = '2025-01-15';
 
-        await page.fill('#startDate', startDate.toISOString().split('T')[0]);
-        await page.fill('#endDate', today.toISOString().split('T')[0]);
+        await page.fill('#startDate', startDate);
+        await page.fill('#endDate', endDate);
         await page.click('#generateBtn');
 
-        // Should show error (check for error dialog or message)
-        await page.waitForTimeout(2000);
-        // The exact error UI depends on implementation
+        // Should still render without crashing; rows exist with zeroed totals
+        await expect(page.locator('#resultsContainer')).toBeVisible({ timeout: 10000 });
+        const rows = page.locator('#summaryTableBody tr');
+        await expect(rows).toHaveCount(mockUsers.length);
+        const firstRowText = await rows.first().innerText();
+        expect(firstRowText).toContain('0h');
     });
 });
