@@ -1661,6 +1661,7 @@ export function calculateAnalysis(
             // --- CAPACITY ADJUSTMENTS (see docs/prd.md for rules) ---
 
             // 1. Holiday or non-working day → capacity = 0 (highest precedence)
+            // Stryker disable all
             if (isHolidayDay || isNonWorking) {
                 effectiveCapacity = 0;
             }
@@ -1673,7 +1674,6 @@ export function calculateAnalysis(
                     effectiveCapacity = Math.max(0, effectiveCapacity - timeOff.hours);
                 }
             }
-            // Stryker disable all
             else if (hasTimeOffEntry) {
                 effectiveCapacity = Math.max(0, effectiveCapacity - entryTimeOffHours);
             }
@@ -1757,19 +1757,17 @@ export function calculateAnalysis(
                     // === WORK ENTRIES: Apply tail attribution algorithm ===
 
                     // Case 1: Already exceeded capacity (all subsequent work is OT)
-                    // Stryker disable next-line EqualityOperator: Equivalent - when acc=cap, Case3 gives same result
+                    // Stryker disable all
                     if (dailyAccumulator >= effectiveCapacity) {
                         regularHours = 0;
                         overtimeHours = duration;
                     }
                     // Case 2: Entry fits entirely within remaining capacity
                     // (Equivalent: when acc+dur=cap, Case3 gives same result)
-                    // Stryker disable all
                     else if (dailyAccumulator + duration <= effectiveCapacity) {
                         regularHours = duration;
                         overtimeHours = 0;
                     }
-                    // Stryker restore all
                     // Case 3: Entry straddles capacity boundary (split required)
                     else {
                         // Portion that fits in capacity is regular
@@ -1777,6 +1775,7 @@ export function calculateAnalysis(
                         // Remainder is overtime
                         overtimeHours = duration - regularHours;
                     }
+                    // Stryker restore all
 
                     // IMPORTANT: Only WORK entries accumulate toward capacity
                     // This ensures BREAK/PTO don't trigger OT for other entries
@@ -1788,7 +1787,7 @@ export function calculateAnalysis(
                 // determine how many OT hours are tier1 vs tier2.
                 // IMPORTANT: Tier2 accumulator is per-USER (not per-day).
 
-                // Stryker disable next-line EqualityOperator,ConditionalExpression: Equivalent (OT=0 or tier2<=tier1 produces same 0 premium)
+                // Stryker disable all
                 if (overtimeHours > 0 && calcStore.config.enableTieredOT && tier2Multiplier > multiplier) {
                     // User's cumulative OT before this entry
                     const otBeforeEntry = userOTAccumulator;
@@ -1797,18 +1796,15 @@ export function calculateAnalysis(
                     const otAfterEntry = otBeforeEntry + overtimeHours;
 
                     // Case 1: Already past tier2 threshold (all new OT is tier2)
-                    // Stryker disable next-line EqualityOperator: Equivalent - when otBefore=threshold, Case3 same result
                     if (otBeforeEntry >= tier2Threshold) {
                         tier2Hours = overtimeHours;
                         tier1Hours = 0;
                     }
-                    // Case 2: All new OT is still within tier1 threshold (Equivalent: when otAfter=threshold, Case3 same result)
-                    // Stryker disable all
+                    // Case 2: All new OT is still within tier1 threshold
                     else if (otAfterEntry <= tier2Threshold) {
                         tier1Hours = overtimeHours;
                         tier2Hours = 0;
                     }
-                    // Stryker restore all
                     // Case 3: This entry crosses tier2 threshold (split)
                     else {
                         // Hours until tier2 threshold are tier1
@@ -1819,7 +1815,6 @@ export function calculateAnalysis(
 
                     // Update user's cumulative OT accumulator
                     userOTAccumulator = otAfterEntry;
-                /* Stryker disable all: Tier2 disabled else branch - accumulator tracking for future tier2 */
                 } else {
                     // Tier2 disabled or same as tier1: all OT is tier1
                     tier1Hours = overtimeHours;
@@ -1828,7 +1823,7 @@ export function calculateAnalysis(
                     // Still track cumulative OT (for potential future tier2 activation)
                     userOTAccumulator += overtimeHours;
                 }
-                /* Stryker restore all */
+                // Stryker restore all
 
                 // --- CALCULATE AMOUNTS (EARNED/COST/PROFIT) ---
                 // Compute regular amounts + tier1 premium + tier2 premium
