@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { setupApiMocks, navigateWithToken } from './helpers/mock-api';
+import { setupApiMocks, navigateWithToken, freezeTime } from './helpers/mock-api';
 
 test.describe('Configuration Panel', () => {
     test.beforeEach(async ({ page }) => {
+        page.on('dialog', async (dialog) => {
+            await dialog.accept();
+        });
+        await freezeTime(page);
         await setupApiMocks(page);
         await navigateWithToken(page);
     });

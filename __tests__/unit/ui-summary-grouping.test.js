@@ -7,6 +7,7 @@ import { renderSummaryTable } from '../../js/ui/summary.js';
 import { initializeElements } from '../../js/ui/shared.js';
 import { store } from '../../js/state.js';
 import { calculateAnalysis } from '../../js/calc.js';
+import { formatWeekKey, getWeekKey } from '../../js/utils.js';
 import { createMockStore } from '../helpers/mock-data.js';
 import { standardAfterEach } from '../helpers/setup.js';
 
@@ -180,6 +181,9 @@ describe('Summary Table grouping behaviors', () => {
 
     const header = document.querySelector('#summaryHeaderRow');
     expect(header.textContent).toContain('Week');
+    const expectedLabel = formatWeekKey(getWeekKey('2025-01-15'));
+    const firstRow = document.querySelector('#summaryTableBody tr');
+    expect(firstRow?.textContent).toContain(expectedLabel);
   });
 
   it('hides billable columns when breakdown is disabled', () => {

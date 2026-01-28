@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { setupApiMocks, navigateWithToken, mockUsers } from './helpers/mock-api';
+import { setupApiMocks, navigateWithToken, mockUsers, freezeTime } from './helpers/mock-api';
 
 test.describe('Report Generation', () => {
     test.beforeEach(async ({ page }) => {
         page.on('dialog', async (dialog) => {
             await dialog.accept();
         });
+        await freezeTime(page);
         await setupApiMocks(page, { entriesPerUser: 1, startDate: '2025-01-15' });
         await navigateWithToken(page);
     });
@@ -26,6 +27,7 @@ test.describe('Report Generation', () => {
 
         // Summary strip should be visible
         await expect(page.locator('#summaryStrip')).toBeVisible();
+        await expect(page.locator('#summaryStrip')).toContainText('Total time9h');
     });
 
     test('shows summary table with user data', async ({ page }) => {
@@ -150,6 +152,7 @@ test.describe('Report Generation - Error Handling', () => {
         page.on('dialog', async (dialog) => {
             await dialog.accept();
         });
+        await freezeTime(page);
     });
 
     test('shows error when users fetch fails', async ({ page }) => {

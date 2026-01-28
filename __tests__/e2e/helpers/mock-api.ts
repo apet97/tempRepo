@@ -225,6 +225,32 @@ export async function setupApiMocks(page: Page, options: {
 }
 
 /**
+ * Freeze browser time for deterministic tests.
+ */
+export async function freezeTime(page: Page, iso: string = '2025-01-15T12:00:00Z') {
+    await page.addInitScript(({ iso: isoString }) => {
+        const fixed = new Date(isoString);
+        const OriginalDate = Date;
+        // @ts-ignore - override Date for deterministic tests
+        // eslint-disable-next-line no-global-assign
+        Date = class extends OriginalDate {
+            constructor(...args: any[]) {
+                return args.length ? new OriginalDate(...args) : new OriginalDate(fixed);
+            }
+            static now() {
+                return fixed.getTime();
+            }
+            static parse(str: string) {
+                return OriginalDate.parse(str);
+            }
+            static UTC(...args: any[]) {
+                return OriginalDate.UTC(...args);
+            }
+        } as DateConstructor;
+    }, { iso });
+}
+
+/**
  * Navigate to app with mock token
  */
 export async function navigateWithToken(page: Page, token?: string) {

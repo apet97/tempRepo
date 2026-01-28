@@ -16,9 +16,7 @@ const uiMock = {
   renderThrottleStatus: jest.fn(),
   renderSummaryStrip: jest.fn(),
   renderSummaryTable: jest.fn(),
-  renderDetailedTable: jest.fn(),
-  renderOverridesPage: jest.fn(),
-  initializeElements: jest.fn()
+  renderDetailedTable: jest.fn()
 };
 
 const apiMock = {
@@ -36,7 +34,7 @@ jest.unstable_mockModule('../../js/calc.js', () => ({
   calculateAnalysis: jest.fn(() => [])
 }));
 
-describe('Main handleGenerateReport cache behavior', () => {
+describe('Main handleGenerateReport concurrency', () => {
   let handleGenerateReport;
   let store;
   let originalClaims;
@@ -117,45 +115,29 @@ describe('Main handleGenerateReport cache behavior', () => {
     store.ui = originalUi;
   });
 
-  it('uses cached entries when user selects "use"', async () => {
+  it('renders only the latest request when responses resolve out of order', async () => {
     const start = '2025-01-01';
     const end = '2025-01-07';
-    const entries = [
-      {
-        id: 'entry_1',
-        userId: 'user1',
-        userName: 'User 1',
-        timeInterval: {
-          start: '2025-01-02T09:00:00Z',
-          end: '2025-01-02T10:00:00Z',
-          duration: 'PT1H'
-        },
-        hourlyRate: { amount: 5000 },
-        billable: true
-      }
-    ];
-
-    const cacheKey = store.getReportCacheKey(start, end);
-    store.setCachedReport(cacheKey, entries);
-    uiMock.showCachePrompt.mockResolvedValue('use');
 
     document.getElementById('startDate').value = start;
     document.getElementById('endDate').value = end;
 
-    await handleGenerateReport();
+    let resolveFirst;
+    let resolveSecond;
 
-    expect(apiMock.fetchDetailedReport).not.toHaveBeenCalled();
-    expect(uiMock.updateLoadingProgress).toHaveBeenCalledWith(0, 'cached data');
-    expect(store.rawEntries).toEqual(entries);
-    expect(uiMock.renderSummaryStrip).toHaveBeenCalled();
-  });
+    apiMock.fetchDetailedReport.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveFirst = resolve; })
+    );
+    apiMock.fetchDetailedReport.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveSecond = resolve; })
+    );
 
-  it('fetches fresh entries when user declines cache', async () => {
-    const start = '2025-01-01';
-    const end = '2025-01-07';
-    const entries = [
+    const firstPromise = handleGenerateReport();
+    const secondPromise = handleGenerateReport();
+
+    resolveSecond([
       {
-        id: 'entry_2',
+        id: 'entry_second',
         userId: 'user1',
         userName: 'User 1',
         timeInterval: {
@@ -166,34 +148,25 @@ describe('Main handleGenerateReport cache behavior', () => {
         hourlyRate: { amount: 5000 },
         billable: true
       }
-    ];
+    ]);
+    await secondPromise;
 
-    const cacheKey = store.getReportCacheKey(start, end);
-    store.setCachedReport(cacheKey, [{ id: 'old_entry' }]);
-    uiMock.showCachePrompt.mockResolvedValue('refresh');
-    apiMock.fetchDetailedReport.mockResolvedValue(entries);
-    const setCacheSpy = jest.spyOn(store, 'setCachedReport');
+    resolveFirst([
+      {
+        id: 'entry_first',
+        userId: 'user1',
+        userName: 'User 1',
+        timeInterval: {
+          start: '2025-01-02T09:00:00Z',
+          end: '2025-01-02T10:00:00Z',
+          duration: 'PT1H'
+        },
+        hourlyRate: { amount: 5000 },
+        billable: true
+      }
+    ]);
+    await firstPromise;
 
-    document.getElementById('startDate').value = start;
-    document.getElementById('endDate').value = end;
-
-    await handleGenerateReport();
-
-    expect(apiMock.fetchDetailedReport).toHaveBeenCalled();
-    expect(setCacheSpy).toHaveBeenCalledWith(cacheKey, entries);
-    expect(store.rawEntries).toEqual(entries);
-    expect(uiMock.renderSummaryStrip).toHaveBeenCalled();
-  });
-
-  it('does not fetch when large date range is cancelled', async () => {
-    uiMock.showLargeDateRangeWarning.mockResolvedValue(false);
-
-    document.getElementById('startDate').value = '2024-01-01';
-    document.getElementById('endDate').value = '2026-01-01';
-
-    await handleGenerateReport();
-
-    expect(apiMock.fetchDetailedReport).not.toHaveBeenCalled();
-    expect(uiMock.renderSummaryStrip).not.toHaveBeenCalled();
+    expect(uiMock.renderSummaryStrip).toHaveBeenCalledTimes(1);
   });
 });

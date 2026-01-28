@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { setupApiMocks, navigateWithToken } from './helpers/mock-api';
+import { setupApiMocks, navigateWithToken, freezeTime } from './helpers/mock-api';
 
 test.describe('CSV Export', () => {
     test.beforeEach(async ({ page }) => {
+        page.on('dialog', async (dialog) => {
+            await dialog.accept();
+        });
+        await freezeTime(page);
         await setupApiMocks(page, { entriesPerUser: 1, startDate: '2025-01-15' });
         await navigateWithToken(page);
     });
@@ -70,6 +74,7 @@ test.describe('CSV Export', () => {
             const dataLines = lines.slice(1).filter(l => l.trim());
             expect(dataLines.some(line => line.includes('Alice Johnson'))).toBe(true);
             expect(dataLines.some(line => line.includes('3h'))).toBe(true);
+            expect(dataLines.some(line => line.includes('2025-01-15'))).toBe(true);
         }
     });
 });

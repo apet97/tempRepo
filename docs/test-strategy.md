@@ -66,3 +66,15 @@ This document defines the testing tiers, quality targets, and workflows for OTPL
 - Prefer small, focused diffs.
 - Update tests alongside behavior changes.
 - Consolidate overlapping suites to keep runtime and maintenance cost low.
+
+## Choosing the Right Test Type
+
+- Unit: use for pure logic and small helpers (calc, utils, data transforms).
+- Integration: use for module orchestration (main flow, cache decisions, error paths).
+- E2E: use for critical user flows and computed outputs (report generation, export).
+
+## What to Avoid
+
+- Spec-only tests that restate constants without validating behavior.
+- Randomized test data that isn’t seeded or deterministic.
+- Assertions that only check “it rendered” without validating values.
