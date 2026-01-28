@@ -62,7 +62,8 @@ jest.mock('../../js/state.js', () => ({
       applyHolidays: true,
       applyTimeOff: true,
       showBillableBreakdown: true,
-      overtimeBasis: 'daily'
+      overtimeBasis: 'daily',
+      reportTimeZone: ''
     },
     calcParams: {
       dailyThreshold: 8,
@@ -74,6 +75,7 @@ jest.mock('../../js/state.js', () => ({
     timeOff: new Map(),
     overrides: {},
     apiStatus: { profilesFailed: 0, holidaysFailed: 0, timeOffFailed: 0 },
+    throttleStatus: { retryCount: 0, lastRetryTime: null },
     ui: {
       isLoading: false,
       summaryExpanded: false,
@@ -83,6 +85,19 @@ jest.mock('../../js/state.js', () => ({
     },
     setToken: jest.fn(),
     resetApiStatus: jest.fn(),
+    resetThrottleStatus: jest.fn(),
+    clearFetchCache: jest.fn(),
+    loadProfilesCache: jest.fn(),
+    saveProfilesCache: jest.fn(),
+    loadHolidayCache: jest.fn(),
+    saveHolidayCache: jest.fn(),
+    loadTimeOffCache: jest.fn(),
+    saveTimeOffCache: jest.fn(),
+    getReportCacheKey: jest.fn(() => null),
+    getCachedReport: jest.fn(() => null),
+    setCachedReport: jest.fn(),
+    clearReportCache: jest.fn(),
+    saveConfig: jest.fn(),
     updateOverride: jest.fn(),
     saveOverrides: jest.fn(),
     getUserOverride: jest.fn(() => ({}))
@@ -105,6 +120,13 @@ jest.mock('../../js/api.js', () => ({
 // Mock utils module
 jest.mock('../../js/utils.js', () => ({
   IsoUtils: {
+    toDateKey: jest.fn((date) => {
+      if (!date) return '';
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }),
     toISODate: jest.fn((date) => {
       const y = date.getUTCFullYear();
       const m = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -126,6 +148,9 @@ jest.mock('../../js/utils.js', () => ({
     }),
     debounce: jest.fn((fn) => fn)
   },
+  debounce: jest.fn((fn) => fn),
+  setCanonicalTimeZone: jest.fn(),
+  isValidTimeZone: jest.fn(() => true),
   formatHours: jest.fn((h) => `${h}h`),
   formatCurrency: jest.fn((a) => `$${a}`),
   safeJSONParse: jest.fn((text, fallback) => {
@@ -197,8 +222,18 @@ describe('main.js - Initialization', () => {
       <input type="checkbox" id="applyHolidays" checked>
       <input type="checkbox" id="applyTimeOff" checked>
       <input type="checkbox" id="showBillableBreakdown" checked>
+      <select id="overtimeBasis">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="both">Both</option>
+      </select>
       <input type="number" id="configDaily" value="8">
+      <div id="weeklyThresholdContainer">
+        <input type="number" id="configWeekly" value="40">
+      </div>
       <input type="number" id="configMultiplier" value="1.5">
+      <input type="text" id="reportTimeZone" list="timeZoneList" value="">
+      <datalist id="timeZoneList"></datalist>
     `;
 
     // Initialize UI elements

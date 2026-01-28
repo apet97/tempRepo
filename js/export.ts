@@ -37,6 +37,10 @@ interface PlaceholderEntry {
     analysis: {
         regular: number;
         overtime: number;
+        dailyOvertime?: number;
+        weeklyOvertime?: number;
+        overlapOvertime?: number;
+        combinedOvertime?: number;
         isBillable: boolean;
     };
 }
@@ -65,6 +69,10 @@ export function downloadCsv(
         'EffectiveCapacityHours',
         'RegularHours',
         'OvertimeHours',
+        'DailyOvertimeHours',
+        'WeeklyOvertimeHours',
+        'OverlapOvertimeHours',
+        'CombinedOvertimeHours',
         'BillableWorkedHours',
         'BillableOTHours',
         'NonBillableWorkedHours',
@@ -110,6 +118,10 @@ export function downloadCsv(
                 const billableOT = e.analysis?.isBillable ? e.analysis?.overtime || 0 : 0;
                 const nonBillableWorked = !e.analysis?.isBillable ? e.analysis?.regular || 0 : 0;
                 const nonBillableOT = !e.analysis?.isBillable ? e.analysis?.overtime || 0 : 0;
+                const dailyOT = e.analysis?.dailyOvertime || 0;
+                const weeklyOT = e.analysis?.weeklyOvertime || 0;
+                const overlapOT = e.analysis?.overlapOvertime || 0;
+                const combinedOT = e.analysis?.combinedOvertime ?? e.analysis?.overtime ?? 0;
                 const totalHours = e.timeInterval.duration
                     ? parseIsoDuration(e.timeInterval.duration)
                     : 0;
@@ -122,6 +134,10 @@ export function downloadCsv(
                     formatHours(day.meta?.capacity ?? 0),
                     formatHours(e.analysis?.regular || 0),
                     formatHours(e.analysis?.overtime || 0),
+                    formatHours(dailyOT),
+                    formatHours(weeklyOT),
+                    formatHours(overlapOT),
+                    formatHours(combinedOT),
                     formatHours(billableWorked),
                     formatHours(billableOT),
                     formatHours(nonBillableWorked),

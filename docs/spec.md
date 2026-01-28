@@ -78,7 +78,7 @@ class Store {
 ---
 
 ## 3. High-Performance Data Orchestration
-v2.1 uses `Promise.all` to saturate the client-side rate limiter and minimize waiting time.
+v2.1 uses parallel fetches with cache-aware orchestration to saturate the client-side rate limiter and minimize waiting time.
 
 ```javascript
 // Orchestration Logic in main.js
@@ -88,8 +88,11 @@ const promises = [
     Api.fetchAllHolidays(..., { signal }),
     Api.fetchAllTimeOff(..., { signal })
 ];
-await Promise.all(promises);
+await Promise.allSettled(promises);
 ```
+
+Cached profiles, holidays, and time-off maps are loaded from localStorage first (6-hour TTL, versioned).
+Only missing user IDs or ranges are fetched over the network, and successful results are persisted back to cache.
 
 ---
 
@@ -111,18 +114,22 @@ async function waitForToken() {
 ---
 
 ## 5. Calculation Logic: Timezone Awareness
-To prevent evening work from shifting to the next day, date extraction is performed using the browser's local time rather than raw string splitting.
+To prevent evening work from shifting to the next day, date extraction is performed using a canonical timezone instead of raw string splitting.
+The canonical timezone is resolved in this order: workspace claim (if present), user-selected report timezone, then browser default.
 
 ```javascript
 // extractDateKey in utils.js
 extractDateKey(isoString) {
     const date = new Date(isoString);
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`; // Local YYYY-MM-DD
+    return formatDateKeyInTimeZone(date, canonicalTimeZone);
 }
 ```
+
+### 5.1 Overtime Basis Modes
+OTPLUS supports three overtime bases:
+- `daily` (default): overtime is calculated when daily capacity is exceeded.
+- `weekly`: overtime is calculated when weeklyThreshold is exceeded across a Monday-based week.
+- `both`: calculates daily and weekly overtime in parallel; combined OT uses the maximum of the two with overlap tracked separately.
 
 ---
 
@@ -135,6 +142,7 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 | **Quote Escaping** | Replaces `"` with `""`.
 | **Injection Mitigation** | Prepends `'` to fields starting with dangerous formula characters (`=`, `+`, `-`, `@`). |
 | **Decimal Hours Column** | Adds `TotalHoursDecimal` alongside `TotalHours` for decimal-friendly exports. |
+| **OT Breakdown Columns** | Exports daily/weekly/overlap/combined overtime columns in addition to total OT. |
 
 --- 
 
@@ -159,6 +167,9 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 |-----|-------|
 | `otplus_config` | JSON object containing toggles and daily/multiplier thresholds. |
 | `overtime_overrides_{workspaceId}` | Map of userId -> manual overrides. |
+| `otplus_profiles_{workspaceId}` | Cached profile map with `{ version, timestamp, entries }`. |
+| `otplus_holidays_{workspaceId}_{start}_{end}` | Cached holiday map scoped to the report range. |
+| `otplus_timeoff_{workspaceId}_{start}_{end}` | Cached time-off map scoped to the report range. |
 
 `otplus_config.config` includes `showDecimalTime` (boolean) to persist the UI formatting toggle.
 

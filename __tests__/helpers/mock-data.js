@@ -188,7 +188,8 @@ export function createMockStore(options = {}) {
       showBillableBreakdown: true,
       showDecimalTime: false,
       amountDisplay: 'earned',
-      overtimeBasis: 'daily'
+      overtimeBasis: 'daily',
+      reportTimeZone: ''
     },
     calcParams: {
       dailyThreshold: 8,

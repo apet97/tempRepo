@@ -505,4 +505,54 @@ describe('Weekly Overtime Basis Specification', () => {
       expect(userResult.totals.overtime).toBe(8);
     });
   });
+
+  describe('Both Overtime Basis', () => {
+    it('should use daily overtime when weekly threshold is not exceeded', () => {
+      mockStore.config.overtimeBasis = 'both';
+      const dateRange = { start: '2025-01-13', end: '2025-01-16' };
+
+      // 4 days x 10h = 40h total; daily OT = 8h, weekly OT = 0h
+      const entries = [
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-13', 9).withDuration(10).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-14', 9).withDuration(10).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-15', 9).withDuration(10).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-16', 9).withDuration(10).build()
+      ];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+      const userResult = results.find(u => u.userId === 'user0');
+
+      expect(userResult.totals.total).toBe(40);
+      expect(userResult.totals.dailyOvertime).toBe(8);
+      expect(userResult.totals.weeklyOvertime).toBe(0);
+      expect(userResult.totals.overlapOvertime).toBe(0);
+      expect(userResult.totals.combinedOvertime).toBe(8);
+      expect(userResult.totals.overtime).toBe(8);
+    });
+
+    it('should use weekly overtime when daily threshold is not exceeded', () => {
+      mockStore.config.overtimeBasis = 'both';
+      const dateRange = { start: '2025-01-13', end: '2025-01-18' };
+
+      // 6 days x 8h = 48h total; daily OT = 0h, weekly OT = 8h
+      const entries = [
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-13', 9).withDuration(8).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-14', 9).withDuration(8).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-15', 9).withDuration(8).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-16', 9).withDuration(8).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-17', 9).withDuration(8).build(),
+        new EntryBuilder().withUser('user0', 'User 0').onDate('2025-01-18', 9).withDuration(8).build()
+      ];
+
+      const results = calculateAnalysis(entries, mockStore, dateRange);
+      const userResult = results.find(u => u.userId === 'user0');
+
+      expect(userResult.totals.total).toBe(48);
+      expect(userResult.totals.dailyOvertime).toBe(0);
+      expect(userResult.totals.weeklyOvertime).toBe(8);
+      expect(userResult.totals.overlapOvertime).toBe(0);
+      expect(userResult.totals.combinedOvertime).toBe(8);
+      expect(userResult.totals.overtime).toBe(8);
+    });
+  });
 });

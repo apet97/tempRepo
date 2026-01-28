@@ -1319,8 +1319,28 @@ export const Api = {
                 const isFullDay =
                     !timeOffPeriod.halfDay &&
                     (request.timeUnit === 'DAYS' || !timeOffPeriod.halfDayHours);
+                let hoursForDay = 0;
+                if (!isFullDay) {
+                    const halfDayHours = Number(timeOffPeriod.halfDayHours);
+                    if (Number.isFinite(halfDayHours) && halfDayHours > 0) {
+                        hoursForDay = halfDayHours;
+                    } else {
+                        const periodStart = innerPeriod.start || timeOffPeriod.start || timeOffPeriod.startDate;
+                        const periodEnd = innerPeriod.end || timeOffPeriod.end || timeOffPeriod.endDate;
+                        if (periodStart && periodEnd) {
+                            const start = new Date(periodStart);
+                            const end = new Date(periodEnd);
+                            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                                const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                                if (Number.isFinite(diffHours) && diffHours > 0) {
+                                    hoursForDay = diffHours;
+                                }
+                            }
+                        }
+                    }
+                }
                 // Initialize start date
-                userMap.set(startKey, { isFullDay, hours: 0 });
+                userMap.set(startKey, { isFullDay, hours: hoursForDay });
 
                 // Handle multi-day time off
                 // Stryker disable next-line ConditionalExpression,EqualityOperator: Multi-day expansion requires inequality check
@@ -1329,7 +1349,7 @@ export const Api = {
                     dateRange.forEach((dateKey) => {
                         // Stryker disable next-line ConditionalExpression: Idempotent but avoids overwriting existing entries
                         if (!userMap.has(dateKey)) {
-                            userMap.set(dateKey, { isFullDay, hours: 0 });
+                            userMap.set(dateKey, { isFullDay, hours: hoursForDay });
                         }
                     });
                 }

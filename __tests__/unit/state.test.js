@@ -61,7 +61,8 @@ describe('State Module - Store Class', () => {
         enableTieredOT: false,
         amountDisplay: 'earned',
         overtimeBasis: 'daily',
-        maxPages: 50
+        maxPages: 50,
+        reportTimeZone: ''
       });
     });
 
@@ -2018,7 +2019,8 @@ describe('State Corruption Handling', () => {
       enableTieredOT: false,
       amountDisplay: 'earned',
       overtimeBasis: 'daily',
-      maxPages: 50
+      maxPages: 50,
+      reportTimeZone: ''
     };
     store.calcParams = {
       dailyThreshold: 8,

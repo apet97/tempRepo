@@ -68,6 +68,15 @@ The detailed view shows an entry-by-entry breakdown:
 ### Daily Capacity Threshold
 Set the number of hours that constitute a full workday. Hours worked beyond this threshold are counted as overtime.
 
+### Overtime Basis (Daily, Weekly, Both)
+Choose how overtime is computed:
+- **Daily** - Overtime begins when daily capacity is exceeded.
+- **Weekly** - Overtime begins when the weekly threshold is exceeded (Monday-based weeks).
+- **Both** - Calculates daily and weekly overtime in parallel and reports the combined OT (maximum of the two). The summary strip adds OT Daily, OT Weekly, and OT Overlap metrics.
+
+### Weekly Threshold (Weekly or Both)
+Defines the number of hours in a week before overtime begins. Default is 40 hours.
+
 ### Overtime Multiplier (Tier 1)
 Set the multiplier applied to overtime hours for cost calculations (e.g., 1.5x for time-and-a-half).
 
@@ -83,6 +92,9 @@ Configure a second overtime tier for extended overtime:
 | **Decimal time** | Show `8.50` instead of `8h 30m` |
 | **Billable breakdown** | Show billable vs non-billable split |
 | **Use profile capacity** | Pull daily capacity from user's Clockify profile |
+
+### Report Time Zone
+Select the time zone used to group entries into dates. By default, OTPLUS uses the workspace time zone (if provided by Clockify), otherwise your browser time zone. You can override this with any IANA time zone (for example, `America/Chicago`).
 
 ---
 
@@ -112,6 +124,7 @@ Export your report data to CSV format for use in spreadsheets or payroll systems
 ### Included Columns
 The export includes all visible columns plus:
 - `TotalHoursDecimal` - Total hours in decimal format for calculations
+- `DailyOvertimeHours`, `WeeklyOvertimeHours`, `OverlapOvertimeHours`, `CombinedOvertimeHours` - Overtime breakdown fields for audits
 
 ### Formula Injection Protection
 OTPLUS automatically sanitizes exported data to prevent spreadsheet formula injection attacks. Fields starting with `=`, `+`, `-`, or `@` are safely escaped.
@@ -142,7 +155,8 @@ If a report is taking too long to generate:
 If the numbers don't match expectations:
 1. Check user overrides - custom capacity settings affect calculations
 2. Verify the daily capacity threshold is set correctly
-3. Confirm holidays and time-off are properly recorded in Clockify
+3. Confirm holidays and time-off are properly recorded in Clockify (half-day requests use their provided hours)
+4. If dates look shifted, confirm the Report Time Zone matches your workspace or payroll policy
 
 ### Dark Mode
 OTPLUS automatically follows your Clockify profile preference. To change:

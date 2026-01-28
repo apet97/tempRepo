@@ -12,7 +12,10 @@ import {
   formatHours,
   IsoUtils,
   classifyEntryForOvertime,
-  base64urlDecode
+  base64urlDecode,
+  isValidTimeZone,
+  setCanonicalTimeZone,
+  getCanonicalTimeZone
 } from '../../js/utils.js';
 import { standardAfterEach } from '../helpers/setup.js';
 
@@ -304,6 +307,41 @@ describe('IsoUtils', () => {
 
     it('should return null for undefined input', () => {
       expect(IsoUtils.extractDateKey(undefined)).toBeNull();
+    });
+  });
+
+  describe('timezone helpers', () => {
+    afterEach(() => {
+      setCanonicalTimeZone(null);
+    });
+
+    it('should validate time zone identifiers', () => {
+      expect(isValidTimeZone('UTC')).toBe(true);
+      expect(isValidTimeZone('Invalid/Zone')).toBe(false);
+    });
+
+    it('should return a canonical timezone string', () => {
+      const tz = getCanonicalTimeZone();
+      expect(typeof tz).toBe('string');
+      expect(tz.length).toBeGreaterThan(0);
+    });
+
+    it('should use canonical timezone for date keys', () => {
+      setCanonicalTimeZone('America/Los_Angeles');
+      // 02:00Z on Jan 1 is still Dec 31 in LA (UTC-8)
+      expect(IsoUtils.extractDateKey('2025-01-01T02:00:00Z')).toBe('2024-12-31');
+    });
+
+    it('should format date keys in canonical timezone', () => {
+      setCanonicalTimeZone('UTC');
+      const date = new Date('2025-01-15T12:00:00Z');
+      expect(IsoUtils.toDateKey(date)).toBe('2025-01-15');
+    });
+
+    it('should ignore invalid canonical time zones', () => {
+      setCanonicalTimeZone('Not/AZone');
+      const tz = getCanonicalTimeZone();
+      expect(tz).not.toBe('Not/AZone');
     });
   });
 

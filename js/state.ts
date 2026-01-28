@@ -81,7 +81,13 @@
  */
 
 import { safeJSONParse } from './utils.js';
-import { STORAGE_KEYS, DEFAULT_MAX_PAGES, REPORT_CACHE_TTL } from './constants.js';
+import {
+    STORAGE_KEYS,
+    DEFAULT_MAX_PAGES,
+    REPORT_CACHE_TTL,
+    DATA_CACHE_TTL,
+    DATA_CACHE_VERSION,
+} from './constants.js';
 import type {
     User,
     UserProfile,
@@ -116,6 +122,19 @@ interface ReportCache {
     timestamp: number;
     /** Cached time entries from Detailed Report API */
     entries: TimeEntry[];
+}
+
+interface MapCache<T> {
+    version: number;
+    timestamp: number;
+    entries: [string, T][];
+}
+
+interface RangeMapCache<T> {
+    version: number;
+    timestamp: number;
+    range: { start: string; end: string };
+    entries: [string, [string, T][]][];
 }
 
 /**
@@ -197,6 +216,7 @@ class Store {
         amountDisplay: 'earned',
         overtimeBasis: 'daily',
         maxPages: DEFAULT_MAX_PAGES,
+        reportTimeZone: '',
     };
 
     /**
@@ -384,6 +404,18 @@ class Store {
                     ? (amountDisplay as 'earned' | 'cost' | 'profit')
                     : 'earned';
 
+                // Validate overtimeBasis mode
+                const overtimeBasis = String(this.config.overtimeBasis || '').toLowerCase();
+                const validOvertimeBases = new Set(['daily', 'weekly', 'both']);
+                this.config.overtimeBasis = validOvertimeBases.has(overtimeBasis)
+                    ? (overtimeBasis as 'daily' | 'weekly' | 'both')
+                    : 'daily';
+
+                // Validate reportTimeZone (store as string or empty)
+                if (typeof this.config.reportTimeZone !== 'string') {
+                    this.config.reportTimeZone = '';
+                }
+
                 // Validate and set maxPages
                 const configMaxPages = parsed.config?.maxPages;
                 if (typeof configMaxPages === 'number' && configMaxPages >= 0) {
@@ -505,6 +537,9 @@ class Store {
         this.token = token;
         this.claims = claims;
 
+        // Load cached profile data for this workspace (if present)
+        this.loadProfilesCache();
+
         // Load overrides for the new workspace (or empty if none saved)
         this._loadOverrides();
     }
@@ -519,6 +554,114 @@ class Store {
         return this.claims?.workspaceId
             ? `${STORAGE_KEYS.OVERRIDES_PREFIX}${this.claims.workspaceId}`
             : null;
+    }
+
+    private _getProfilesCacheKey(): string | null {
+        return this.claims?.workspaceId
+            ? `${STORAGE_KEYS.PROFILES_PREFIX}${this.claims.workspaceId}`
+            : null;
+    }
+
+    private _getRangeCacheKey(prefix: string, start: string, end: string): string | null {
+        return this.claims?.workspaceId
+            ? `${prefix}${this.claims.workspaceId}_${start}_${end}`
+            : null;
+    }
+
+    private _isCacheFresh(cache: { version?: number; timestamp?: number } | null): boolean {
+        if (!cache) return false;
+        if (cache.version !== DATA_CACHE_VERSION) return false;
+        if (typeof cache.timestamp !== 'number') return false;
+        return Date.now() - cache.timestamp <= DATA_CACHE_TTL;
+    }
+
+    loadProfilesCache(): void {
+        const cacheKey = this._getProfilesCacheKey();
+        if (!cacheKey) return;
+        const saved = localStorage.getItem(cacheKey);
+        if (!saved) return;
+        const cache = safeJSONParse<MapCache<UserProfile> | null>(saved, null);
+        if (!this._isCacheFresh(cache)) return;
+        if (!cache) return;
+        const map = new Map<string, UserProfile>(cache.entries || []);
+        if (map.size > 0) {
+            this.profiles = map;
+        }
+    }
+
+    saveProfilesCache(): void {
+        const cacheKey = this._getProfilesCacheKey();
+        if (!cacheKey) return;
+        const cache: MapCache<UserProfile> = {
+            version: DATA_CACHE_VERSION,
+            timestamp: Date.now(),
+            entries: Array.from(this.profiles.entries()),
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cache));
+    }
+
+    loadHolidayCache(start: string, end: string): void {
+        const cacheKey = this._getRangeCacheKey(STORAGE_KEYS.HOLIDAYS_PREFIX, start, end);
+        if (!cacheKey) return;
+        const saved = localStorage.getItem(cacheKey);
+        if (!saved) return;
+        const cache = safeJSONParse<RangeMapCache<Holiday> | null>(saved, null);
+        if (!cache || !this._isCacheFresh(cache)) return;
+        if (cache.range?.start !== start || cache.range?.end !== end) return;
+        const reconstructed = new Map<string, Map<string, Holiday>>();
+        (cache.entries || []).forEach(([userId, entries]) => {
+            reconstructed.set(userId, new Map(entries));
+        });
+        if (reconstructed.size > 0) {
+            this.holidays = reconstructed;
+        }
+    }
+
+    saveHolidayCache(start: string, end: string): void {
+        const cacheKey = this._getRangeCacheKey(STORAGE_KEYS.HOLIDAYS_PREFIX, start, end);
+        if (!cacheKey) return;
+        const cache: RangeMapCache<Holiday> = {
+            version: DATA_CACHE_VERSION,
+            timestamp: Date.now(),
+            range: { start, end },
+            entries: Array.from(this.holidays.entries()).map(([userId, map]) => [
+                userId,
+                Array.from(map.entries()),
+            ]),
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cache));
+    }
+
+    loadTimeOffCache(start: string, end: string): void {
+        const cacheKey = this._getRangeCacheKey(STORAGE_KEYS.TIMEOFF_PREFIX, start, end);
+        if (!cacheKey) return;
+        const saved = localStorage.getItem(cacheKey);
+        if (!saved) return;
+        const cache = safeJSONParse<RangeMapCache<TimeOffInfo> | null>(saved, null);
+        if (!cache || !this._isCacheFresh(cache)) return;
+        if (cache.range?.start !== start || cache.range?.end !== end) return;
+        const reconstructed = new Map<string, Map<string, TimeOffInfo>>();
+        (cache.entries || []).forEach(([userId, entries]) => {
+            reconstructed.set(userId, new Map(entries));
+        });
+        if (reconstructed.size > 0) {
+            this.timeOff = reconstructed;
+        }
+    }
+
+    saveTimeOffCache(start: string, end: string): void {
+        const cacheKey = this._getRangeCacheKey(STORAGE_KEYS.TIMEOFF_PREFIX, start, end);
+        if (!cacheKey) return;
+        const cache: RangeMapCache<TimeOffInfo> = {
+            version: DATA_CACHE_VERSION,
+            timestamp: Date.now(),
+            range: { start, end },
+            entries: Array.from(this.timeOff.entries()).map(([userId, map]) => [
+                userId,
+                Array.from(map.entries()),
+            ]),
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cache));
     }
 
     /**
@@ -1216,11 +1359,20 @@ class Store {
             localStorage.removeItem(overrideKey);
         }
 
-        // Remove all other workspace-scoped overrides (in case user accessed multiple workspaces)
+        // Remove all other workspace-scoped overrides and caches
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && key.startsWith(STORAGE_KEYS.OVERRIDES_PREFIX)) {
+                keysToRemove.push(key);
+            }
+            if (key && key.startsWith(STORAGE_KEYS.PROFILES_PREFIX)) {
+                keysToRemove.push(key);
+            }
+            if (key && key.startsWith(STORAGE_KEYS.HOLIDAYS_PREFIX)) {
+                keysToRemove.push(key);
+            }
+            if (key && key.startsWith(STORAGE_KEYS.TIMEOFF_PREFIX)) {
                 keysToRemove.push(key);
             }
         }
@@ -1251,6 +1403,7 @@ class Store {
             amountDisplay: 'earned',
             overtimeBasis: 'daily',
             maxPages: DEFAULT_MAX_PAGES,
+            reportTimeZone: '',
         };
 
         // Calculation parameters

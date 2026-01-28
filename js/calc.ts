@@ -119,6 +119,7 @@ import {
     round,
     parseIsoDuration,
     classifyEntryForOvertime,
+    getWeekKey,
     IsoUtils,
     type EntryClassification,
 } from './utils.js';
@@ -1073,6 +1074,10 @@ function createEmptyTotals(): UserTotals {
     return {
         regular: 0,
         overtime: 0,
+        dailyOvertime: 0,
+        weeklyOvertime: 0,
+        overlapOvertime: 0,
+        combinedOvertime: 0,
         total: 0,
         breaks: 0,
         billableWorked: 0,
@@ -1593,94 +1598,73 @@ export function calculateAnalysis(
             }
         }
 
-        // === INITIALIZE TIER2 OVERTIME ACCUMULATOR ===
-        // Track cumulative OT hours for this user across the entire date range.
-        // This is used to determine when tier2 premium kicks in.
-        // IMPORTANT: This is per-USER, not per-day (accumulates across all days).
-        let userOTAccumulator = 0;
+        const overtimeBasis = (calcStore.config.overtimeBasis || 'daily').toLowerCase() as
+            | 'daily'
+            | 'weekly'
+            | 'both';
+        const useDaily = overtimeBasis === 'daily' || overtimeBasis === 'both';
+        const useWeekly = overtimeBasis === 'weekly' || overtimeBasis === 'both';
 
-        // === PROCESS EACH DATE IN RANGE ===
-        // Important: Process ALL dates, not just dates with entries.
-        // This ensures expectedCapacity is calculated for every day.
+        const entryDailyOvertime = new Map<TimeEntry, number>();
+        const entryWeeklyOvertime = new Map<TimeEntry, number>();
+        const dayContextByDate = new Map<
+            string,
+            {
+                entries: TimeEntry[];
+                meta: DayMeta;
+                baseCapacity: number;
+                effectiveCapacity: number;
+                isHolidayDay: boolean;
+                isNonWorking: boolean;
+                isTimeOffDay: boolean;
+                timeOffHours: number;
+                forceOvertime: boolean;
+            }
+        >();
+
+        // === BUILD DAY CONTEXT (CAPACITY + FLAGS) ===
         for (const dateKey of allDates) {
-            // Get entries for this specific date (may be empty array)
             const dayEntries = entriesByDate.get(dateKey) || [];
 
-            // === DETERMINE DAY CONTEXT ===
-            // Gather all information about this day that affects capacity
-
-            // Get base capacity (before adjustments)
             const baseCapacity = getEffectiveCapacity(userId, dateKey, calcStore);
-
-            // Check if day is a holiday (from API)
             const holiday = getHoliday(userId, dateKey, calcStore);
-
-            // Check if day is a non-working day per profile (e.g., weekend)
             const isNonWorking = !isWorkingDay(userId, dateKey, calcStore);
-
-            // Check if user has time-off (from API)
             const timeOff = getTimeOff(userId, dateKey, calcStore);
 
-            // === DUAL-SOURCE DETECTION: Fallback to Entry Type ===
-            // If APIs are disabled but entries contain holiday/time-off markers,
-            // we still detect the context from entry types. This ensures correct
-            // overtime calculation even when API data is unavailable.
-
-            // Fallback holiday detection from entry type
             const hasHolidayEntry =
                 !calcStore.config.applyHolidays &&
                 dayEntries.some((e) => e.type === 'HOLIDAY' || e.type === 'HOLIDAY_TIME_ENTRY');
-
-            // Fallback time-off detection from entry type
             const hasTimeOffEntry =
                 !calcStore.config.applyTimeOff &&
                 dayEntries.some((e) => e.type === 'TIME_OFF' || e.type === 'TIME_OFF_TIME_ENTRY');
 
-            // Calculate time-off hours from entries (fallback)
-            // If time-off API is disabled, sum durations of TIME_OFF entries
             let entryTimeOffHours = 0;
-            // Stryker disable next-line ConditionalExpression: Equivalent - when false, inner loop finds no matches, entryTimeOffHours=0
             if (hasTimeOffEntry) {
                 for (const e of dayEntries) {
                     if (e.type === 'TIME_OFF' || e.type === 'TIME_OFF_TIME_ENTRY') {
-                        // Stryker disable next-line OptionalChaining: Equivalent - valid entries always have timeInterval
                         entryTimeOffHours += parseIsoDuration(e.timeInterval?.duration);
                     }
                 }
             }
 
-            // === DETERMINE EFFECTIVE CAPACITY ===
-            // Start with base capacity, then apply adjustments
-
             let effectiveCapacity = baseCapacity;
-
-            // Combine API and entry-based detection (dual-source)
             const isHolidayDay = !!holiday || hasHolidayEntry;
             const isTimeOffDay = !!timeOff || hasTimeOffEntry;
 
-            // --- CAPACITY ADJUSTMENTS (see docs/prd.md for rules) ---
-
-            // 1. Holiday or non-working day → capacity = 0 (highest precedence)
             // Stryker disable all
             if (isHolidayDay || isNonWorking) {
                 effectiveCapacity = 0;
-            }
-            // 2. Time-off → reduce capacity (only if not already 0)
-            else if (timeOff) {
+            } else if (timeOff) {
                 if (timeOff.isFullDay) {
-                    effectiveCapacity = 0; // Full-day time-off
+                    effectiveCapacity = 0;
                 } else {
-                    // Partial time-off: reduce by hours (can't go below 0)
                     effectiveCapacity = Math.max(0, effectiveCapacity - timeOff.hours);
                 }
-            }
-            else if (hasTimeOffEntry) {
+            } else if (hasTimeOffEntry) {
                 effectiveCapacity = Math.max(0, effectiveCapacity - entryTimeOffHours);
             }
             // Stryker restore all
 
-            // === CREATE DAY METADATA ===
-            // Store context information for this day (for UI and debugging)
             const dayMeta = createDayMeta(
                 effectiveCapacity,
                 isHolidayDay,
@@ -1690,9 +1674,135 @@ export function calculateAnalysis(
                 holiday?.projectId || null
             );
 
-            // === SORT ENTRIES CHRONOLOGICALLY ===
-            // Sort by start timestamp for tail attribution algorithm.
-            // Earlier entries are processed first and fill capacity first.
+            const forceOvertime =
+                isHolidayDay || isNonWorking || (isTimeOffDay && effectiveCapacity === 0);
+
+            dayContextByDate.set(dateKey, {
+                entries: dayEntries,
+                meta: dayMeta,
+                baseCapacity,
+                effectiveCapacity,
+                isHolidayDay,
+                isNonWorking,
+                isTimeOffDay,
+                timeOffHours: timeOff?.hours || entryTimeOffHours,
+                forceOvertime,
+            });
+        }
+
+        // === DAILY OVERTIME SPLITS ===
+        if (useDaily) {
+            for (const dateKey of allDates) {
+                const context = dayContextByDate.get(dateKey);
+                const dayEntries = context?.entries || [];
+                const effectiveCapacity = context?.effectiveCapacity ?? 0;
+
+                /* istanbul ignore next -- defensive: timeInterval.start is always present for valid entries */
+                /* Stryker disable all: Defensive fallback for null timeInterval (never triggered with valid entries) */
+                const sortedEntries = [...dayEntries].sort(
+                    (a, b) =>
+                        (a.timeInterval?.start || '').localeCompare(b.timeInterval?.start || '')
+                );
+                /* Stryker restore all */
+
+                let dailyAccumulator = 0;
+                for (const entry of sortedEntries) {
+                    const duration = getEntryDurationHours(entry);
+                    const entryClass: EntryClassification = classifyEntryForOvertime(entry);
+
+                    let overtimeHours = 0;
+                    if (entryClass === 'work') {
+                        // Stryker disable all
+                        if (dailyAccumulator >= effectiveCapacity) {
+                            overtimeHours = duration;
+                        } else if (dailyAccumulator + duration <= effectiveCapacity) {
+                            overtimeHours = 0;
+                        } else {
+                            overtimeHours = duration - (effectiveCapacity - dailyAccumulator);
+                        }
+                        // Stryker restore all
+                        dailyAccumulator += duration;
+                    }
+
+                    entryDailyOvertime.set(entry, Math.max(0, overtimeHours));
+                }
+            }
+        }
+
+        // === WEEKLY OVERTIME SPLITS ===
+        if (useWeekly) {
+            const weeklyThreshold = Math.max(0, calcStore.calcParams.weeklyThreshold || 0);
+            const entriesByWeek = new Map<string, TimeEntry[]>();
+
+            for (const dateKey of allDates) {
+                const context = dayContextByDate.get(dateKey);
+                const dayEntries = context?.entries || [];
+                const weekKey = getWeekKey(dateKey);
+                if (!entriesByWeek.has(weekKey)) {
+                    entriesByWeek.set(weekKey, []);
+                }
+                const bucket = entriesByWeek.get(weekKey);
+                if (bucket) {
+                    bucket.push(...dayEntries);
+                }
+            }
+
+            for (const [, weekEntries] of entriesByWeek) {
+                /* istanbul ignore next -- defensive: timeInterval.start is always present for valid entries */
+                /* Stryker disable all: Defensive fallback for null timeInterval (never triggered with valid entries) */
+                const sortedEntries = [...weekEntries].sort(
+                    (a, b) =>
+                        (a.timeInterval?.start || '').localeCompare(b.timeInterval?.start || '')
+                );
+                /* Stryker restore all */
+
+                let weeklyAccumulator = 0;
+                for (const entry of sortedEntries) {
+                    const duration = getEntryDurationHours(entry);
+                    const entryClass: EntryClassification = classifyEntryForOvertime(entry);
+
+                    let overtimeHours = 0;
+                    if (entryClass === 'work') {
+                        const entryDateKey = IsoUtils.extractDateKey(entry.timeInterval?.start);
+                        const context = entryDateKey
+                            ? dayContextByDate.get(entryDateKey)
+                            : undefined;
+                        const forceOvertime = context?.forceOvertime ?? false;
+
+                        // Stryker disable all
+                        if (weeklyThreshold === 0 || forceOvertime || weeklyAccumulator >= weeklyThreshold) {
+                            overtimeHours = duration;
+                        } else if (weeklyAccumulator + duration <= weeklyThreshold) {
+                            overtimeHours = 0;
+                        } else {
+                            overtimeHours = weeklyAccumulator + duration - weeklyThreshold;
+                        }
+                        // Stryker restore all
+
+                        weeklyAccumulator += duration;
+                    }
+
+                    entryWeeklyOvertime.set(entry, Math.max(0, overtimeHours));
+                }
+            }
+        }
+
+        // === INITIALIZE TIER2 OVERTIME ACCUMULATOR ===
+        // Track cumulative OT hours for this user across the entire date range.
+        let userOTAccumulator = 0;
+
+        // === PROCESS EACH DATE IN RANGE ===
+        for (const dateKey of allDates) {
+            const context = dayContextByDate.get(dateKey);
+            const dayEntries = context?.entries || [];
+            const dayMeta = context?.meta;
+            const baseCapacity = context?.baseCapacity ?? 0;
+            const effectiveCapacity = context?.effectiveCapacity ?? 0;
+            const isHolidayDay = context?.isHolidayDay ?? false;
+            const isNonWorking = context?.isNonWorking ?? false;
+            const isTimeOffDay = context?.isTimeOffDay ?? false;
+            const timeOffHours = context?.timeOffHours ?? 0;
+
             /* istanbul ignore next -- defensive: timeInterval.start is always present for valid entries */
             /* Stryker disable all: Defensive fallback for null timeInterval (never triggered with valid entries) */
             const sortedEntries = [...dayEntries].sort(
@@ -1701,133 +1811,69 @@ export function calculateAnalysis(
             );
             /* Stryker restore all */
 
-            // === INITIALIZE DAILY ACCUMULATOR ===
-            // Track cumulative WORK hours for this day (for tail attribution).
-            // IMPORTANT: BREAK and PTO entries do NOT accumulate.
-            let dailyAccumulator = 0;
-
-            // Array to collect processed entries with analysis attached
             const processedEntries: TimeEntry[] = [];
 
-            // === PROCESS EACH ENTRY (TAIL ATTRIBUTION ALGORITHM) ===
             for (const entry of sortedEntries) {
-                // --- EXTRACT ENTRY DATA ---
-
-                // Get duration in hours (with fallback to timestamp calculation)
                 const duration = getEntryDurationHours(entry);
-
-                // Classify entry type (WORK, BREAK, PTO)
                 const entryClass: EntryClassification = classifyEntryForOvertime(entry);
-
-                // Extract all three rates (earned/cost/profit) in cents
                 const rates = extractRates(entry, duration);
-
-                // Determine billability (default to billable if missing)
                 const isBillable = entry.billable !== false;
 
-                // --- GET OVERTIME PARAMETERS FOR THIS DAY ---
+                const dailyOT = useDaily ? entryDailyOvertime.get(entry) || 0 : 0;
+                const weeklyOT = useWeekly ? entryWeeklyOvertime.get(entry) || 0 : 0;
 
-                // Tier1 multiplier (e.g., 1.5 = time-and-a-half)
+                let overlapOvertime = 0;
+                let combinedOvertime = 0;
+                let overtimeHours = 0;
+
+                if (entryClass === 'work') {
+                    if (overtimeBasis === 'daily') {
+                        overtimeHours = dailyOT;
+                        combinedOvertime = overtimeHours;
+                    } else if (overtimeBasis === 'weekly') {
+                        overtimeHours = weeklyOT;
+                        combinedOvertime = overtimeHours;
+                    } else {
+                        overlapOvertime = Math.min(dailyOT, weeklyOT);
+                        combinedOvertime = Math.max(dailyOT, weeklyOT);
+                        overtimeHours = combinedOvertime;
+                    }
+                }
+
+                const regularHours =
+                    entryClass === 'work' ? Math.max(0, duration - overtimeHours) : duration;
+
                 const multiplier = getEffectiveMultiplier(userId, dateKey, calcStore);
-
-                // Tier2 threshold (cumulative OT hours before tier2 kicks in)
                 const tier2Threshold = getEffectiveTier2Threshold(userId, dateKey, calcStore);
-
-                // Tier2 multiplier (e.g., 2.0 = double-time)
                 const tier2Multiplier = getEffectiveTier2Multiplier(userId, dateKey, calcStore);
 
-                // --- SPLIT ENTRY INTO REGULAR/OVERTIME HOURS ---
-                // This implements the tail attribution algorithm (see docs/prd.md)
-
-                let regularHours = 0;
-                let overtimeHours = 0;
                 let tier1Hours = 0;
                 let tier2Hours = 0;
 
-                if (entryClass === 'break' || entryClass === 'pto') {
-                    // === BREAK/PTO ENTRIES: Always regular, never accumulate ===
-                    // Business Rule: BREAK and PTO entries:
-                    // - Count as regular hours in totals
-                    // - Do NOT accumulate toward capacity (don't trigger OT for other entries)
-                    // - Can NEVER become overtime themselves
-                    regularHours = duration;
-                    overtimeHours = 0;
-                    // NOTE: We do NOT increment dailyAccumulator for BREAK/PTO!
-                } else {
-                    // === WORK ENTRIES: Apply tail attribution algorithm ===
-
-                    // Case 1: Already exceeded capacity (all subsequent work is OT)
-                    // Stryker disable all
-                    if (dailyAccumulator >= effectiveCapacity) {
-                        regularHours = 0;
-                        overtimeHours = duration;
-                    }
-                    // Case 2: Entry fits entirely within remaining capacity
-                    // (Equivalent: when acc+dur=cap, Case3 gives same result)
-                    else if (dailyAccumulator + duration <= effectiveCapacity) {
-                        regularHours = duration;
-                        overtimeHours = 0;
-                    }
-                    // Case 3: Entry straddles capacity boundary (split required)
-                    else {
-                        // Portion that fits in capacity is regular
-                        regularHours = effectiveCapacity - dailyAccumulator;
-                        // Remainder is overtime
-                        overtimeHours = duration - regularHours;
-                    }
-                    // Stryker restore all
-
-                    // IMPORTANT: Only WORK entries accumulate toward capacity
-                    // This ensures BREAK/PTO don't trigger OT for other entries
-                    dailyAccumulator += duration;
-                }
-
-                // --- TIER2 OVERTIME LOGIC ---
-                // If this entry has OT hours AND tier2Multiplier > tier1Multiplier,
-                // determine how many OT hours are tier1 vs tier2.
-                // IMPORTANT: Tier2 accumulator is per-USER (not per-day).
-
                 // Stryker disable all
                 if (overtimeHours > 0 && calcStore.config.enableTieredOT && tier2Multiplier > multiplier) {
-                    // User's cumulative OT before this entry
                     const otBeforeEntry = userOTAccumulator;
-
-                    // User's cumulative OT after this entry
                     const otAfterEntry = otBeforeEntry + overtimeHours;
 
-                    // Case 1: Already past tier2 threshold (all new OT is tier2)
                     if (otBeforeEntry >= tier2Threshold) {
                         tier2Hours = overtimeHours;
                         tier1Hours = 0;
-                    }
-                    // Case 2: All new OT is still within tier1 threshold
-                    else if (otAfterEntry <= tier2Threshold) {
+                    } else if (otAfterEntry <= tier2Threshold) {
                         tier1Hours = overtimeHours;
                         tier2Hours = 0;
-                    }
-                    // Case 3: This entry crosses tier2 threshold (split)
-                    else {
-                        // Hours until tier2 threshold are tier1
+                    } else {
                         tier1Hours = tier2Threshold - otBeforeEntry;
-                        // Remaining hours are tier2
                         tier2Hours = overtimeHours - tier1Hours;
                     }
 
-                    // Update user's cumulative OT accumulator
                     userOTAccumulator = otAfterEntry;
                 } else {
-                    // Tier2 disabled or same as tier1: all OT is tier1
                     tier1Hours = overtimeHours;
                     tier2Hours = 0;
-
-                    // Still track cumulative OT (for potential future tier2 activation)
                     userOTAccumulator += overtimeHours;
                 }
                 // Stryker restore all
 
-                // --- CALCULATE AMOUNTS (EARNED/COST/PROFIT) ---
-                // Compute regular amounts + tier1 premium + tier2 premium
-                // for all three amount types in parallel.
                 const amounts = calculateAmounts(
                     regularHours,
                     overtimeHours,
@@ -1838,9 +1884,6 @@ export function calculateAnalysis(
                     tier2Multiplier
                 );
 
-                // --- SELECT PRIMARY AMOUNT TYPE ---
-                // Based on config.amountDisplay, choose which amount breakdown to use
-                // as the "primary" amount for the `cost` field in EntryAnalysis.
                 const primaryAmounts =
                     amountDisplay === 'cost'
                         ? amounts.cost
@@ -1848,31 +1891,30 @@ export function calculateAnalysis(
                           ? amounts.profit
                           : amounts.earned;
 
-                // --- BUILD ENTRY ANALYSIS OBJECT ---
-                // Create the analysis object that will be attached to this entry.
-                // This contains all calculated fields needed for display and aggregation.
                 const analysis: EntryAnalysis = {
-                    // Hours breakdown (rounded to 4 decimals for precision)
                     regular: round(regularHours, 4),
                     overtime: round(overtimeHours, 4),
+                    dailyOvertime: round(entryClass === 'work' ? dailyOT : 0, 4),
+                    weeklyOvertime: round(entryClass === 'work' ? weeklyOT : 0, 4),
+                    overlapOvertime:
+                        overtimeBasis === 'both' ? round(overlapOvertime, 4) : 0,
+                    combinedOvertime:
+                        overtimeBasis === 'both'
+                            ? round(combinedOvertime, 4)
+                            : round(overtimeHours, 4),
 
-                    // Billable flag and break detection
                     isBillable,
                     isBreak: entryClass === 'break',
 
-                    // Primary amount fields (based on amountDisplay mode)
-                    cost: primaryAmounts.totalAmountWithOT, // Confusingly named (should be "amount")
-                    profit: amounts.profit.totalAmountWithOT, // Always show profit separately
+                    cost: primaryAmounts.totalAmountWithOT,
+                    profit: amounts.profit.totalAmountWithOT,
 
-                    // Tags for UI display (e.g., "HOLIDAY", "BREAK")
                     tags: [],
 
-                    // Rates (in currency units, not cents)
                     hourlyRate: primaryAmounts.rate,
                     regularRate: primaryAmounts.rate,
                     overtimeRate: primaryAmounts.overtimeRate,
 
-                    // Amount breakdown (primary type)
                     regularAmount: primaryAmounts.regularAmount,
                     overtimeAmountBase: primaryAmounts.overtimeAmountBase,
                     tier1Premium: primaryAmounts.tier1Premium,
@@ -1880,64 +1922,45 @@ export function calculateAnalysis(
                     totalAmountWithOT: primaryAmounts.totalAmountWithOT,
                     totalAmountNoOT: primaryAmounts.totalAmountNoOT,
 
-                    // Full amounts object (all three types)
                     amounts,
                 };
 
-                // --- ADD CONTEXT TAGS ---
-                // Add tags based on day context for UI display (Status column)
                 if (isHolidayDay) analysis.tags.push('HOLIDAY');
                 if (isNonWorking) analysis.tags.push('OFF-DAY');
                 if (isTimeOffDay) analysis.tags.push('TIME-OFF');
                 if (entryClass === 'break') analysis.tags.push('BREAK');
 
-                // --- ATTACH ANALYSIS TO ENTRY ---
-                // Mutate the original entry object to add the analysis field.
-                // This is done for test compatibility and to avoid copying large entry objects.
                 (entry as TimeEntry & { analysis: EntryAnalysis }).analysis = analysis;
-
-                // Add to processed entries array (will be stored in DayData)
                 processedEntries.push(entry);
 
-                // --- AGGREGATE TO USER TOTALS ---
-                // Add this entry's values to the user's running totals.
-                // These totals will be rounded at the end of user processing.
-
                 const totals = userAnalysis.totals;
-
-                // Total hours (always accumulate, regardless of type)
                 totals.total += duration;
 
-                // --- HOURS BREAKDOWN BY ENTRY TYPE ---
-
                 if (entryClass === 'break') {
-                    // BREAK entry: track separately + add to regular hours
                     totals.breaks += duration;
-                    totals.regular += regularHours; // (always = duration for breaks)
-
-                    // Billable breakdown (breaks can be billable or non-billable)
+                    totals.regular += regularHours;
                     if (isBillable) {
                         totals.billableWorked += regularHours;
                     } else {
                         totals.nonBillableWorked += regularHours;
                     }
                 } else if (entryClass === 'pto') {
-                    // PTO entry: track separately + add to regular hours
                     totals.vacationEntryHours += duration;
-                    totals.regular += regularHours; // (always = duration for PTO)
-
-                    // Billable breakdown (PTO can be billable or non-billable)
+                    totals.regular += regularHours;
                     if (isBillable) {
                         totals.billableWorked += regularHours;
                     } else {
                         totals.nonBillableWorked += regularHours;
                     }
                 } else {
-                    // WORK entry: add regular and overtime hours
                     totals.regular += regularHours;
                     totals.overtime += overtimeHours;
+                    totals.dailyOvertime += dailyOT;
+                    totals.weeklyOvertime += weeklyOT;
+                    totals.overlapOvertime += overlapOvertime;
+                    totals.combinedOvertime +=
+                        overtimeBasis === 'both' ? combinedOvertime : overtimeHours;
 
-                    // Billable breakdown (separate buckets for worked vs OT)
                     if (isBillable) {
                         totals.billableWorked += regularHours;
                         totals.billableOT += overtimeHours;
@@ -1947,68 +1970,42 @@ export function calculateAnalysis(
                     }
                 }
 
-                // --- ACCUMULATE AMOUNTS ---
-                // Add amounts for all three types (earned/cost/profit)
-
-                // Primary amount (based on amountDisplay mode)
                 totals.amount += primaryAmounts.totalAmountWithOT;
                 totals.amountBase += primaryAmounts.baseAmount;
-
-                // Earned amounts
                 totals.amountEarned += amounts.earned.totalAmountWithOT;
                 totals.amountEarnedBase += amounts.earned.baseAmount;
-
-                // Cost amounts
                 totals.amountCost += amounts.cost.totalAmountWithOT;
                 totals.amountCostBase += amounts.cost.baseAmount;
-
-                // Profit amounts
                 totals.amountProfit += amounts.profit.totalAmountWithOT;
                 totals.amountProfitBase += amounts.profit.baseAmount;
 
-                // --- ACCUMULATE OVERTIME PREMIUMS ---
-
-                // Tier1 premium (covers ALL overtime hours)
                 totals.otPremium += primaryAmounts.tier1Premium;
                 totals.otPremiumEarned += amounts.earned.tier1Premium;
                 totals.otPremiumCost += amounts.cost.tier1Premium;
                 totals.otPremiumProfit += amounts.profit.tier1Premium;
-
-                // Tier2 additional premium (covers only tier2 hours)
                 totals.otPremiumTier2 += primaryAmounts.tier2Premium;
                 totals.otPremiumTier2Earned += amounts.earned.tier2Premium;
                 totals.otPremiumTier2Cost += amounts.cost.tier2Premium;
                 totals.otPremiumTier2Profit += amounts.profit.tier2Premium;
             }
 
-            // --- STORE DAY DATA ---
-            // Create DayData object containing all processed entries and metadata
             const dayData: DayData = {
-                entries: processedEntries, // Entries with analysis attached
-                meta: dayMeta, // Day context (capacity, holiday, etc.)
+                entries: processedEntries,
+                meta: dayMeta,
             };
 
-            // Store in user's days map (keyed by dateKey)
             userAnalysis.days.set(dateKey, dayData);
 
-            // --- UPDATE CAPACITY TOTALS ---
-            // Track expected capacity and context across all days
-
-            // Add effective capacity (after all adjustments)
             userAnalysis.totals.expectedCapacity += effectiveCapacity;
 
-            // Track holiday days
             if (isHolidayDay) {
                 userAnalysis.totals.holidayCount += 1;
-                // Holiday hours = base capacity (what capacity would have been without holiday)
                 userAnalysis.totals.holidayHours += baseCapacity;
             }
 
-            // Track time-off days
             if (isTimeOffDay) {
                 userAnalysis.totals.timeOffCount += 1;
-                // Time-off hours = actual time-off amount (from API or entries)
-                userAnalysis.totals.timeOffHours += timeOff?.hours || entryTimeOffHours;
+                userAnalysis.totals.timeOffHours += timeOffHours;
             }
         }
         // End of per-day loop
@@ -2022,6 +2019,10 @@ export function calculateAnalysis(
         // Hours: 4 decimal places (0.0001h precision = 0.36s)
         totals.regular = round(totals.regular, 4);
         totals.overtime = round(totals.overtime, 4);
+        totals.dailyOvertime = round(totals.dailyOvertime, 4);
+        totals.weeklyOvertime = round(totals.weeklyOvertime, 4);
+        totals.overlapOvertime = round(totals.overlapOvertime, 4);
+        totals.combinedOvertime = round(totals.combinedOvertime, 4);
         totals.total = round(totals.total, 4);
         totals.breaks = round(totals.breaks, 4);
         totals.billableWorked = round(totals.billableWorked, 4);
