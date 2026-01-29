@@ -44,6 +44,11 @@ Before releasing, ensure:
    npm test
    ```
 
+2. **E2E tests pass**
+   ```bash
+   npm run test:e2e
+   ```
+
 2. **Type checking passes**
    ```bash
    npm run typecheck
@@ -197,6 +202,7 @@ If a release has issues:
 
 - Run in verbose mode: `npm test -- --verbose`
 - Check for flaky tests: `npm test -- --runInBand`
+- E2E artifacts are written to `playwright-report/` and `test-results/` (ignored in git)
 
 ### Worker Doesn't Load
 

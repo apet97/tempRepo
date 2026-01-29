@@ -47,3 +47,7 @@ All Clockify requests go through `api.fetchWithAuth`, which attaches `X-Addon-To
 3. `fetchDetailedReport()` retrieves entries for every user in a single request; optional `fetchAllProfiles`, `fetchAllHolidays`, and `fetchAllTimeOff` run in parallel and are merged with cached data when available.
 4. `calculateAnalysis()` groups by user/day, determines effective capacity (overrides → profile → defaults), splits work vs OT via tail attribution with daily/weekly/both modes, and calculates money columns including tier2 premiums.
 5. UI renderers consume `store.analysisResults` to display the summary strip, grouped tables, and paginated detailed entries; export and status indicators rely on the same analysis object.
+
+## Cache prompts & large-range warnings
+- If sessionStorage contains a recent report for the same date range, the user is prompted to reuse or refresh cached data.
+- If the date range exceeds 365 days, a confirmation prompt is shown before fetching to prevent accidental long-running reports.

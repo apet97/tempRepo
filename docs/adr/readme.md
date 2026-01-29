@@ -29,3 +29,4 @@ Write one when changing:
 - API strategy (rate limiting, retries, batching)
 - caching/persistence approach
 - export/security rules (CSV injection, XSS)
+- testing strategy or quality gates

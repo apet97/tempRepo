@@ -83,7 +83,7 @@ v2.1 uses parallel fetches with cache-aware orchestration to saturate the client
 ```javascript
 // Orchestration Logic in main.js
 const promises = [
-    Api.fetchEntries(..., { signal }),
+    Api.fetchDetailedReport(..., { signal }),
     Api.fetchAllProfiles(..., { signal }),
     Api.fetchAllHolidays(..., { signal }),
     Api.fetchAllTimeOff(..., { signal })
@@ -150,7 +150,8 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 
 | Feature | Endpoint | Method | Note |
 |---------|----------|--------|------|
-| Time Entries | `/v1/workspaces/{wid}/user/{uid}/time-entries` | GET | Paginated (500/page) |
+| Detailed Report | `/v1/workspaces/{wid}/reports/detailed` | POST | Paginated (200/page), includes amounts |
+| Time Entries (legacy) | `/v1/workspaces/{wid}/user/{uid}/time-entries` | GET | Paginated (500/page), legacy path |
 | Profiles | `/v1/workspaces/{wid}/member-profile/{uid}` | GET | Batched (5 parallel) |
 | Holidays | `/v1/workspaces/{wid}/holidays/in-period` | GET | `YYYY-MM-DD` strict format |
 | Time Off | `/v1/workspaces/{wid}/time-off/requests` | POST | Approved status filter |
@@ -189,6 +190,10 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 - Coverage: 100% enforced via thresholds
 - Test files: `__tests__/unit/*.test.js`
 
+### 11.2 Integration Testing
+- Framework: Jest + jsdom
+- Scope: orchestration (cache decisions, request races, optional fetch failures)
+
 ### 11.2 Mutation Testing
 - Framework: Stryker Mutator
 - Purpose: Validates test effectiveness (not just coverage)
@@ -203,3 +208,10 @@ CSV generation uses a specialized `escapeCsv` utility to ensure data integrity a
 | api.ts | 100% |
 
 All equivalent mutants have been addressed through targeted Stryker disable comments wrapping complete if-else chains.
+
+### 11.3 E2E Testing
+- Framework: Playwright (Chromium/Firefox/WebKit)
+- Determinism: time frozen per test and dialogs auto-accepted
+- Scope: auth, report generation, export, and error handling
+
+See `docs/test-strategy.md` for tiering and determinism rules.

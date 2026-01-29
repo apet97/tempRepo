@@ -24,6 +24,8 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 - **Iterative Rate Limiting:** Implements a global client-side token bucket (50 req/s) with an iterative wait loop to ensure stack safety and strict API compliance.
 - **Request Cancellation:** Supports instant termination of pending network activity via `AbortController` when a user cancels or restarts a report.
 - **Persistent Data Caching:** Profiles, holidays, and time-off maps are cached in localStorage (6-hour TTL) to reduce repeat fetches for large teams.
+- **Report Cache Prompt:** Session-scoped report data is cached with a user prompt to reuse or refresh for the latest data.
+- **Large Range Confirmation:** Date ranges over 365 days require explicit confirmation to avoid accidental long-running reports.
 
 ### 3.2 Accuracy & Compliance
 - **Timezone Awareness:** Uses a canonical timezone (user-selected report timezone → workspace claim → browser default) for date grouping, ensuring evening work is attributed to the correct calendar day rather than shifting to the next day in UTC.

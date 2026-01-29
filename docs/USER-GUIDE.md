@@ -21,12 +21,16 @@ Use the date picker to choose your reporting period. Two quick selectors are ava
 - **Last Month** - Automatically selects the previous calendar month
 - **This Month** - Automatically selects the current calendar month
 
+If you select a very large range (more than 365 days), OTPLUS will ask for confirmation before fetching.
+
 ### Choosing Users
 Select which team members to include in the report. You can select individual users or all users in your workspace.
 
 ### Generate and Cancel
 - Click **Generate** to start building the report
 - Click **Cancel** to stop a report in progress (useful for large date ranges that take too long)
+
+If cached data exists for the same date range, OTPLUS will prompt you to reuse it or refresh for the latest data.
 
 ---
 
