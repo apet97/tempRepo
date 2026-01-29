@@ -42,14 +42,15 @@ export function createMockTimeEntries(options: {
         userId = 'user-1',
         userName = 'Alice Johnson',
         count = 5,
-        // Use yesterday as default to ensure entries fall within typical test date ranges
-        startDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        // Use a fixed date for deterministic tests
+        startDate = '2025-01-15',
     } = options;
 
+    const baseDate = new Date(`${startDate}T00:00:00Z`);
     const entries = [];
     for (let i = 0; i < count; i++) {
-        const date = new Date(startDate);
-        date.setDate(date.getDate() + Math.floor(i / 2));
+        const date = new Date(baseDate);
+        date.setUTCDate(date.getUTCDate() + Math.floor(i / 2));
         const dateStr = date.toISOString().split('T')[0];
 
         entries.push({
@@ -87,14 +88,18 @@ export function createMockTimeEntries(options: {
 /**
  * Mock detailed report response
  */
-export function createMockDetailedReportResponse(options: { entriesPerUser?: number } = {}) {
-    const { entriesPerUser = 5 } = options;
+export function createMockDetailedReportResponse(options: {
+    entriesPerUser?: number;
+    startDate?: string;
+} = {}) {
+    const { entriesPerUser = 5, startDate = '2025-01-15' } = options;
 
     const allEntries = mockUsers.flatMap(user =>
         createMockTimeEntries({
             userId: user.id,
             userName: user.name,
             count: entriesPerUser,
+            startDate,
         })
     );
 
@@ -116,14 +121,13 @@ export function createMockProfile(userId: string) {
 /**
  * Mock holidays data
  */
-export function createMockHolidays() {
-    const thisYear = new Date().getFullYear();
+export function createMockHolidays(year = 2025) {
     return [
         {
             name: 'New Year',
             datePeriod: {
-                startDate: `${thisYear}-01-01`,
-                endDate: `${thisYear}-01-01`,
+                startDate: `${year}-01-01`,
+                endDate: `${year}-01-01`,
             },
         },
     ];
@@ -144,12 +148,14 @@ export function createMockTimeOffResponse() {
 export async function setupApiMocks(page: Page, options: {
     users?: typeof mockUsers;
     entriesPerUser?: number;
+    startDate?: string;
     shouldFailUsers?: boolean;
     shouldFailReport?: boolean;
 } = {}) {
     const {
         users = mockUsers,
         entriesPerUser = 5,
+        startDate = '2025-01-15',
         shouldFailUsers = false,
         shouldFailReport = false,
     } = options;
@@ -183,7 +189,7 @@ export async function setupApiMocks(page: Page, options: {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
-                body: JSON.stringify(createMockDetailedReportResponse({ entriesPerUser })),
+                body: JSON.stringify(createMockDetailedReportResponse({ entriesPerUser, startDate })),
             });
         }
     });
@@ -216,6 +222,32 @@ export async function setupApiMocks(page: Page, options: {
             body: JSON.stringify(createMockTimeOffResponse()),
         });
     });
+}
+
+/**
+ * Freeze browser time for deterministic tests.
+ */
+export async function freezeTime(page: Page, iso: string = '2025-01-15T12:00:00Z') {
+    await page.addInitScript(({ iso: isoString }) => {
+        const fixed = new Date(isoString);
+        const OriginalDate = Date;
+        // @ts-ignore - override Date for deterministic tests
+        // eslint-disable-next-line no-global-assign
+        Date = class extends OriginalDate {
+            constructor(...args: any[]) {
+                return args.length ? new OriginalDate(...args) : new OriginalDate(fixed);
+            }
+            static now() {
+                return fixed.getTime();
+            }
+            static parse(str: string) {
+                return OriginalDate.parse(str);
+            }
+            static UTC(...args: any[]) {
+                return OriginalDate.UTC(...args);
+            }
+        } as DateConstructor;
+    }, { iso });
 }
 
 /**

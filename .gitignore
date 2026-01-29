@@ -34,6 +34,8 @@ api-mutation*.txt
 
 # Generated reports
 reports/
+playwright-report/
+test-results/
 
 # Screenshots
 *.png

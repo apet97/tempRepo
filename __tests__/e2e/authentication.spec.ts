@@ -1,7 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { createMockToken, setupApiMocks, navigateWithToken } from './helpers/mock-api';
+import { createMockToken, setupApiMocks, navigateWithToken, freezeTime } from './helpers/mock-api';
 
 test.describe('Authentication Flow', () => {
+    test.beforeEach(async ({ page }) => {
+        page.on('dialog', async (dialog) => {
+            await dialog.accept();
+        });
+        await freezeTime(page);
+    });
+
     test('shows error when no auth token is provided', async ({ page }) => {
         // Navigate without token
         await page.goto('/');

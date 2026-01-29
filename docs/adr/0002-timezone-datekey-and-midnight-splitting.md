@@ -11,8 +11,8 @@ we miscompute capacity and overtime. Current behavior must be deterministic.
 
 ## Decision
 1) Canonical reporting timezone (in priority order):
-   a) Workspace timezone (if available from Clockify / configuration)
-   b) User-selected timezone in OTPLUS settings
+   a) User-selected timezone in OTPLUS settings
+   b) Workspace timezone (if available from Clockify / configuration)
    c) Browser/system timezone
 
 2) dateKey calculation:

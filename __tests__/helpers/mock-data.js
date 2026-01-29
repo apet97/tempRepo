@@ -3,6 +3,12 @@
  * Provides comprehensive, reusable mock data for all test scenarios
  */
 
+let mockIdCounter = 0;
+const nextMockId = () => {
+  mockIdCounter += 1;
+  return mockIdCounter;
+};
+
 // ============================================================================
 // Core Mock Data Generators
 // ============================================================================
@@ -93,7 +99,7 @@ export function generateMockAnalysisData(userCount = 5) {
   const names = ['Alice Johnson', 'Bob Smith', 'Charlie Brown', 'Diana Prince', 'Eve Anderson'];
 
   for (let i = 0; i < userCount; i++) {
-    const regularHours = 40 + Math.floor(Math.random() * 10); // 40-50 hours
+    const regularHours = 40 + (i % 11); // 40-50 hours (deterministic)
     const overtimeHours = Math.max(0, regularHours - 40); // OT if over 40
     const billableHours = regularHours * 0.8; // 80% billable
     const totalCost = (regularHours * 50) + (overtimeHours * 50 * 0.5); // $50/hr base, 1.5x OT
@@ -169,11 +175,12 @@ export function generateMockAnalysisData(userCount = 5) {
 export function createMockStore(options = {}) {
   const userCount = options.userCount || 5;
   const users = options.users || generateMockUsers(userCount);
+  const mockId = nextMockId();
 
   const defaults = {
-    token: 'mock-jwt-token-' + Date.now(),
+    token: `mock-jwt-token-${mockId}`,
     claims: {
-      workspaceId: 'ws_test_' + Date.now(),
+      workspaceId: `ws_test_${mockId}`,
       userId: 'user_test',
       backendUrl: 'https://api.clockify.me'
     },
@@ -188,7 +195,8 @@ export function createMockStore(options = {}) {
       showBillableBreakdown: true,
       showDecimalTime: false,
       amountDisplay: 'earned',
-      overtimeBasis: 'daily'
+      overtimeBasis: 'daily',
+      reportTimeZone: ''
     },
     calcParams: {
       dailyThreshold: 8,
@@ -237,8 +245,9 @@ export function createMockStore(options = {}) {
  * @returns {Object} Mock token payload
  */
 export function createMockTokenPayload() {
+  const mockId = nextMockId();
   return {
-    workspaceId: 'ws_test_' + Date.now(),
+    workspaceId: `ws_test_${mockId}`,
     userId: 'user_test',
     backendUrl: 'https://api.clockify.me'
   };

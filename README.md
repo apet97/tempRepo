@@ -23,3 +23,12 @@ OTPLUS is a Clockify addon that transforms detailed report data into an overtime
 - **Detailed Guide:** `docs/guide.md` explains what OTPLUS consumes (modules, data flow, persistence) and walks through every API call the addon makes.
 - **Product Requirements:** `docs/prd.md`
 - **Technical Specification:** `docs/spec.md`
+- **Test Strategy:** `docs/test-strategy.md` defines test tiers, determinism rules, and quality targets.
+
+## Testing
+Common commands:
+- Unit: `npm test`
+- Lint: `npm run lint`
+- Typecheck: `npm run typecheck`
+- E2E: `npm run test:e2e`
+- Mutation (scheduled/manual): `npm run test:mutants`

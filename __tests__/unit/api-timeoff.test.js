@@ -1448,6 +1448,130 @@ describe('API Time-Off - Date Expansion Mutations', () => {
       expect(dayInfo.hours).not.toBeNull();
       expect(dayInfo.hours).not.toBeUndefined();
     });
+
+    it('should set hours for half-day time off when halfDayHours provided', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          requests: [{
+            userId: 'user_1',
+            status: { statusType: 'APPROVED' },
+            timeOffPeriod: {
+              startDate: '2025-01-15T00:00:00Z',
+              halfDayHours: 4
+            },
+            timeUnit: 'HOURS'
+          }]
+        })
+      });
+
+      const results = await Api.fetchAllTimeOff(
+        'workspace_123',
+        [{ id: 'user_1', name: 'User 1' }],
+        '2025-01-01',
+        '2025-01-31'
+      );
+
+      const dayInfo = results.get('user_1')?.get('2025-01-15');
+      expect(dayInfo.isFullDay).toBe(false);
+      expect(dayInfo.hours).toBe(4);
+    });
+
+    it('should derive hours from period when halfDayHours is missing', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          requests: [{
+            userId: 'user_1',
+            status: { statusType: 'APPROVED' },
+            timeOffPeriod: {
+              halfDay: true,
+              period: {
+                start: '2025-01-15T08:00:00Z',
+                end: '2025-01-15T12:30:00Z'
+              }
+            },
+            timeUnit: 'HOURS'
+          }]
+        })
+      });
+
+      const results = await Api.fetchAllTimeOff(
+        'workspace_123',
+        [{ id: 'user_1', name: 'User 1' }],
+        '2025-01-01',
+        '2025-01-31'
+      );
+
+      const dayInfo = results.get('user_1')?.get('2025-01-15');
+      expect(dayInfo.isFullDay).toBe(false);
+      expect(dayInfo.hours).toBe(4.5);
+    });
+
+    it('should keep hours at 0 when period end is before start', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          requests: [{
+            userId: 'user_1',
+            status: { statusType: 'APPROVED' },
+            timeOffPeriod: {
+              halfDay: true,
+              period: {
+                start: '2025-01-15T12:00:00Z',
+                end: '2025-01-15T08:00:00Z'
+              },
+              startDate: '2025-01-15T00:00:00Z'
+            },
+            timeUnit: 'HOURS'
+          }]
+        })
+      });
+
+      const results = await Api.fetchAllTimeOff(
+        'workspace_123',
+        [{ id: 'user_1', name: 'User 1' }],
+        '2025-01-01',
+        '2025-01-31'
+      );
+
+      const dayInfo = results.get('user_1')?.get('2025-01-15');
+      expect(dayInfo.isFullDay).toBe(false);
+      expect(dayInfo.hours).toBe(0);
+    });
+
+    it('should keep hours at 0 when period end is invalid', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          requests: [{
+            userId: 'user_1',
+            status: { statusType: 'APPROVED' },
+            timeOffPeriod: {
+              halfDay: true,
+              endDate: 'not-a-date',
+              startDate: '2025-01-15T00:00:00Z'
+            },
+            timeUnit: 'HOURS'
+          }]
+        })
+      });
+
+      const results = await Api.fetchAllTimeOff(
+        'workspace_123',
+        [{ id: 'user_1', name: 'User 1' }],
+        '2025-01-01',
+        '2025-01-31'
+      );
+
+      const dayInfo = results.get('user_1')?.get('2025-01-15');
+      expect(dayInfo.isFullDay).toBe(false);
+      expect(dayInfo.hours).toBe(0);
+    });
   });
 
   describe('API status tracking mutations', () => {

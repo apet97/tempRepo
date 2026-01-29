@@ -151,7 +151,15 @@ import { Api } from './api.js';
 import { calculateAnalysis } from './calc.js';
 import { downloadCsv } from './export.js';
 import * as UI from './ui/index.js';
-import { IsoUtils, debounce, parseIsoDuration, getDateRangeDays, base64urlDecode } from './utils.js';
+import {
+    IsoUtils,
+    debounce,
+    parseIsoDuration,
+    getDateRangeDays,
+    base64urlDecode,
+    setCanonicalTimeZone,
+    isValidTimeZone,
+} from './utils.js';
 import { initErrorReporting, reportError } from './error-reporting.js';
 import { SENTRY_DSN } from './constants.js';
 import type { DateRange, TimeEntry, TokenClaims } from './types.js';
@@ -184,8 +192,28 @@ export function setDefaultDates(): void {
     const startEl = document.getElementById('startDate') as HTMLInputElement | null;
     const endEl = document.getElementById('endDate') as HTMLInputElement | null;
 
-    if (startEl) startEl.value = IsoUtils.toISODate(today);
-    if (endEl) endEl.value = IsoUtils.toISODate(today);
+    if (startEl) startEl.value = IsoUtils.toDateKey(today);
+    if (endEl) endEl.value = IsoUtils.toDateKey(today);
+}
+
+/**
+ * Resolves the canonical timezone based on workspace claims, user setting, and browser default.
+ */
+function resolveCanonicalTimeZone(
+    claims: TokenClaims | null,
+    preferredTimeZone: string | null | undefined
+): string {
+    if (preferredTimeZone && isValidTimeZone(preferredTimeZone)) {
+        return preferredTimeZone;
+    }
+    const workspaceTimeZone =
+        (claims?.workspaceTimeZone as string | undefined) ||
+        (claims?.workspaceTimezone as string | undefined) ||
+        (claims?.timeZone as string | undefined);
+    if (workspaceTimeZone && isValidTimeZone(workspaceTimeZone)) {
+        return workspaceTimeZone;
+    }
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
 /**
@@ -285,6 +313,13 @@ export function init(): void {
 
         // Store token and claims in centralized state (state.ts) for subsequent API calls
         store.setToken(token, payload);
+
+        // Resolve and set canonical timezone before deriving date keys
+        const canonicalTimeZone = resolveCanonicalTimeZone(
+            payload,
+            store.config.reportTimeZone
+        );
+        setCanonicalTimeZone(canonicalTimeZone);
 
         // Initialize UI with sensible defaults (today)
         setDefaultDates();
@@ -502,6 +537,17 @@ function updateDailyThresholdState(): void {
 }
 
 /**
+ * Toggles weekly threshold visibility based on overtime basis selection.
+ */
+function updateWeeklyThresholdState(): void {
+    const weeklyContainer = document.getElementById('weeklyThresholdContainer');
+    if (!weeklyContainer) return;
+    const basis = (store.config.overtimeBasis || 'daily').toLowerCase();
+    const showWeekly = basis === 'weekly' || basis === 'both';
+    weeklyContainer.classList.toggle('hidden', !showWeekly);
+}
+
+/**
  * Determines whether the current time entries include cost/profit rate information.
  *
  * **Rationale**: OTPLUS can display "Earned" (billable × rate), "Cost" (internal cost),
@@ -706,8 +752,9 @@ export function bindConfigEvents(): void {
                 // When profile capacity toggle changes, update the Daily Threshold input state
                 // (disabled/enabled, visible helper text)
                 if (key === 'useProfileCapacity') {
-                    updateDailyThresholdState();
-                }
+    updateDailyThresholdState();
+    updateWeeklyThresholdState();
+}
 
                 // Trigger recalculation if we have raw entries
                 // NOTE: showDecimalTime is special - it only affects formatting, not calculation
@@ -755,6 +802,54 @@ export function bindConfigEvents(): void {
         });
     }
 
+    // ========== Overtime Basis Selector ==========
+    const overtimeBasisEl = document.getElementById('overtimeBasis') as HTMLSelectElement | null;
+    if (overtimeBasisEl) {
+        const validBases = new Set(['daily', 'weekly', 'both']);
+        const currentBasis = String(store.config.overtimeBasis || '').toLowerCase();
+        overtimeBasisEl.value = validBases.has(currentBasis) ? currentBasis : 'daily';
+        overtimeBasisEl.addEventListener('change', (e) => {
+            const nextValue = String((e.target as HTMLSelectElement).value || '').toLowerCase();
+            store.config.overtimeBasis = (validBases.has(nextValue) ? nextValue : 'daily') as
+                | 'daily'
+                | 'weekly'
+                | 'both';
+            store.saveConfig();
+            updateWeeklyThresholdState();
+            if (store.rawEntries) runCalculation();
+        });
+        updateWeeklyThresholdState();
+    }
+
+    // ========== Timezone Selector ==========
+    const reportTimeZoneEl = document.getElementById('reportTimeZone') as HTMLInputElement | null;
+    const timeZoneList = document.getElementById('timeZoneList') as HTMLDataListElement | null;
+    const supportedValuesOf = (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf;
+    if (timeZoneList && typeof supportedValuesOf === 'function') {
+        const zones = supportedValuesOf('timeZone');
+        timeZoneList.innerHTML = zones
+            .map((zone: string) => `<option value="${zone}"></option>`)
+            .join('');
+    }
+    if (reportTimeZoneEl) {
+        reportTimeZoneEl.value = store.config.reportTimeZone || '';
+        reportTimeZoneEl.addEventListener('change', (e) => {
+            const nextValue = String((e.target as HTMLInputElement).value || '').trim();
+            if (nextValue && !isValidTimeZone(nextValue)) {
+                reportTimeZoneEl.setCustomValidity('Invalid time zone');
+                reportTimeZoneEl.reportValidity();
+                reportTimeZoneEl.value = store.config.reportTimeZone || '';
+                return;
+            }
+            reportTimeZoneEl.setCustomValidity('');
+            store.config.reportTimeZone = nextValue;
+            store.saveConfig();
+            const canonicalTimeZone = resolveCanonicalTimeZone(store.claims, nextValue);
+            setCanonicalTimeZone(canonicalTimeZone);
+            if (store.rawEntries) runCalculation();
+        });
+    }
+
     // ========== Numeric Configuration Inputs ==========
     // These use debouncing to avoid triggering recalculations on every keystroke
 
@@ -768,6 +863,21 @@ export function bindConfigEvents(): void {
                 // Parse float; default to 8 if invalid
                 store.calcParams.dailyThreshold =
                     parseFloat((e.target as HTMLInputElement).value) || 8;
+                store.saveConfig();
+                if (store.rawEntries) runCalculation();
+            }, 300)
+        );
+    }
+
+    // Weekly Threshold (hours per week that don't count as OT in weekly/both modes)
+    const weeklyEl = document.getElementById('configWeekly') as HTMLInputElement | null;
+    if (weeklyEl) {
+        weeklyEl.value = String(store.calcParams.weeklyThreshold);
+        weeklyEl.addEventListener(
+            'input',
+            debounce((e: Event) => {
+                store.calcParams.weeklyThreshold =
+                    parseFloat((e.target as HTMLInputElement).value) || 40;
                 store.saveConfig();
                 if (store.rawEntries) runCalculation();
             }, 300)
@@ -1338,43 +1448,9 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
             throw new Error('No workspace ID');
         }
 
-        let entries: typeof store.rawEntries;
+        const bypassPersistentCache = forceRefresh;
 
-        if (useCachedData && cachedEntries) {
-            // ===== Use Cached Data Path =====
-            // User chose to reuse cached results; skip API call
-            entries = cachedEntries;
-            UI.updateLoadingProgress(0, 'cached data');
-        } else {
-            // ===== Fetch Fresh Data Path =====
-            // Use the Detailed Report API (not the standard time entries API)
-            // The Detailed Report API returns enriched entries with billable flags, rates,
-            // project/client/task info, and allows pagination
-            // See docs/guide.md for full API reference
-            entries = await Api.fetchDetailedReport(
-                store.claims.workspaceId,
-                `${startDate}T00:00:00Z`,
-                `${endDate}T23:59:59Z`,
-                {
-                    signal,  // Pass AbortSignal for cancellation
-                    onProgress: (page, phase) => {
-                        // Update UI with pagination progress (useful for large reports)
-                        UI.updateLoadingProgress(page, phase);
-                    },
-                }
-            );
-
-            // Cache the fetched entries for potential reuse
-            // Only cache if we got results (avoid caching empty responses)
-            if (cacheKey && entries && entries.length > 0) {
-                store.setCachedReport(cacheKey, entries);
-            }
-        }
-
-        // Store raw entries in application state for subsequent calculations and exports
-        store.rawEntries = entries;
-
-        // ===== Optional Data Fetches =====
+        // ===== Optional Data Fetches (kick off in parallel) =====
         // These fetches are optional and can fail gracefully:
         // - Profiles (capacity, working days)
         // - Holidays
@@ -1393,8 +1469,10 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
         // and working day schedules (which days user works, e.g., Mon-Fri)
         // Only fetch if enabled in config and not already cached
         if (store.config.useProfileCapacity || store.config.useProfileWorkingDays) {
-            // Filter to only fetch profiles we haven't cached yet
-            const missingUsers = store.users.filter((u) => !store.profiles.has(u.id));
+            // Filter to only fetch profiles we haven't cached yet (unless forcing refresh)
+            const missingUsers = bypassPersistentCache
+                ? store.users
+                : store.users.filter((u) => !store.profiles.has(u.id));
             if (missingUsers.length > 0) {
                 optionalPromises.push({
                     name: 'profiles',
@@ -1410,6 +1488,7 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
                                 workingDays: profile.workingDays,
                             });
                         });
+                        store.saveProfilesCache();
                     }),
                 });
             }
@@ -1420,39 +1499,50 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
         // Only fetch if enabled in config
         // See docs/prd.md "Effective capacity adjustments" for how holidays are applied
         if (store.config.applyHolidays) {
-            optionalPromises.push({
-                name: 'holidays',
-                promise: Api.fetchAllHolidays(
-                    store.claims.workspaceId,
-                    store.users,
-                    startDate,
-                    endDate,
-                    { signal }
-                ).then((holidays) => {
-                    // Convert holiday list to Map<userId, Map<dateKey, holiday>>
-                    // This allows O(1) lookup of "is this date a holiday for this user?"
-                    holidays.forEach((hList, userId) => {
-                        const hMap = new Map();
-                        (hList || []).forEach((h) => {
-                            const startKey = IsoUtils.extractDateKey(h.datePeriod?.startDate);
-                            const endKey = IsoUtils.extractDateKey(h.datePeriod?.endDate);
+            if (!bypassPersistentCache) {
+                store.loadHolidayCache(startDate, endDate);
+            } else {
+                store.holidays.clear();
+            }
+            const missingUsers = bypassPersistentCache
+                ? store.users
+                : store.users.filter((u) => !store.holidays.has(u.id));
+            if (missingUsers.length > 0) {
+                optionalPromises.push({
+                    name: 'holidays',
+                    promise: Api.fetchAllHolidays(
+                        store.claims.workspaceId,
+                        missingUsers,
+                        startDate,
+                        endDate,
+                        { signal }
+                    ).then((holidays) => {
+                        // Convert holiday list to Map<userId, Map<dateKey, holiday>>
+                        // This allows O(1) lookup of "is this date a holiday for this user?"
+                        holidays.forEach((hList, userId) => {
+                            const hMap = new Map();
+                            (hList || []).forEach((h) => {
+                                const startKey = IsoUtils.extractDateKey(h.datePeriod?.startDate);
+                                const endKey = IsoUtils.extractDateKey(h.datePeriod?.endDate);
 
-                            if (startKey) {
-                                if (!endKey || endKey === startKey) {
-                                    // Single-day holiday
-                                    hMap.set(startKey, h);
-                                } else {
-                                    // Multi-day holiday (e.g., company-wide closure Dec 20-Jan 2)
-                                    // Expand to individual days for efficient lookup
-                                    const range = IsoUtils.generateDateRange(startKey, endKey);
-                                    range.forEach((date) => hMap.set(date, h));
+                                if (startKey) {
+                                    if (!endKey || endKey === startKey) {
+                                        // Single-day holiday
+                                        hMap.set(startKey, h);
+                                    } else {
+                                        // Multi-day holiday (e.g., company-wide closure Dec 20-Jan 2)
+                                        // Expand to individual days for efficient lookup
+                                        const range = IsoUtils.generateDateRange(startKey, endKey);
+                                        range.forEach((date) => hMap.set(date, h));
+                                    }
                                 }
-                            }
+                            });
+                            store.holidays.set(userId, hMap);
                         });
-                        store.holidays.set(userId, hMap);
-                    });
-                }),
-            });
+                        store.saveHolidayCache(startDate, endDate);
+                    }),
+                });
+            }
         }
 
         // ===== 4. Fetch Time Off - OPTIONAL =====
@@ -1460,49 +1550,91 @@ export async function handleGenerateReport(forceRefresh = false): Promise<void> 
         // Only fetch if enabled in config
         // See docs/prd.md "Effective capacity adjustments" for how time-off is applied
         if (store.config.applyTimeOff) {
-            optionalPromises.push({
-                name: 'timeOff',
-                promise: Api.fetchAllTimeOff(
-                    store.claims.workspaceId,
-                    store.users,
-                    startDate,
-                    endDate,
-                    { signal }
-                ).then((timeOff) => {
-                    // Store time-off data in app state
-                    // Structure: Map<userId, Map<dateKey, hoursTaken>>
-                    store.timeOff = timeOff;
-                }),
-            });
+            if (!bypassPersistentCache) {
+                store.loadTimeOffCache(startDate, endDate);
+            } else {
+                store.timeOff.clear();
+            }
+            const missingUsers = bypassPersistentCache
+                ? store.users
+                : store.users.filter((u) => !store.timeOff.has(u.id));
+            if (missingUsers.length > 0) {
+                optionalPromises.push({
+                    name: 'timeOff',
+                    promise: Api.fetchAllTimeOff(
+                        store.claims.workspaceId,
+                        missingUsers,
+                        startDate,
+                        endDate,
+                        { signal }
+                    ).then((timeOff) => {
+                        // Store time-off data in app state
+                        // Structure: Map<userId, Map<dateKey, hoursTaken>>
+                        timeOff.forEach((value, userId) => {
+                            store.timeOff.set(userId, value);
+                        });
+                        store.saveTimeOffCache(startDate, endDate);
+                    }),
+                });
+            }
         }
+
+        // ===== Fetch Entries (in parallel with optional calls) =====
+        const entriesPromise =
+            useCachedData && cachedEntries
+                ? Promise.resolve(cachedEntries)
+                : Api.fetchDetailedReport(
+                      store.claims.workspaceId,
+                      `${startDate}T00:00:00Z`,
+                      `${endDate}T23:59:59Z`,
+                      {
+                          signal,
+                          onProgress: (page, phase) => {
+                              UI.updateLoadingProgress(page, phase);
+                          },
+                      }
+                  );
+
+        if (useCachedData && cachedEntries) {
+            UI.updateLoadingProgress(0, 'cached data');
+        }
+
+        const optionalResultsPromise = optionalPromises.length > 0
+            ? Promise.allSettled(optionalPromises.map((p) => p.promise))
+            : Promise.resolve([]);
+
+        const entries = await entriesPromise;
+
+        // Cache the fetched entries for potential reuse
+        if (!useCachedData && cacheKey && entries && entries.length > 0) {
+            store.setCachedReport(cacheKey, entries);
+        }
+
+        // Store raw entries in application state for subsequent calculations and exports
+        store.rawEntries = entries;
 
         // ===== Wait for Optional Fetches with Graceful Failure =====
         // Use Promise.allSettled() so failures don't reject the entire chain
         // Track failures for UI warning banner, but continue with report
-        if (optionalPromises.length > 0) {
-            const results = await Promise.allSettled(optionalPromises.map((p) => p.promise));
-            results.forEach((result, index) => {
-                if (result.status === 'rejected') {
-                    // Only report failure if the error is NOT an AbortError
-                    // (AbortError is expected when request is cancelled)
-                    const reason = result.reason as Error;
-                    if (reason?.name !== 'AbortError') {
-                        const name = optionalPromises[index].name;
-                        console.warn(`Optional fetch '${name}' failed:`, reason);
-                        // Track failures for UI status display (show warning banner)
-                        if (name === 'profiles') {
-                            store.apiStatus.profilesFailed = store.users.length;
-                        }
-                        if (name === 'holidays') {
-                            store.apiStatus.holidaysFailed = store.users.length;
-                        }
-                        if (name === 'timeOff') {
-                            store.apiStatus.timeOffFailed = store.users.length;
-                        }
+        const optionalResults = await optionalResultsPromise;
+        optionalResults.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                const reason = result.reason as Error;
+                if (reason?.name !== 'AbortError') {
+                    const name = optionalPromises[index].name;
+                    console.warn(`Optional fetch '${name}' failed:`, reason);
+                    if (name === 'profiles') {
+                        store.apiStatus.profilesFailed = store.users.length;
+                    }
+                    if (name === 'holidays') {
+                        store.apiStatus.holidaysFailed = store.users.length;
+                    }
+                    if (name === 'timeOff') {
+                        store.apiStatus.timeOffFailed = store.users.length;
                     }
                 }
-            });
-        }
+            }
+        });
 
         // ===== Stale Request Detection =====
         // Before updating UI, check if this request is still the most recent one

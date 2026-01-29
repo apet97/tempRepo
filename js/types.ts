@@ -185,6 +185,14 @@ export interface EntryAnalysis {
     regular: number;
     /** Overtime hours */
     overtime: number;
+    /** Daily overtime hours (daily basis) */
+    dailyOvertime?: number;
+    /** Weekly overtime hours (weekly basis) */
+    weeklyOvertime?: number;
+    /** Overlap between daily and weekly overtime (both mode) */
+    overlapOvertime?: number;
+    /** Combined overtime (union of daily + weekly, both mode) */
+    combinedOvertime?: number;
     /** Whether entry is billable */
     isBillable: boolean;
     /** Whether entry is a break */
@@ -272,6 +280,14 @@ export interface UserTotals {
     regular: number;
     /** Total overtime hours */
     overtime: number;
+    /** Daily overtime hours (daily basis) */
+    dailyOvertime: number;
+    /** Weekly overtime hours (weekly basis) */
+    weeklyOvertime: number;
+    /** Overlap between daily and weekly overtime (both mode) */
+    overlapOvertime: number;
+    /** Combined overtime (union of daily + weekly, both mode) */
+    combinedOvertime: number;
     /** Total hours (regular + overtime) */
     total: number;
     /** Total break hours */
@@ -369,9 +385,11 @@ export interface OvertimeConfig {
     /** Amount display mode */
     amountDisplay: 'earned' | 'cost' | 'profit';
     /** Overtime calculation basis */
-    overtimeBasis: 'daily' | 'weekly';
+    overtimeBasis: 'daily' | 'weekly' | 'both';
     /** Maximum pages to fetch from Reports API (0 = unlimited up to hard limit) */
     maxPages?: number;
+    /** Preferred reporting timezone (IANA), empty for auto */
+    reportTimeZone?: string;
 }
 
 /**
@@ -530,6 +548,12 @@ export interface TokenClaims {
     backendUrl: string;
     /** Reports API URL */
     reportsUrl?: string;
+    /** Optional workspace timezone (if provided by Clockify) */
+    workspaceTimeZone?: string;
+    /** Optional alternate workspace timezone field */
+    workspaceTimezone?: string;
+    /** Optional user timezone */
+    timeZone?: string;
     /** Theme preference */
     theme?: 'DARK' | 'LIGHT';
     /** Additional claims */
@@ -607,6 +631,10 @@ export interface SummaryRow {
     capacity: number | null;
     regular: number;
     overtime: number;
+    dailyOvertime: number;
+    weeklyOvertime: number;
+    overlapOvertime: number;
+    combinedOvertime: number;
     breaks: number;
     total: number;
     billableWorked: number;

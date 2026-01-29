@@ -72,6 +72,8 @@ describe('Main Logic Fixes - Holiday Expansion', () => {
                 toISODate: (date) => date.toISOString().split('T')[0]
             },
             debounce: fn => fn,
+            setCanonicalTimeZone: () => {},
+            isValidTimeZone: () => true,
             escapeHtml: str => str,
             formatHours: h => h + 'h',
             formatCurrency: c => c,

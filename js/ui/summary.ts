@@ -44,6 +44,10 @@ export function renderSummaryStrip(users: UserAnalysis[]): void {
             acc.worked += u.totals.total;
             acc.regular += u.totals.regular;
             acc.overtime += u.totals.overtime;
+            acc.dailyOvertime += u.totals.dailyOvertime || 0;
+            acc.weeklyOvertime += u.totals.weeklyOvertime || 0;
+            acc.overlapOvertime += u.totals.overlapOvertime || 0;
+            acc.combinedOvertime += u.totals.combinedOvertime || 0;
             acc.breaks += u.totals.breaks;
             acc.billableWorked += u.totals.billableWorked;
             acc.nonBillableWorked += u.totals.nonBillableWorked;
@@ -77,6 +81,10 @@ export function renderSummaryStrip(users: UserAnalysis[]): void {
             worked: 0,
             regular: 0,
             overtime: 0,
+            dailyOvertime: 0,
+            weeklyOvertime: 0,
+            overlapOvertime: 0,
+            combinedOvertime: 0,
             breaks: 0,
             billableWorked: 0,
             nonBillableWorked: 0,
@@ -107,9 +115,12 @@ export function renderSummaryStrip(users: UserAnalysis[]): void {
 
     const showBillable = store.config.showBillableBreakdown;
     const showTier2 = store.config.enableTieredOT && showBillable;
+    const showBoth = store.config.overtimeBasis === 'both';
     const amountLabels = getAmountLabels();
     const amountDisplay = getAmountDisplayMode();
     const isProfitMode = amountDisplay === 'profit';
+    const overtimeLabel = showBoth ? 'OT (Combined)' : 'Overtime';
+    const overtimeValue = showBoth ? totals.combinedOvertime : totals.overtime;
 
     // Time metrics (always on top row)
     const timeMetrics = `
@@ -118,7 +129,16 @@ export function renderSummaryStrip(users: UserAnalysis[]): void {
     <div class="summary-item"><span class="summary-label">Total time</span><span class="summary-value">${formatHoursDisplay(totals.worked)}</span></div>
     <div class="summary-item"><span class="summary-label">Break</span><span class="summary-value">${formatHoursDisplay(totals.breaks)}</span></div>
     <div class="summary-item"><span class="summary-label">Regular</span><span class="summary-value">${formatHoursDisplay(totals.regular)}</span></div>
-    <div class="summary-item danger"><span class="summary-label">Overtime</span><span class="summary-value">${formatHoursDisplay(totals.overtime)}</span></div>
+    <div class="summary-item danger"><span class="summary-label">${overtimeLabel}</span><span class="summary-value">${formatHoursDisplay(overtimeValue)}</span></div>
+    ${
+        showBoth
+            ? `
+      <div class="summary-item"><span class="summary-label">OT Daily</span><span class="summary-value">${formatHoursDisplay(totals.dailyOvertime)}</span></div>
+      <div class="summary-item"><span class="summary-label">OT Weekly</span><span class="summary-value">${formatHoursDisplay(totals.weeklyOvertime)}</span></div>
+      <div class="summary-item"><span class="summary-label">OT Overlap</span><span class="summary-value">${formatHoursDisplay(totals.overlapOvertime)}</span></div>
+    `
+            : ''
+    }
     ${
         showBillable
             ? `
@@ -287,6 +307,10 @@ function computeSummaryRows(
                         capacity: groupBy === 'user' ? user.totals.expectedCapacity : null,
                         regular: 0,
                         overtime: 0,
+                        dailyOvertime: 0,
+                        weeklyOvertime: 0,
+                        overlapOvertime: 0,
+                        combinedOvertime: 0,
                         breaks: 0,
                         total: 0,
                         billableWorked: 0,
@@ -310,6 +334,11 @@ function computeSummaryRows(
                 // Accumulate regular and overtime from entry analysis
                 group.regular += entry.analysis?.regular || 0;
                 group.overtime += entry.analysis?.overtime || 0;
+                group.dailyOvertime += entry.analysis?.dailyOvertime || 0;
+                group.weeklyOvertime += entry.analysis?.weeklyOvertime || 0;
+                group.overlapOvertime += entry.analysis?.overlapOvertime || 0;
+                group.combinedOvertime +=
+                    entry.analysis?.combinedOvertime ?? entry.analysis?.overtime ?? 0;
                 group.total += duration;
 
                 // Accumulate breaks and vacation
@@ -349,13 +378,17 @@ function computeSummaryRows(
         }
 
         // For user grouping, if a user has no entries, still include them
-        if (groupBy === 'user' && !groups.has(user.userId)) {
+                if (groupBy === 'user' && !groups.has(user.userId)) {
             groups.set(user.userId, {
                 groupKey: user.userId,
                 groupName: user.userName,
                 capacity: user.totals.expectedCapacity,
                 regular: 0,
                 overtime: 0,
+                dailyOvertime: 0,
+                weeklyOvertime: 0,
+                overlapOvertime: 0,
+                combinedOvertime: 0,
                 breaks: 0,
                 total: 0,
                 billableWorked: 0,
@@ -391,7 +424,8 @@ function computeSummaryRows(
 function renderSummaryHeaders(
     groupBy: string,
     expanded: boolean,
-    showBillable: boolean
+    showBillable: boolean,
+    showBoth: boolean
 ): string {
     const groupLabel: Record<string, string> = {
         user: 'User',
@@ -413,11 +447,21 @@ function renderSummaryHeaders(
         headers += `<th class="text-right">Capacity</th>`;
     }
 
+    const overtimeLabel = showBoth ? 'OT (Combined)' : 'Overtime';
+
     headers += `
     <th class="text-right">Regular</th>
-    <th class="text-right">Overtime</th>
+    <th class="text-right">${overtimeLabel}</th>
     <th class="text-right">Breaks</th>
   `;
+
+    if (expanded && showBoth) {
+        headers += `
+      <th class="text-right">OT Daily</th>
+      <th class="text-right">OT Weekly</th>
+      <th class="text-right">OT Overlap</th>
+    `;
+    }
 
     // Advanced columns (shown when expanded and billable breakdown enabled)
     if (expanded && showBillable) {
@@ -461,7 +505,8 @@ function renderSummaryRow(
     row: SummaryRow,
     groupBy: string,
     expanded: boolean,
-    showBillable: boolean
+    showBillable: boolean,
+    showBoth: boolean
 ): string {
     const amountDisplay = getAmountDisplayMode();
     const isProfitMode = amountDisplay === 'profit';
@@ -492,11 +537,21 @@ function renderSummaryRow(
         html += `<td class="text-right">${formatHoursDisplay(row.capacity || 0)}</td>`;
     }
 
+    const overtimeValue = showBoth ? row.combinedOvertime : row.overtime;
+
     html += `
     <td class="text-right">${formatHoursDisplay(row.regular)}</td>
-    <td class="text-right ${row.overtime > 0 ? 'text-danger' : ''}">${formatHoursDisplay(row.overtime)}</td>
+    <td class="text-right ${overtimeValue > 0 ? 'text-danger' : ''}">${formatHoursDisplay(overtimeValue)}</td>
     <td class="text-right">${formatHoursDisplay(row.breaks)}</td>
   `;
+
+    if (expanded && showBoth) {
+        html += `
+      <td class="text-right">${formatHoursDisplay(row.dailyOvertime)}</td>
+      <td class="text-right">${formatHoursDisplay(row.weeklyOvertime)}</td>
+      <td class="text-right">${formatHoursDisplay(row.overlapOvertime)}</td>
+    `;
+    }
 
     // Advanced columns
     if (expanded && showBillable) {
@@ -534,6 +589,7 @@ export function renderSummaryTable(users: UserAnalysis[]): void {
     const groupBy = store.ui.summaryGroupBy || 'user';
     const expanded = store.ui.summaryExpanded || false;
     const showBillable = store.config.showBillableBreakdown;
+    const showBoth = store.config.overtimeBasis === 'both';
 
     // Compute grouped rows
     const rows = computeSummaryRows(users, groupBy);
@@ -541,14 +597,14 @@ export function renderSummaryTable(users: UserAnalysis[]): void {
     // Update header
     const thead = document.getElementById('summaryHeaderRow');
     if (thead) {
-        thead.innerHTML = renderSummaryHeaders(groupBy, expanded, showBillable);
+        thead.innerHTML = renderSummaryHeaders(groupBy, expanded, showBillable, showBoth);
     }
 
     // Render rows using a document fragment to minimize DOM thrashing
     const fragment = document.createDocumentFragment();
     for (const row of rows) {
         const tr = document.createElement('tr');
-        tr.innerHTML = renderSummaryRow(row, groupBy, expanded, showBillable);
+        tr.innerHTML = renderSummaryRow(row, groupBy, expanded, showBillable, showBoth);
         fragment.appendChild(tr);
     }
 

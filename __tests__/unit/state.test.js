@@ -4,7 +4,7 @@
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { store } from '../../js/state.js';
-import { STORAGE_KEYS } from '../../js/constants.js';
+import { STORAGE_KEYS, DATA_CACHE_TTL, DATA_CACHE_VERSION } from '../../js/constants.js';
 import { standardAfterEach } from '../helpers/setup.js';
 
 describe('State Module - Store Class', () => {
@@ -61,7 +61,8 @@ describe('State Module - Store Class', () => {
         enableTieredOT: false,
         amountDisplay: 'earned',
         overtimeBasis: 'daily',
-        maxPages: 50
+        maxPages: 50,
+        reportTimeZone: ''
       });
     });
 
@@ -1256,11 +1257,413 @@ describe('State Module - Store Class', () => {
     it('should clear all workspace overrides from localStorage', () => {
       localStorage.setItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws1`, 'data1');
       localStorage.setItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws2`, 'data2');
+      localStorage.setItem(`${STORAGE_KEYS.PROFILES_PREFIX}ws1`, 'profile1');
+      localStorage.setItem(`${STORAGE_KEYS.HOLIDAYS_PREFIX}ws1_2025-01-01_2025-01-31`, 'holiday1');
+      localStorage.setItem(`${STORAGE_KEYS.TIMEOFF_PREFIX}ws1_2025-01-01_2025-01-31`, 'timeoff1');
 
       store.clearAllData();
 
       expect(localStorage.getItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws1`)).toBeNull();
       expect(localStorage.getItem(`${STORAGE_KEYS.OVERRIDES_PREFIX}ws2`)).toBeNull();
+      expect(localStorage.getItem(`${STORAGE_KEYS.PROFILES_PREFIX}ws1`)).toBeNull();
+      expect(
+        localStorage.getItem(`${STORAGE_KEYS.HOLIDAYS_PREFIX}ws1_2025-01-01_2025-01-31`)
+      ).toBeNull();
+      expect(
+        localStorage.getItem(`${STORAGE_KEYS.TIMEOFF_PREFIX}ws1_2025-01-01_2025-01-31`)
+      ).toBeNull();
+    });
+  });
+
+  describe('Persistent data cache helpers', () => {
+    beforeEach(() => {
+      localStorage.clear();
+      store.setToken('mock_token', { workspaceId: 'workspace_123' });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should treat null cache as stale', () => {
+      expect(store._isCacheFresh(null)).toBe(false);
+    });
+
+    it('should save and load profiles cache when fresh', () => {
+      store.profiles.set('user1', { workCapacityHours: 8 });
+      store.saveProfilesCache();
+
+      store.profiles = new Map();
+      store.loadProfilesCache();
+
+      expect(store.profiles.get('user1')).toEqual({ workCapacityHours: 8 });
+    });
+
+    it('should no-op cache helpers when workspace is missing', () => {
+      store.claims = null;
+      store.token = null;
+
+      store.loadProfilesCache();
+      store.saveProfilesCache();
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      store.saveHolidayCache('2025-01-01', '2025-01-31');
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      store.saveTimeOffCache('2025-01-01', '2025-01-31');
+
+      expect(localStorage.length).toBe(0);
+    });
+
+    it('should return early when profiles cache is missing', () => {
+      store.loadProfilesCache();
+      expect(store.profiles.size).toBe(0);
+    });
+
+    it('should ignore stale profiles cache', () => {
+      const now = Date.now();
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+
+      const cacheKey = `${STORAGE_KEYS.PROFILES_PREFIX}workspace_123`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: now - DATA_CACHE_TTL - 1,
+          entries: [['user1', { workCapacityHours: 8 }]]
+        })
+      );
+
+      store.loadProfilesCache();
+      expect(store.profiles.size).toBe(0);
+    });
+
+    it('should ignore profiles cache with invalid version', () => {
+      const cacheKey = `${STORAGE_KEYS.PROFILES_PREFIX}workspace_123`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION + 1,
+          timestamp: Date.now(),
+          entries: [['user1', { workCapacityHours: 8 }]]
+        })
+      );
+
+      store.loadProfilesCache();
+      expect(store.profiles.size).toBe(0);
+    });
+
+    it('should ignore profiles cache with invalid timestamp', () => {
+      const cacheKey = `${STORAGE_KEYS.PROFILES_PREFIX}workspace_123`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: 'bad',
+          entries: [['user1', { workCapacityHours: 8 }]]
+        })
+      );
+
+      store.loadProfilesCache();
+      expect(store.profiles.size).toBe(0);
+    });
+
+    it('should ignore profiles cache when parsed cache is null', () => {
+      const cacheKey = `${STORAGE_KEYS.PROFILES_PREFIX}workspace_123`;
+      localStorage.setItem(cacheKey, 'null');
+
+      store.loadProfilesCache();
+      expect(store.profiles.size).toBe(0);
+    });
+
+    it('should ignore profiles cache with empty entries', () => {
+      const cacheKey = `${STORAGE_KEYS.PROFILES_PREFIX}workspace_123`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          entries: []
+        })
+      );
+
+      store.loadProfilesCache();
+      expect(store.profiles.size).toBe(0);
+    });
+
+    it('should ignore profiles cache without entries array', () => {
+      const cacheKey = `${STORAGE_KEYS.PROFILES_PREFIX}workspace_123`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now()
+        })
+      );
+
+      store.loadProfilesCache();
+      expect(store.profiles.size).toBe(0);
+    });
+
+    it('should load holiday cache for matching range', () => {
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-01-31' },
+          entries: [['user1', [['2025-01-01', { name: 'Holiday' }]]]]
+        })
+      );
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.get('user1')?.get('2025-01-01')).toEqual({ name: 'Holiday' });
+    });
+
+    it('should return early when holiday cache is missing', () => {
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should ignore holiday cache when parsed cache is null', () => {
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(cacheKey, 'null');
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should ignore stale holiday cache', () => {
+      const now = Date.now();
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: now - DATA_CACHE_TTL - 1,
+          range: { start: '2025-01-01', end: '2025-01-31' },
+          entries: [['user1', [['2025-01-01', { name: 'Holiday' }]]]]
+        })
+      );
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should ignore holiday cache with empty entries', () => {
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-01-31' },
+          entries: []
+        })
+      );
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should ignore holiday cache with mismatched range', () => {
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-02-01_2025-02-28`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-02-01', end: '2025-02-28' },
+          entries: [['user1', [['2025-02-01', { name: 'Holiday' }]]]]
+        })
+      );
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should ignore holiday cache when end date mismatches', () => {
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-01-01_2025-02-01`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-02-01' },
+          entries: [['user1', [['2025-01-01', { name: 'Holiday' }]]]]
+        })
+      );
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should ignore holiday cache when range is missing', () => {
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          entries: [['user1', [['2025-01-01', { name: 'Holiday' }]]]]
+        })
+      );
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should ignore holiday cache without entries array', () => {
+      const cacheKey = `${STORAGE_KEYS.HOLIDAYS_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-01-31' }
+        })
+      );
+
+      store.loadHolidayCache('2025-01-01', '2025-01-31');
+      expect(store.holidays.size).toBe(0);
+    });
+
+    it('should load time off cache for matching range', () => {
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-01-31' },
+          entries: [['user1', [['2025-01-15', { isFullDay: true, hours: 0 }]]]]
+        })
+      );
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.get('user1')?.get('2025-01-15')).toEqual({ isFullDay: true, hours: 0 });
+    });
+
+    it('should return early when time off cache is missing', () => {
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should ignore time off cache when parsed cache is null', () => {
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(cacheKey, 'null');
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should ignore stale time off cache', () => {
+      const now = Date.now();
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: now - DATA_CACHE_TTL - 1,
+          range: { start: '2025-01-01', end: '2025-01-31' },
+          entries: [['user1', [['2025-01-02', { hours: 4 }]]]]
+        })
+      );
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should ignore time off cache with empty entries', () => {
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-01-31' },
+          entries: []
+        })
+      );
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should ignore time off cache with mismatched range', () => {
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-02-01_2025-02-28`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-02-01', end: '2025-02-28' },
+          entries: [['user1', [['2025-02-15', { isFullDay: true, hours: 0 }]]]]
+        })
+      );
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should ignore time off cache when end date mismatches', () => {
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-02-01`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-02-01' },
+          entries: [['user1', [['2025-01-02', { hours: 4 }]]]]
+        })
+      );
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should ignore time off cache when range is missing', () => {
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          entries: [['user1', [['2025-01-02', { hours: 4 }]]]]
+        })
+      );
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should ignore time off cache without entries array', () => {
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          version: DATA_CACHE_VERSION,
+          timestamp: Date.now(),
+          range: { start: '2025-01-01', end: '2025-01-31' }
+        })
+      );
+
+      store.loadTimeOffCache('2025-01-01', '2025-01-31');
+      expect(store.timeOff.size).toBe(0);
+    });
+
+    it('should save time off cache entries', () => {
+      store.timeOff.set('user1', new Map([['2025-01-15', { isFullDay: true, hours: 0 }]]));
+
+      store.saveTimeOffCache('2025-01-01', '2025-01-31');
+      const cacheKey = `${STORAGE_KEYS.TIMEOFF_PREFIX}workspace_123_2025-01-01_2025-01-31`;
+      const saved = JSON.parse(localStorage.getItem(cacheKey));
+
+      expect(saved.entries[0][0]).toBe('user1');
+      expect(saved.entries[0][1][0][0]).toBe('2025-01-15');
     });
   });
 
@@ -2018,7 +2421,8 @@ describe('State Corruption Handling', () => {
       enableTieredOT: false,
       amountDisplay: 'earned',
       overtimeBasis: 'daily',
-      maxPages: 50
+      maxPages: 50,
+      reportTimeZone: ''
     };
     store.calcParams = {
       dailyThreshold: 8,

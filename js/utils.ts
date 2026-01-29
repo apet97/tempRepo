@@ -345,6 +345,60 @@ export function base64urlDecode(str: string): string {
     return atob(base64);
 }
 
+// ==================== TIMEZONE HELPERS ====================
+
+let canonicalTimeZone: string | null = null;
+
+/**
+ * Validates a time zone identifier.
+ */
+export function isValidTimeZone(timeZone: string): boolean {
+    if (!timeZone) return false;
+    try {
+        Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Sets the canonical time zone for date key calculations.
+ */
+export function setCanonicalTimeZone(timeZone: string | null): void {
+    canonicalTimeZone = timeZone && isValidTimeZone(timeZone) ? timeZone : null;
+}
+
+/**
+ * Returns the canonical time zone (user/workspace override or browser default).
+ */
+export function getCanonicalTimeZone(): string {
+    if (canonicalTimeZone) return canonicalTimeZone;
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+/**
+ * Formats a Date into YYYY-MM-DD using a specific time zone.
+ */
+function formatDateKeyInTimeZone(date: Date, timeZone: string): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const partMap: Record<string, string> = {};
+    parts.forEach((part) => {
+        if (part.type !== 'literal') {
+            partMap[part.type] = part.value;
+        }
+    });
+    const y = partMap.year || '0000';
+    const m = partMap.month || '01';
+    const d = partMap.day || '01';
+    return `${y}-${m}-${d}`;
+}
+
 /**
  * Rounds a number to a specific number of decimal places.
  * Crucial for avoiding floating point drift in currency and hour calculations.
@@ -521,6 +575,15 @@ export const IsoUtils = {
     },
 
     /**
+     * Converts a Date object to a canonical date key (YYYY-MM-DD) using the configured time zone.
+     */
+    toDateKey(date: Date | null | undefined): string {
+        if (!date) return '';
+        const tz = getCanonicalTimeZone();
+        return formatDateKeyInTimeZone(date, tz);
+    },
+
+    /**
      * Parses a YYYY-MM-DD string into a Date object (at UTC midnight).
      *
      * @param dateStr - YYYY-MM-DD string.
@@ -547,12 +610,8 @@ export const IsoUtils = {
 
         const date = new Date(isoString);
         if (isNaN(date.getTime())) return null;
-
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        // Use local calendar day so entries recorded late at night align with the user's intended day
-        return `${y}-${m}-${d}`;
+        const tz = getCanonicalTimeZone();
+        return formatDateKeyInTimeZone(date, tz);
     },
 
     /**

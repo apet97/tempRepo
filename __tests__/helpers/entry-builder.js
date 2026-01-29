@@ -11,7 +11,11 @@
  */
 export class EntryBuilder {
   constructor() {
-    this._id = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    if (!EntryBuilder._counter) {
+      EntryBuilder._counter = 0;
+    }
+    EntryBuilder._counter += 1;
+    this._id = `entry_${EntryBuilder._counter}`;
     this._userId = 'user1';
     this._userName = 'TestUser';
     this._startTime = '2025-01-15T09:00:00Z';

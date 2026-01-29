@@ -32,6 +32,12 @@ export const STORAGE_KEYS = {
     OVERRIDES_PREFIX: 'overtime_overrides_',
     /** Prefix for UI state persistence. */
     OVERRIDES_UI_PREFIX: 'overtime_overrides_ui_',
+    /** Prefix for cached profiles by workspace. */
+    PROFILES_PREFIX: 'otplus_profiles_',
+    /** Prefix for cached holidays by workspace and date range. */
+    HOLIDAYS_PREFIX: 'otplus_holidays_',
+    /** Prefix for cached time-off by workspace and date range. */
+    TIMEOFF_PREFIX: 'otplus_timeoff_',
     /** UI state persistence (summary grouping, expand/collapse states). */
     UI_STATE: 'otplus_ui_state',
     /** Report cache in sessionStorage. */
@@ -42,6 +48,16 @@ export const STORAGE_KEYS = {
  * Report cache TTL in milliseconds (5 minutes).
  */
 export const REPORT_CACHE_TTL = 5 * 60 * 1000;
+
+/**
+ * Persistent cache TTL for profiles/holidays/time-off (6 hours).
+ */
+export const DATA_CACHE_TTL = 6 * 60 * 60 * 1000;
+
+/**
+ * Cache schema version for stored maps.
+ */
+export const DATA_CACHE_VERSION = 1;
 
 export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS];
 

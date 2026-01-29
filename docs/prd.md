@@ -23,11 +23,16 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 - **Parallel Data Orchestration:** v2.1 fetches Time Entries, Member Profiles, Holidays, and Time Off requests concurrently using `Promise.all`.
 - **Iterative Rate Limiting:** Implements a global client-side token bucket (50 req/s) with an iterative wait loop to ensure stack safety and strict API compliance.
 - **Request Cancellation:** Supports instant termination of pending network activity via `AbortController` when a user cancels or restarts a report.
+- **Persistent Data Caching:** Profiles, holidays, and time-off maps are cached in localStorage (6-hour TTL) to reduce repeat fetches for large teams.
+- **Report Cache Prompt:** Session-scoped report data is cached with a user prompt to reuse or refresh for the latest data.
+- **Large Range Confirmation:** Date ranges over 365 days require explicit confirmation to avoid accidental long-running reports.
 
 ### 3.2 Accuracy & Compliance
-- **Timezone Awareness:** Uses the browser's local time for date grouping, ensuring evening work is attributed to the correct calendar day rather than shifting to the next day in UTC.
+- **Timezone Awareness:** Uses a canonical timezone (user-selected report timezone → workspace claim → browser default) for date grouping, ensuring evening work is attributed to the correct calendar day rather than shifting to the next day in UTC.
 - **Holiday Compliance:** Strictly adheres to the API requirement for `YYYY-MM-DD` date formatting.
 - **Precision Math:** All duration and cost calculations use `utils.round()` to eliminate floating-point drift.
+- **Overtime Basis Options:** Supports daily, weekly, and combined overtime bases for flexible payroll policies.
+- **Partial Time-Off Hours:** Half-day requests use provided hours (or period duration) instead of assuming full-day absence.
 
 ### 3.3 Enhanced UX/UI
 - **Persisted Configuration:** User preferences (toggles, thresholds) are automatically saved to `localStorage`, eliminating repetitive configuration.
@@ -54,11 +59,13 @@ The v2.0 baseline suffered from performance bottlenecks when handling large team
 - Regular hours are allocated first until daily capacity is reached.
 - All remaining time in subsequent entries is categorized as Overtime.
 - Billable and Non-Billable metrics are tracked independently for both Regular and OT buckets.
+- Weekly basis mode uses `weeklyThreshold` and Monday-based weeks; combined mode reports the max of daily/weekly OT plus overlap tracking.
 
 ### 4.3 Secure Data Export
 - **CSV Sanitization:** Implements "Smart Escaping" to double-quote fields only when necessary.
 - **Formula Injection Protection:** Prevents CSV injection attacks by prepending a single quote (`'`) to any field starting with `=`, `+`, `-`, or `@`.
 - **Decimal Hours Column:** Adds `TotalHoursDecimal` to CSV output while preserving existing columns.
+- **Overtime Breakdown Columns:** Adds daily/weekly/overlap/combined OT columns for audit-friendly exports.
 
 ---
 

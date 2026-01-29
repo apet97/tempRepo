@@ -1337,6 +1337,16 @@ body.density-spacious {
   min-width: 112px;
 }
 
+#overtimeBasis {
+  width: 110px;
+  min-width: 110px;
+}
+
+#reportTimeZone {
+  width: 160px;
+  min-width: 160px;
+}
+
 /* API Status Banner */
 .api-status-banner {
   background: #fff3cd;

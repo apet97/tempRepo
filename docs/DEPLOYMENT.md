@@ -44,6 +44,11 @@ Before releasing, ensure:
    npm test
    ```
 
+2. **E2E tests pass**
+   ```bash
+   npm run test:e2e
+   ```
+
 2. **Type checking passes**
    ```bash
    npm run typecheck
@@ -161,6 +166,7 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push and 
 2. **Type Check** - TypeScript compilation
 3. **Test** - Jest with coverage enforcement
 4. **Build** - Production build verification
+5. **Mutation Testing** - Runs nightly or manually (not on every PR)
 
 Artifacts are uploaded for successful builds on `main` branch.
 
@@ -196,6 +202,7 @@ If a release has issues:
 
 - Run in verbose mode: `npm test -- --verbose`
 - Check for flaky tests: `npm test -- --runInBand`
+- E2E artifacts are written to `playwright-report/` and `test-results/` (ignored in git)
 
 ### Worker Doesn't Load
 

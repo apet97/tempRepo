@@ -139,6 +139,10 @@ describe('Export Module', () => {
         expect(csvContent).toContain('EffectiveCapacityHours');
         expect(csvContent).toContain('RegularHours');
         expect(csvContent).toContain('OvertimeHours');
+        expect(csvContent).toContain('DailyOvertimeHours');
+        expect(csvContent).toContain('WeeklyOvertimeHours');
+        expect(csvContent).toContain('OverlapOvertimeHours');
+        expect(csvContent).toContain('CombinedOvertimeHours');
         expect(csvContent).toContain('BillableWorkedHours');
         expect(csvContent).toContain('BillableOTHours');
         expect(csvContent).toContain('NonBillableOTHours');
@@ -200,6 +204,120 @@ describe('Export Module', () => {
       });
 
       downloadCsv(mockAnalysis);
+    });
+
+    it('should fall back to overtime when combinedOvertime is missing', () => {
+      const analysis = [{
+        userId: 'user_1',
+        userName: 'User 1',
+        totals: { total: 2 },
+        days: new Map([
+          ['2025-01-15', {
+            entries: [{
+              id: 'entry_fallback',
+              userId: 'user_1',
+              userName: 'User 1',
+              description: 'Fallback OT',
+              timeInterval: {
+                start: '2025-01-15T09:00:00Z',
+                end: '2025-01-15T11:00:00Z',
+                duration: 'PT2H'
+              },
+              analysis: {
+                regular: 0,
+                overtime: 2,
+                isBillable: true
+              }
+            }],
+            meta: {
+              capacity: 8,
+              isHoliday: false,
+              holidayName: '',
+              isNonWorking: false,
+              isTimeOff: false
+            }
+          }]
+        ])
+      }];
+
+      const createElementSpy = jest.spyOn(document, 'createElement');
+      const mockLink = {
+        setAttribute: jest.fn(),
+        click: jest.fn(),
+        style: {}
+      };
+      createElementSpy.mockReturnValue(mockLink);
+
+      global.Blob = jest.fn((content) => {
+        const csvContent = content[0];
+        const lines = csvContent.split('\n');
+        const headers = lines[0].split(',');
+        const combinedIdx = headers.indexOf('CombinedOvertimeHours');
+        const dataLine = lines.find(l => l.includes('Fallback OT'));
+
+        expect(combinedIdx).toBeGreaterThan(-1);
+        expect(dataLine).toBeDefined();
+
+        const fields = dataLine.split(',');
+        expect(fields[combinedIdx]).toBe('2h');
+      });
+
+      downloadCsv(analysis);
+    });
+
+    it('should default combined overtime to 0 when analysis is missing', () => {
+      const analysis = [{
+        userId: 'user_1',
+        userName: 'User 1',
+        totals: { total: 1 },
+        days: new Map([
+          ['2025-01-16', {
+            entries: [{
+              id: 'entry_no_analysis',
+              userId: 'user_1',
+              userName: 'User 1',
+              description: 'No analysis',
+              timeInterval: {
+                start: '2025-01-16T09:00:00Z',
+                end: '2025-01-16T10:00:00Z',
+                duration: 'PT1H'
+              },
+              billable: true
+            }],
+            meta: {
+              capacity: 8,
+              isHoliday: false,
+              holidayName: '',
+              isNonWorking: false,
+              isTimeOff: false
+            }
+          }]
+        ])
+      }];
+
+      const createElementSpy = jest.spyOn(document, 'createElement');
+      const mockLink = {
+        setAttribute: jest.fn(),
+        click: jest.fn(),
+        style: {}
+      };
+      createElementSpy.mockReturnValue(mockLink);
+
+      global.Blob = jest.fn((content) => {
+        const csvContent = content[0];
+        const lines = csvContent.split('\n');
+        const headers = lines[0].split(',');
+        const combinedIdx = headers.indexOf('CombinedOvertimeHours');
+        const dataLine = lines.find(l => l.includes('No analysis'));
+
+        expect(combinedIdx).toBeGreaterThan(-1);
+        expect(dataLine).toBeDefined();
+
+        const fields = dataLine.split(',');
+        expect(fields[combinedIdx]).toBe('0h');
+      });
+
+      downloadCsv(analysis);
     });
 
     it('should escape CSV injection characters', () => {
@@ -880,12 +998,15 @@ describe('Export Module', () => {
         const csvContent = content[0];
         // Regular day should have "No" for isHoliday column
         const lines = csvContent.split('\n');
+        const headers = lines[0].split(',');
         const dataLine = lines.find(l => l.includes('Regular work day'));
         expect(dataLine).not.toBeUndefined();
         expect(typeof dataLine).toBe('string');
-        // Check that isHoliday is "No" (column 13)
         const fields = dataLine.split(',');
-        expect(fields[12]).toBe('No'); // isHoliday
+        const isHolidayIdx = headers.indexOf('isHoliday');
+        expect(isHolidayIdx).toBeGreaterThan(-1);
+        // Check that isHoliday is "No"
+        expect(fields[isHolidayIdx]).toBe('No'); // isHoliday
       });
 
       downloadCsv(analysis);
@@ -925,12 +1046,15 @@ describe('Export Module', () => {
         const csvContent = content[0];
         // Regular day should have "No" for isTimeOff column
         const lines = csvContent.split('\n');
+        const headers = lines[0].split(',');
         const dataLine = lines.find(l => l.includes('Not time off'));
         expect(dataLine).not.toBeUndefined();
         expect(typeof dataLine).toBe('string');
-        // Check that isTimeOff is "No" (column 16)
         const fields = dataLine.split(',');
-        expect(fields[15]).toBe('No'); // isTimeOff
+        const isTimeOffIdx = headers.indexOf('isTimeOff');
+        expect(isTimeOffIdx).toBeGreaterThan(-1);
+        // Check that isTimeOff is "No"
+        expect(fields[isTimeOffIdx]).toBe('No'); // isTimeOff
       });
 
       downloadCsv(analysis);
